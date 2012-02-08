@@ -1,4 +1,4 @@
-# Word Cloud Layout for D3
+# Word Cloud Layout
 
 This is a [Wordle](http://www.wordle.net/)-inspired word cloud layout written
 in JavaScript. It uses HTML5 canvas and sprite masks to achieve
@@ -13,6 +13,6 @@ demonstration along with implementation details.
 
 See the samples in `examples/`.
 
-This layout is similar to
+This layout requires [D3](http://mbostock.github.com/d3/).  It’s similar to
 [d3.layout.force](https://github.com/mbostock/d3/wiki/Force-Layout), in that
-it’s *asynchronous* and *stateful*.
+it’s **asynchronous** and **stateful**.
