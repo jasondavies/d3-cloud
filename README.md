@@ -7,7 +7,7 @@ near-interactive speeds.
 See [here](http://www.jasondavies.com/wordcloud/) for an interactive
 demonstration along with implementation details.
 
-![Example cloud of Twitter search results for “amazing”](examples/amazing.png)
+![Example cloud of Twitter search results for “amazing”](raw/master/examples/amazing.png)
 
 ## Usage
 
