@@ -355,8 +355,8 @@
   }
 
   var cloudRadians = Math.PI / 180,
-      cw = 1 << 12 >> 5,
-      ch = 1 << 12,
+      cw = 1 << 11 >> 5,
+      ch = 1 << 11,
       canvas;
 
   if (typeof document !== "undefined") {
