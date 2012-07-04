@@ -1,0 +1,28 @@
+{
+  "name": "d3.layout.cloud",
+  "version": "1.0.1",
+  "description": "Generate word clouds in JavaScript.",
+  "keywords": [
+    "word",
+    "cloud",
+    "tag",
+    "visualization",
+    "canvas"
+  ],
+  "homepage": "http://www.jasondavies.com/wordcloud/",
+  "author": {
+    "name": "Jason Davies",
+    "url": "http://www.jasondavies.com/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/jasondavies/wordcloud.git"
+  },
+  "main": "d3.layout.cloud.js",
+  "dependencies": {
+    "canvas": "0.10.x"
+  },
+  "devDependencies": {
+    "uglify-js": "1.2.x"
+  }
+}

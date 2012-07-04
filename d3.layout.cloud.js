@@ -201,7 +201,7 @@
   // Load in batches for speed.
   function cloudSprite(d, data, di) {
     if (d.sprite) return;
-    c.clearRect(0, 0, cw << 5, ch);
+    c.clearRect(0, 0, (cw << 5) / ratio, ch / ratio);
     var x = 0,
         y = 0,
         maxh = 0,
@@ -210,8 +210,8 @@
     while (++di < n) {
       d = data[di];
       c.save();
-      c.font = (d.size + 1) + "px " + d.font;
-      var w = c.measureText(d.text + "m").width,
+      c.font = ~~((d.size + 1) / ratio) + "px " + d.font;
+      var w = c.measureText(d.text + "m").width * ratio,
           h = d.size << 1;
       if (d.rotate) {
         var sr = Math.sin(d.rotate * cloudRadians),
@@ -232,7 +232,7 @@
         maxh = 0;
       }
       if (y + h >= ch) break;
-      c.translate(x + (w >> 1), y + (h >> 1));
+      c.translate((x + (w >> 1)) / ratio, (y + (h >> 1)) / ratio);
       if (d.rotate) c.rotate(d.rotate * cloudRadians);
       c.fillText(d.text, 0, 0);
       c.restore();
@@ -246,7 +246,7 @@
       d.y0 = -d.y1;
       x += w;
     }
-    var pixels = c.getImageData(0, 0, cw << 5, ch).data,
+    var pixels = c.getImageData(0, 0, (cw << 5) / ratio, ch / ratio).data,
         sprite = [];
     while (--di >= 0) {
       d = data[di];
@@ -264,7 +264,7 @@
       for (var j = 0; j < h; j++) {
         for (var i = 0; i < w; i++) {
           var k = w32 * j + (i >> 5),
-              m = (pixels[((y + j) * (cw << 5) + (x + i)) << 2] ? 1 : 0) << (31 - (i % 32));
+              m = pixels[((y + j) * (cw << 5) + (x + i)) << 2] ? 1 << (31 - (i % 32)) : 0;
           if (p) {
             if (j) sprite[k - w32] |= m;
             if (j < w - 1) sprite[k + w32] |= m;
@@ -357,12 +357,16 @@
   var cloudRadians = Math.PI / 180,
       cw = 1 << 11 >> 5,
       ch = 1 << 11,
-      canvas;
+      canvas,
+      ratio = 1;
 
   if (typeof document !== "undefined") {
     canvas = document.createElement("canvas");
-    canvas.width = cw << 5;
-    canvas.height = ch;
+    canvas.width = 1;
+    canvas.height = 1;
+    ratio = Math.sqrt(canvas.getContext("2d").getImageData(0, 0, 1, 1).data.length >> 2);
+    canvas.width = (cw << 5) / ratio;
+    canvas.height = ch / ratio;
   } else {
     // node-canvas support
     var Canvas = require("canvas");
