@@ -16,7 +16,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "http://github.com/jasondavies/wordcloud.git"
+    "url": "http://github.com/jasondavies/d3-cloud.git"
   },
   "main": "d3.layout.cloud.js",
   "dependencies": {
