@@ -9,6 +9,7 @@
         return {text: d, size: 10 + Math.random() * 90};
       }))
       .rotate(function() { return ~~(Math.random() * 2) * 90; })
+      .font("Impact")
       .fontSize(function(d) { return d.size; })
       .on("end", draw)
       .start();
@@ -23,6 +24,7 @@
         .data(words)
       .enter().append("text")
         .style("font-size", function(d) { return d.size + "px"; })
+        .style("font-family", "Impact")
         .attr("text-anchor", "middle")
         .attr("transform", function(d) {
           return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
