@@ -2,6 +2,8 @@
 <script src="../d3.layout.cloud.js"></script>
 <body>
 <script>
+  var fill = d3.scale.category20();
+
   d3.layout.cloud().size([300, 300])
       .words([
         "Hello", "world", "normally", "you", "want", "more", "words",
@@ -25,6 +27,7 @@
       .enter().append("text")
         .style("font-size", function(d) { return d.size + "px"; })
         .style("font-family", "Impact")
+        .style("fill", function(d, i) { return fill(i); })
         .attr("text-anchor", "middle")
         .attr("transform", function(d) {
           return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
