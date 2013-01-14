@@ -3,6 +3,7 @@
 (function(exports) {
   function cloud() {
     var size = [256, 256],
+        startPoint = null,
         text = cloudText,
         font = cloudFont,
         fontSize = cloudFontSize,
@@ -46,8 +47,13 @@
             d;
         while (+new Date - start < timeInterval && ++i < n && timer) {
           d = data[i];
-          d.x = (size[0] * (Math.random() + .5)) >> 1;
-          d.y = (size[1] * (Math.random() + .5)) >> 1;
+          if (startPoint) {
+            d.x = startPoint[0];
+            d.y = startPoint[1];
+          } else {
+            d.x = (size[0] * (Math.random() + .5)) >> 1;
+            d.y = (size[1] * (Math.random() + .5)) >> 1;
+          }
           cloudSprite(d, data, i);
           if (place(board, d, bounds)) {
             tags.push(d);
@@ -139,6 +145,12 @@
     cloud.size = function(x) {
       if (!arguments.length) return size;
       size = [+x[0], +x[1]];
+      return cloud;
+    };
+
+    cloud.startPoint = function(x) {
+      if (!arguments.length) return startPoint;
+      startPoint = [+x[0], +x[1]];
       return cloud;
     };
 
