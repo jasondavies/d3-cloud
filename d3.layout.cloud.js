@@ -24,16 +24,15 @@
           i = -1,
           tags = [],
           data = words.map(function(d, i) {
-        return {
-          text: text.call(this, d, i),
-          font: font.call(this, d, i),
-          style: fontStyle.call(this, d, i),
-          weight: fontWeight.call(this, d, i),
-          rotate: rotate.call(this, d, i),
-          size: ~~fontSize.call(this, d, i),
-          padding: cloudPadding.call(this, d, i)
-        };
-      }).sort(function(a, b) { return b.size - a.size; });
+            d.text = text.call(this, d, i);
+            d.font = font.call(this, d, i);
+            d.style = fontStyle.call(this, d, i);
+            d.weight = fontWeight.call(this, d, i);
+            d.rotate = rotate.call(this, d, i);
+            d.size = ~~fontSize.call(this, d, i);
+            d.padding = cloudPadding.call(this, d, i);
+            return d;
+          }).sort(function(a, b) { return b.size - a.size; });
 
       if (timer) clearInterval(timer);
       timer = setInterval(step, 0);
