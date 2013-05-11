@@ -48,7 +48,7 @@
           d.x = (size[0] * (Math.random() + .5)) >> 1;
           d.y = (size[1] * (Math.random() + .5)) >> 1;
           cloudSprite(d, data, i);
-          if (place(board, d, bounds)) {
+          if (d.hasText && place(board, d, bounds)) {
             tags.push(d);
             event.word(d);
             if (bounds) cloudBounds(bounds, d);
@@ -225,7 +225,7 @@
         y = 0,
         maxh = 0,
         n = data.length;
-    di--;
+    --di;
     while (++di < n) {
       d = data[di];
       c.save();
@@ -263,12 +263,14 @@
       d.y1 = h >> 1;
       d.x0 = -d.x1;
       d.y0 = -d.y1;
+      d.hasText = true;
       x += w;
     }
     var pixels = c.getImageData(0, 0, (cw << 5) / ratio, ch / ratio).data,
         sprite = [];
     while (--di >= 0) {
       d = data[di];
+      if (!d.hasText) continue;
       var w = d.width,
           w32 = w >> 5,
           h = d.y1 - d.y0,
