@@ -1,6 +1,6 @@
 {
   "name": "d3.layout.cloud",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Generate word clouds in JavaScript.",
   "keywords": [
     "word",
