@@ -378,7 +378,6 @@
 
   if (typeof document !== "undefined") {
     canvas = document.createElement("canvas");
-    document.body.appendChild(canvas);
     canvas.width = 1;
     canvas.height = 1;
     ratio = Math.sqrt(canvas.getContext("2d").getImageData(0, 0, 1, 1).data.length >> 2);
