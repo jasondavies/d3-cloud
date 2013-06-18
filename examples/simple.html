@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
+<body>
 <script src="../lib/d3/d3.js"></script>
 <script src="../d3.layout.cloud.js"></script>
-<body>
 <script>
   var fill = d3.scale.category20();
 
@@ -12,6 +12,7 @@
         "than", "this"].map(function(d) {
         return {text: d, size: 10 + Math.random() * 90};
       }))
+      .padding(5)
       .rotate(function() { return ~~(Math.random() * 2) * 90; })
       .font("Impact")
       .fontSize(function(d) { return d.size; })

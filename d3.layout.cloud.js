@@ -30,7 +30,7 @@
             d.weight = fontWeight.call(this, d, i);
             d.rotate = rotate.call(this, d, i);
             d.size = ~~fontSize.call(this, d, i);
-            d.padding = cloudPadding.call(this, d, i);
+            d.padding = padding.call(this, d, i);
             return d;
           }).sort(function(a, b) { return b.size - a.size; });
 
@@ -254,6 +254,7 @@
       c.translate((x + (w >> 1)) / ratio, (y + (h >> 1)) / ratio);
       if (d.rotate) c.rotate(d.rotate * cloudRadians);
       c.fillText(d.text, 0, 0);
+      if (d.padding) c.lineWidth = 2 * d.padding, c.strokeText(d.text, 0, 0);
       c.restore();
       d.width = w;
       d.height = h;
@@ -273,8 +274,7 @@
       if (!d.hasText) continue;
       var w = d.width,
           w32 = w >> 5,
-          h = d.y1 - d.y0,
-          p = d.padding;
+          h = d.y1 - d.y0;
       // Zero the buffer
       for (var i = 0; i < h * w32; i++) sprite[i] = 0;
       x = d.xoff;
@@ -286,11 +286,6 @@
         for (var i = 0; i < w; i++) {
           var k = w32 * j + (i >> 5),
               m = pixels[((y + j) * (cw << 5) + (x + i)) << 2] ? 1 << (31 - (i % 32)) : 0;
-          if (p) {
-            if (j) sprite[k - w32] |= m;
-            if (j < w - 1) sprite[k + w32] |= m;
-            m |= (m << 1) | (m >> 1);
-          }
           sprite[k] |= m;
           seen |= m;
         }
@@ -383,6 +378,7 @@
 
   if (typeof document !== "undefined") {
     canvas = document.createElement("canvas");
+    document.body.appendChild(canvas);
     canvas.width = 1;
     canvas.height = 1;
     ratio = Math.sqrt(canvas.getContext("2d").getImageData(0, 0, 1, 1).data.length >> 2);
@@ -399,7 +395,7 @@
         archimedean: archimedeanSpiral,
         rectangular: rectangularSpiral
       };
-  c.fillStyle = "red";
+  c.fillStyle = c.strokeStyle = "red";
   c.textAlign = "center";
 
   exports.cloud = cloud;
