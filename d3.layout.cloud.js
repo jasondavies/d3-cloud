@@ -11,7 +11,7 @@
         rotate = cloudRotate,
         padding = cloudPadding,
         spiral = archimedeanSpiral,
-        initPos = centerPointPos,
+        initPos = centerAreaPos,
         words = [],
         timeInterval = Infinity,
         event = d3.dispatch("word", "end"),
