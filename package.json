@@ -1,6 +1,6 @@
 {
   "name": "d3.layout.cloud",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "description": "Generate word clouds in JavaScript.",
   "keywords": [
     "word",
@@ -18,9 +18,9 @@
     "type": "git",
     "url": "http://github.com/jasondavies/d3-cloud.git"
   },
-  "main": "d3.layout.cloud.js",
+  "main": "index.js",
   "dependencies": {
-    "canvas": "0.10.x"
+    "canvas": "1.1.x"
   },
   "devDependencies": {
     "uglify-js": "1.2.x"
