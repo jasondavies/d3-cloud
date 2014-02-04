@@ -9,6 +9,7 @@
         fontStyle = cloudFontNormal,
         fontWeight = cloudFontNormal,
         rotate = cloudRotate,
+        randomize = true,
         padding = cloudPadding,
         spiral = archimedeanSpiral,
         words = [],
@@ -45,8 +46,8 @@
             d;
         while (+new Date - start < timeInterval && ++i < n && timer) {
           d = data[i];
-          d.x = (size[0] * (Math.random() + .5)) >> 1;
-          d.y = (size[1] * (Math.random() + .5)) >> 1;
+          d.x = (size[0] * ((randomize ? Math.random() : .5) + .5)) >> 1;
+          d.y = (size[1] * ((randomize ? Math.random() : .5) + .5)) >> 1;
           cloudSprite(d, data, i);
           if (d.hasText && place(board, d, bounds)) {
             tags.push(d);
@@ -85,7 +86,7 @@
           startY = tag.y,
           maxDelta = Math.sqrt(size[0] * size[0] + size[1] * size[1]),
           s = spiral(size),
-          dt = Math.random() < .5 ? 1 : -1,
+          dt = (randomize ? Math.random() : .5) < .5 ? 1 : -1,
           t = -dt,
           dxdy,
           dx,
@@ -163,6 +164,12 @@
       if (!arguments.length) return rotate;
       rotate = d3.functor(x);
       return cloud;
+    };
+
+    cloud.randomize = function(x) {
+        if (!arguments.length) return randomize;
+        randomize = !!x;
+        return cloud;
     };
 
     cloud.text = function(x) {
