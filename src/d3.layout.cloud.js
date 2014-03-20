@@ -1,6 +1,20 @@
 // Word cloud layout by Jason Davies, http://www.jasondavies.com/word-cloud/
 // Algorithm due to Jonathan Feinberg, http://static.mrfeinberg.com/bv_ch03.pdf
-(function() {
+(function (root, factory) {
+  'use strict';
+  if (typeof define === 'function' && define.amd) {
+        // AMD. Register as an anonymous module.
+        define(['d3'], factory);
+    } else if (typeof exports === 'object') {
+        // Node. Does not work with strict CommonJS, but
+        // only CommonJS-like environments that support module.exports,
+        // like Node.
+        module.exports = factory(require('d3'));
+    } else {
+        // Browser globals (root is window)
+        root.returnExports = factory(root.d3);
+    }
+}(this, function (d3) {
   function cloud() {
     var size = [256, 256],
         text = cloudText,
@@ -396,6 +410,7 @@
   c.fillStyle = c.strokeStyle = "red";
   c.textAlign = "center";
 
-  if (typeof module === "object" && module.exports) module.exports = cloud;
-  else (d3.layout || (d3.layout = {})).cloud = cloud;
-})();
+  d3.layout.cloud = cloud;
+
+  return d3;
+}));
