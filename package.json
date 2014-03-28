@@ -20,6 +20,7 @@
   },
   "main": "index.js",
   "dependencies": {
+    "d3": "~3.4",
     "canvas": "1.1.x"
   },
   "devDependencies": {
