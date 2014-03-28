@@ -412,5 +412,5 @@
 
   d3.layout.cloud = cloud;
 
-  return d3;
+  return cloud;
 }));
