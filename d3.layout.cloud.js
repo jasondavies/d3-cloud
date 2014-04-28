@@ -101,9 +101,6 @@
         tag.x = startX + dx;
         tag.y = startY + dy;
 
-        // if (tag.width < size[0] && tag.height <size[1] &&
-        //     (tag.x + tag.x0 < 0 || tag.y + tag.y0 < 0 ||
-        //     tag.x + tag.x1 > size[0] || tag.y + tag.y1 > size[1])) continue;
         if (tag.x + tag.x0 < 0 || tag.y + tag.y0 < 0 ||
             tag.x + tag.x1 > size[0] || tag.y + tag.y1 > size[1]) {
           if (!overflow) {
