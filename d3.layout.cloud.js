@@ -51,7 +51,6 @@
           cloudSprite(d, data, i);
           while(d.hasText) {
             if (place(board, d, bounds)) {
-              console.log(d.size);
               tags.push(d);
               event.word(d);
               if (bounds) cloudBounds(bounds, d);
@@ -70,7 +69,7 @@
               d.x = x;
               d.y = y;
               // decrement the size until it fits
-              d.size = nsi < data.length ? data[nsi++].size : d.size - (d.size >> 1);
+              d.size = nsi < data.length ? data[nsi++].size : d.size - (d.size >> 3);
               cloudSprite(d, data, i);
             }
           }
