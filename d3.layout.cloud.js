@@ -65,12 +65,14 @@
             } else {
               // reset
               delete d.sprite;
-              d.sprint = null;
+              d.sprite = null;
               d.x = x;
               d.y = y;
               // decrement the size until it fits
               d.size = nsi < data.length ? data[nsi++].size : d.size - (d.size >> 3);
-              cloudSprite(d, data, i);
+              if (~~d.size > 0) {
+                cloudSprite(d, data, i);
+              }
             }
           }
         }
