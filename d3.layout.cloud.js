@@ -13,6 +13,7 @@
         spiral = archimedeanSpiral,
         words = [],
         timeInterval = Infinity,
+        stepLimit = Infinity,
         event = d3.dispatch("word", "end"),
         timer = null,
         cloud = {};
@@ -36,6 +37,9 @@
 
       if (timer) clearInterval(timer);
       timer = setInterval(step, 0);
+
+      // Record the start of the step function
+      var stepStart = +new Date();
       step();
 
       return cloud;
@@ -58,7 +62,7 @@
             d.y -= size[1] >> 1;
           }
         }
-        if (i >= n) {
+        if (i >= n || (start - stepStart) > stepLimit) {
           cloud.stop();
           event.end(tags, bounds);
         }
@@ -76,6 +80,12 @@
     cloud.timeInterval = function(x) {
       if (!arguments.length) return timeInterval;
       timeInterval = x == null ? Infinity : x;
+      return cloud;
+    };
+
+    cloud.stepLimit = function(x) {
+      if (!arguments.length) return stepLimit;
+      stepLimit = x == null ? Infinity : x;
       return cloud;
     };
 
