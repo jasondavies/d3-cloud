@@ -20,7 +20,9 @@
   },
   "main": "index.js",
   "dependencies": {
-    "canvas": "1.1.x"
+    "d3": "^3.5.5",
+    "canvas": "^1.2.1",
+    "jsdom": "^4.0.0"
   },
   "devDependencies": {
     "uglify-js": "1.2.x"
