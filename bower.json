@@ -1,0 +1,17 @@
+{
+  "name": "d3-cloud",
+  "homepage": "https://github.com/giwa/d3-cloud",
+  "version": "1.0.5",
+  "main": ["./d3.layout.cloud.js"],
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "components",
+    "bin",
+    "demo",
+    "doc",
+    "test",
+    "index.html",
+    "package.json"
+  ]
+}
