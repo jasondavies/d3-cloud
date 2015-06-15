@@ -1,0 +1,26 @@
+{
+  "name": "d3-cloud",
+  "homepage": "https://github.com/krisalexander/d3-cloud",
+  "version": "1.0.5",
+  "_release": "1.0.5",
+  "_resolution": {
+    "type": "version",
+    "tag": "v1.0.5",
+    "commit": "83eb4128335eacdc0736ab7a6cafbdc2b124f484"
+  },
+  "_source": "https://github.com/krisalexander/d3-cloud.git",
+  "_target": "~1.0.5",
+  "_originalSource": "https://github.com/krisalexander/d3-cloud.git",
+  "main": ["./d3.layout.cloud.js"],
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "components",
+    "bin",
+    "demo",
+    "doc",
+    "test",
+    "index.html",
+    "package.json"
+  ]
+}
