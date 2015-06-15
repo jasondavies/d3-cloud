@@ -3,7 +3,7 @@
   "main": "d3.layout.cloud.js",
   "dependencies": {
     "d3": "~3.5"
-  }
+  },
   "version": "1.0.5",
   "homepage": "https://github.com/krisalexander/d3-cloud",
   "authors": [
