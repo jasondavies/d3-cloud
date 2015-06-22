@@ -94,7 +94,7 @@ function cloud(d3) {
         dx = ~~dxdy[0];
         dy = ~~dxdy[1];
 
-        if (Math.min(dx, dy) > maxDelta) break;
+        if (Math.min(Math.abs(dx), Math.abs(dy)) >= maxDelta) break;
 
         tag.x = startX + dx;
         tag.y = startY + dy;
