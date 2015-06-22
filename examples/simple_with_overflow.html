@@ -1,18 +1,22 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <body>
-<script src="../bower_components/d3/d3.js"></script>
-<script src="../src/d3.layout.cloud.js"></script>
+<script src="../lib/d3/d3.js"></script>
+<script src="../d3.layout.cloud.js"></script>
 <script>
-  var fill = d3.scale.category20();
+//OneBigWord will (usually) not show up, because it doesn't fit in
+var fill = d3.scale.category20();
+
+var words = [
+        "Hello", "world", "normally", "you", "want", "more", "words",
+        "than", "this", "OneBigWord"].map(function(d) {
+        return {text: d, size: 10 + Math.random() * 90};
+        });
 
   d3.layout.cloud().size([300, 300])
-      .words([
-        "Hello", "world", "normally", "you", "want", "more", "words",
-        "than", "this"].map(function(d) {
-        return {text: d, size: 10 + Math.random() * 90};
-      }))
+      .words(words)
       .padding(5)
+      .overflow(true)
       .rotate(function() { return ~~(Math.random() * 2) * 90; })
       .font("Impact")
       .fontSize(function(d) { return d.size; })
