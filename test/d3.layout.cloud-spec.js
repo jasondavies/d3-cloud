@@ -69,9 +69,6 @@
         expect(layout).toBeDefined();
         expect(layout.words().length).toEqual(3);
 
-        expect(localdocument).toBeDefined();
-        expect(localdocument.getElementsByTagName('svg')).toBeDefined();
-        expect(localdocument.getElementsByTagName('svg').length).toEqual(0);
       });
 
     });
