@@ -15,6 +15,20 @@ See the samples in `examples/`.
 
 ## API Reference
 
+<a name="on" href="#on">#</a> <b>on</b>(<i>type</i>, <i>listener</i>)
+
+Registers the specified *listener* to receive events of the specified *type*
+from the layout. Currently, only "word" and "end" events are supported.
+
+A "word" event is dispatched every time a word is successfully placed.
+Registered listeners are called with a single argument: the word object that
+has been placed.
+
+An "end" event is dispatched when the layout has finished attempting to place
+all words.  Registered listeners are called with two arguments: an array of the
+word objects that were successfully placed, and a *bounds* object of the form
+`[{x0, y0}, {x1, y1}]` representing the extent of the placed objects.
+
 <a name="start" href="#start">#</a> <b>start</b>()
 
 Starts the layout algorithm.  This initialises various attributes on the word
@@ -29,7 +43,7 @@ addressed in a future release.
 
 <a name="stop" href="#stop">#</a> <b>stop</b>()
 
-Stops the layout algorithm.V
+Stops the layout algorithm.
 
 <a name="timeInterval" href="#timeInterval">#</a> <b>timeInterval</b>([<i>time</i>])
 
