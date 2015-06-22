@@ -27,6 +27,7 @@
         randomize = true,
         padding = cloudPadding,
         spiral = archimedeanSpiral,
+        random = Math.random,
         words = [],
         timeInterval = Infinity,
         event = d3.dispatch("word", "end"),
@@ -68,8 +69,10 @@
             d.x = (size[0] * (Math.random() + .5)) >> 1;
             d.y = (size[1] * (Math.random() + .5)) >> 1;
           }
-          d.x = (size[0] * ((randomize ? Math.random() : .5) + .5)) >> 1;
-          d.y = (size[1] * ((randomize ? Math.random() : .5) + .5)) >> 1;
+          // d.x = (size[0] * ((randomize ? Math.random() : .5) + .5)) >> 1;
+          // d.y = (size[1] * ((randomize ? Math.random() : .5) + .5)) >> 1;
+          d.x = (size[0] * (random() + .5)) >> 1;
+          d.y = (size[1] * (random() + .5)) >> 1;
           cloudSprite(d, data, i);
           if (d.hasText && place(board, d, bounds)) {
             tags.push(d);
@@ -108,7 +111,8 @@
           startY = tag.y,
           maxDelta = Math.sqrt(size[0] * size[0] + size[1] * size[1]),
           s = spiral(size),
-          dt = (randomize ? Math.random() : .5) < .5 ? 1 : -1,
+          // dt = (randomize ? Math.random() : .5) < .5 ? 1 : -1,
+          dt = random() < .5 ? 1 : -1,
           t = -dt,
           dxdy,
           dx,
@@ -212,6 +216,12 @@
       return cloud;
     };
 
+    cloud.random = function(x) {
+      if (!arguments.length) return random;
+      random = d3.functor(x);
+      return cloud;
+    };
+
     cloud.fontSize = function(x) {
       if (!arguments.length) return fontSize;
       fontSize = d3.functor(x);
@@ -244,7 +254,7 @@
   }
 
   function cloudRotate() {
-    return (~~(Math.random() * 6) - 3) * 30;
+    return (~~(random() * 6) - 3) * 30;
   }
 
   function cloudPadding() {
