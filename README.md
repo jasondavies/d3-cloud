@@ -118,6 +118,7 @@ function(size) {
   // increase or decrease indicating clockwise or counterclockwise motion.
   return function(t) { return [x, y]; };
 }
+```
 
 If not specified, returns the current spiral generator, which defaults to the
 built-in "archimedean" spiral.
