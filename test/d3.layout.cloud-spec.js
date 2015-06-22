@@ -1,7 +1,6 @@
 (function() {
 
   /* globals require, describe, it, expect, console */
-
   'use strict';
 
   try {
@@ -21,9 +20,10 @@
 
     describe('d3.layout.cloud', function() {
 
-      it('should create an svg', function() {
+      it('should parse a text into words', function() {
 
-        var w = 960 * 1,
+        var endTime,
+          w = 960 * 1,
           h = 600 * 1;
 
         var layout = locald3.layout.cloud()
@@ -35,7 +35,7 @@
           })
           .on("end", draw);
 
-        var start = +new Date();
+        var start  = +new Date();
 
         for (var i = 0; i < 2; i++) {
           parseText("this is a small cloud");
@@ -59,12 +59,19 @@
         }
 
         function draw() {
-          console.log(+new Date() - start);
+          endTime = +new Date();
+          console.log("Time", +new Date() - start);
         }
+
+        expect(start).toBeDefined();
+        expect(endTime).toBeDefined();
+
+        expect(layout).toBeDefined();
+        expect(layout.words().length).toEqual(3);
 
         expect(localdocument).toBeDefined();
         expect(localdocument.getElementsByTagName('svg')).toBeDefined();
-        expect(localdocument.getElementsByTagName('svg').length).toEqual(' ');
+        expect(localdocument.getElementsByTagName('svg').length).toEqual(0);
       });
 
     });
