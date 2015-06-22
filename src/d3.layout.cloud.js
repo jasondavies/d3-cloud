@@ -1,20 +1,20 @@
 // Word cloud layout by Jason Davies, http://www.jasondavies.com/word-cloud/
 // Algorithm due to Jonathan Feinberg, http://static.mrfeinberg.com/bv_ch03.pdf
+
 (function (root, factory) {
-  'use strict';
-  if (typeof define === 'function' && define.amd) {
+    if (typeof define === 'function' && define.amd) {
         // AMD. Register as an anonymous module.
         define(['d3'], factory);
     } else if (typeof exports === 'object') {
         // Node. Does not work with strict CommonJS, but
         // only CommonJS-like environments that support module.exports,
         // like Node.
-        module.exports = factory(require('d3'));
+        module.exports = factory(require('d3'), require('canvas'));
     } else {
         // Browser globals (root is window)
         root.returnExports = factory(root.d3);
     }
-}(this, function (d3) {
+}(this, function (d3, Canvas) {
   function cloud() {
     var size = [256, 256],
         text = cloudText,
@@ -397,7 +397,7 @@
     ratio = Math.sqrt(canvas.getContext("2d").getImageData(0, 0, 1, 1).data.length >> 2);
     canvas.width = (cw << 5) / ratio;
     canvas.height = ch / ratio;
-  } else {
+  } else if (!!Canvas){
     // Attempt to use node-canvas.
     canvas = new Canvas(cw << 5, ch);
   }
@@ -412,5 +412,5 @@
 
   d3.layout.cloud = cloud;
 
-  return cloud;
+  return d3;
 }));
