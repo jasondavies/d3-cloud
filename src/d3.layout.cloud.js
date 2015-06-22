@@ -32,6 +32,7 @@
         timeInterval = Infinity,
         event = d3.dispatch("word", "end"),
         timer = null,
+        overflow = false,
         cloud = {};
 
     cloud.start = function() {
@@ -128,7 +129,11 @@
         tag.y = startY + dy;
 
         if (tag.x + tag.x0 < 0 || tag.y + tag.y0 < 0 ||
-            tag.x + tag.x1 > size[0] || tag.y + tag.y1 > size[1]) continue;
+            tag.x + tag.x1 > size[0] || tag.y + tag.y1 > size[1]) {
+          if (!overflow) {
+            continue;
+          }
+        }
         // TODO only check for collisions within current bounds.
         if (!bounds || !cloudCollide(tag, board, size[0])) {
           if (!bounds || collideRects(tag, bounds)) {
@@ -231,6 +236,12 @@
     cloud.padding = function(x) {
       if (!arguments.length) return padding;
       padding = d3.functor(x);
+      return cloud;
+    };
+
+    cloud.overflow = function(x) {
+      if (!arguments.length) return overflow;
+      overflow = d3.functor(x);
       return cloud;
     };
 
