@@ -15,6 +15,10 @@ See the samples in `examples/`.
 
 ## API Reference
 
+<a name="cloud" href="#cloud">#</a> d3.layout.<b>cloud</b>()
+
+Constructs a new cloud layout instance.
+
 <a name="on" href="#on">#</a> <b>on</b>(<i>type</i>, <i>listener</i>)
 
 Registers the specified *listener* to receive events of the specified *type*
