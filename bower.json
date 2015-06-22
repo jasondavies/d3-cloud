@@ -1,0 +1,27 @@
+{
+  "name": "d3-cloud",
+  "description": "Create word clouds in JavaScript.",
+  "version": "1.0.5",
+  "keywords": [
+    "css",
+    "js",
+    "d3",
+    "word cloud"
+  ],
+  "homepage": "https://github.com/jasondavies/d3-cloud",
+  "main": [
+    "./d3.layout.cloud.js"
+  ],
+  "ignore": [
+    ".*",
+    "LICENSE",
+    "README.md",
+    "examples",
+    "index.js",
+    "lib",
+    "package.json"
+  ],
+  "dependencies": {
+    "d3": ">= 2.7.4"
+  }
+}
