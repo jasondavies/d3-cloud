@@ -15,9 +15,6 @@
       require("../");
     }
     var supportOverflow = false;
-    // window = localdocument.createWindow();
-    // navigator = window.navigator;
-    // CSSStyleDeclaration = window.CSSStyleDeclaration;
 
     describe('d3.layout.cloud', function() {
       var simpleCloudElement = localdocument.createElement("div");

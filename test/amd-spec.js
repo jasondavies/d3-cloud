@@ -15,9 +15,6 @@
       locald3 = require("d3");
       require("../");
     }
-    // window = localdocument.createWindow();
-    // navigator = window.navigator;
-    // CSSStyleDeclaration = window.CSSStyleDeclaration;
 
     describe('d3.layout.cloud', function() {
 
