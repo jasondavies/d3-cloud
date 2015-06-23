@@ -11,7 +11,7 @@
       localdocument = document;
       locald3 = d3;
     } catch (e) {
-      localdocument = require("jsdom").jsdom("<html><head></head><body></body></html>");
+      localdocument = require("jsdom").jsdom("<html><head></head><body><div id='a-cloud'></div></body></html>");
       locald3 = require("../src/d3.layout.cloud");
     }
     // window = localdocument.createWindow();
@@ -19,6 +19,9 @@
     // CSSStyleDeclaration = window.CSSStyleDeclaration;
 
     describe('d3.layout.cloud', function() {
+      var simpleCloudElement = localdocument.createElement("div");
+      simpleCloudElement.setAttribute("id", "simple-cloud");
+      localdocument.body.appendChild(simpleCloudElement);
 
       var fill = locald3.scale.category20();
 
@@ -44,7 +47,7 @@
         .start();
 
       function draw(words) {
-        locald3.select("#simple-cloud").append("svg")
+        locald3.select(simpleCloudElement).append("svg")
           .attr("width", 300)
           .attr("height", 300)
           .append("g")
@@ -68,13 +71,17 @@
           });
       }
 
-      it('should draw', function() {
+      it('should draw one svg text node for each word', function() {
         expect(mySimpleCloud).toBeDefined();
         expect(mySimpleCloud.words().length).toEqual(9);
 
         expect(localdocument).toBeDefined();
-        expect(locald3.select("#simple-cloud")).toBeDefined();
-        expect(d3.select("#simple-cloud")[0][0].children[0].childNodes[0].childElementCount).toEqual(mySimpleCloud.words().length);
+        expect(locald3.select(simpleCloudElement)).toBeDefined();
+        if (locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0]._childNodes) {
+          expect(locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0]._childNodes.length).toEqual(mySimpleCloud.words().length);
+        } else {
+          expect(locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0].childElementCount).toEqual(mySimpleCloud.words().length);
+        }
 
       });
     });
