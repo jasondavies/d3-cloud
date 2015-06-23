@@ -22,5 +22,11 @@
   "dependencies": {
     "d3": "3.x",
     "canvas": "1.2.x"
+  },
+  "devDependencies": {
+    "jsdom": "^3.0.0"
+  },
+  "scripts": {
+    "test": "jasmine-node test"
   }
 }

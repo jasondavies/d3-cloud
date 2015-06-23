@@ -1,0 +1,14 @@
+language: node_js
+
+node_js:
+  # - '0.8'
+  # - '0.10'
+  # - '0.11'
+  - '0.12'
+  # - 'iojs'
+
+before_install: 
+ - sudo apt-get install libcairo2-dev libjpeg8-dev libpango1.0-dev libgif-dev build-essential g++
+ - npm install -g jasmine-node 
+
+script: npm test
