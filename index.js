@@ -4,7 +4,7 @@ var globals = {};
 if ("d3" in global) globals.d3 = global.d3;
 if ("Canvas" in global) globals.Canvas = global.Canvas;
 global.d3 = require("d3");
-global.Canvas = require("Canvas");
+global.Canvas = require("canvas");
 
 require("./d3.layout.cloud");
 module.exports = d3.layout.cloud;
