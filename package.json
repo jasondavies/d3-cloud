@@ -24,7 +24,7 @@
     "canvas": "1.2.x"
   },
   "devDependencies": {
-    "jsdom": "^4.0.0"
+    "jsdom": "^3.0.0"
   },
   "scripts": {
     "test": "jasmine-node test"
