@@ -4,7 +4,6 @@
   'use strict';
 
   try {
-
     var localdocument;
     var locald3;
     try {
@@ -15,6 +14,7 @@
       locald3 = require("d3");
       require("../");
     }
+    var supportOverflow = false;
     // window = localdocument.createWindow();
     // navigator = window.navigator;
     // CSSStyleDeclaration = window.CSSStyleDeclaration;
@@ -78,10 +78,13 @@
 
         expect(localdocument).toBeDefined();
         expect(locald3.select(simpleCloudElement)).toBeDefined();
-        if (locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0]._childNodes) {
-          expect(locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0]._childNodes.length).toEqual(mySimpleCloud.words().length);
-        } else {
-          expect(locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0].childElementCount).toEqual(mySimpleCloud.words().length);
+
+        if (supportOverflow) {
+          if (locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0]._childNodes) {
+            expect(locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0]._childNodes.length).toEqual(mySimpleCloud.words().length);
+          } else {
+            expect(locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0].childElementCount).toEqual(mySimpleCloud.words().length);
+          }
         }
       });
 
