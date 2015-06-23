@@ -12,7 +12,8 @@
       locald3 = d3;
     } catch (e) {
       localdocument = require("jsdom").jsdom("<html><head></head><body><div id='a-cloud'></div></body></html>");
-      locald3 = require("../src/d3.layout.cloud");
+      locald3 = require("d3");
+      require("../");
     }
     // window = localdocument.createWindow();
     // navigator = window.navigator;
@@ -71,7 +72,7 @@
           });
       }
 
-      it('should draw one svg text node for each word', function() {
+      it('should draw one svg text node for each word, if it fits', function() {
         expect(mySimpleCloud).toBeDefined();
         expect(mySimpleCloud.words().length).toEqual(9);
 
@@ -82,10 +83,9 @@
         } else {
           expect(locald3.select(simpleCloudElement)[0][0].children[0].childNodes[0].childElementCount).toEqual(mySimpleCloud.words().length);
         }
-
       });
-    });
 
+    });
 
   } catch (e) {
     console.log(e);
