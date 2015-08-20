@@ -20,7 +20,9 @@
   },
   "main": "index.js",
   "dependencies": {
-    "d3": "3.x",
+    "d3": "3.x"
+  },
+  "optionalDependencies": {
     "canvas": "1.2.x"
   }
 }
