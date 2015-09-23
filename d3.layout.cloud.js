@@ -372,6 +372,7 @@ function cloud(d3) {
     canvas.height = ch / ratio;
   } else {
     // Attempt to use node-canvas.
+    var Canvas = require('Canvas');
     canvas = new Canvas(cw << 5, ch);
   }
 
