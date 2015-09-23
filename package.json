@@ -24,5 +24,8 @@
   },
   "optionalDependencies": {
     "canvas": "1.2.x"
+  },
+  "scripts": {
+    "postinstall": "[ -d  node_modules/canvas ] && echo \"Installed. \" || echo \"NOTE: Canvas it is not currently installed, if you need server side render you need to install it and its dependancies.\" #CHECKING FOR CANVAS"
   }
 }
