@@ -1,13 +1,9 @@
-<!DOCTYPE html>
-<meta charset="utf-8">
-<body>
-<script src="d3/d3.js"></script>
-<script src="../d3.layout.cloud.js"></script>
-<script>(function() {
+var d3 = require("d3"),
+    cloud = require("../");
 
 var fill = d3.scale.category20();
 
-var layout = d3.layout.cloud()
+var layout = cloud()
     .size([500, 500])
     .words([
       "Hello", "world", "normally", "you", "want", "more", "words",
@@ -40,5 +36,3 @@ function draw(words) {
       })
       .text(function(d) { return d.text; });
 }
-
-})();</script>

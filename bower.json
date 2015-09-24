@@ -1,10 +1,7 @@
 {
   "name": "d3-cloud",
-  "version": "1.1.2",
-  "main": "d3.layout.cloud.js",
-  "scripts": [
-    "d3.layout.cloud.js"
-  ],
+  "version": "1.2.0",
+  "main": "build/d3.layout.cloud.js",
   "ignore": [
     ".DS_Store",
     ".git",
@@ -12,7 +9,6 @@
     ".npmignore",
     "examples",
     "index.js",
-    "lib",
     "node_modules",
     "package.json"
   ]

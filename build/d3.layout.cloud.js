@@ -1,3 +1,4 @@
+(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g=(g.d3||(g.d3 = {}));g=(g.layout||(g.layout = {}));g.cloud = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 // Word cloud layout by Jason Davies, https://www.jasondavies.com/wordcloud/
 // Algorithm due to Jonathan Feinberg, http://static.mrfeinberg.com/bv_ch03.pdf
 
@@ -397,3 +398,108 @@ var spirals = {
   archimedean: archimedeanSpiral,
   rectangular: rectangularSpiral
 };
+
+},{"d3-dispatch":2}],2:[function(require,module,exports){
+(function (global, factory) {
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+  typeof define === 'function' && define.amd ? define(['exports'], factory) :
+  factory((global.dispatch = {}));
+}(this, function (exports) { 'use strict';
+
+  function Dispatch(types) {
+    var i = -1,
+        n = types.length,
+        callbacksByType = {},
+        callbackByName = {},
+        type,
+        that = this;
+
+    that.on = function(type, callback) {
+      type = parseType(type);
+
+      // Return the current callback, if any.
+      if (arguments.length < 2) {
+        return (callback = callbackByName[type.name]) && callback.value;
+      }
+
+      // If a type was specified…
+      if (type.type) {
+        var callbacks = callbacksByType[type.type],
+            callback0 = callbackByName[type.name],
+            i;
+
+        // Remove the current callback, if any, using copy-on-remove.
+        if (callback0) {
+          callback0.value = null;
+          i = callbacks.indexOf(callback0);
+          callbacksByType[type.type] = callbacks = callbacks.slice(0, i).concat(callbacks.slice(i + 1));
+          delete callbackByName[type.name];
+        }
+
+        // Add the new callback, if any.
+        if (callback) {
+          callback = {value: callback};
+          callbackByName[type.name] = callback;
+          callbacks.push(callback);
+        }
+      }
+
+      // Otherwise, if a null callback was specified, remove all callbacks with the given name.
+      else if (callback == null) {
+        for (var otherType in callbacksByType) {
+          if (callback = callbackByName[otherType + type.name]) {
+            callback.value = null;
+            var callbacks = callbacksByType[otherType], i = callbacks.indexOf(callback);
+            callbacksByType[otherType] = callbacks.slice(0, i).concat(callbacks.slice(i + 1));
+            delete callbackByName[callback.name];
+          }
+        }
+      }
+
+      return that;
+    };
+
+    while (++i < n) {
+      type = types[i] + "";
+      if (!type || (type in that)) throw new Error("illegal or duplicate type: " + type);
+      callbacksByType[type] = [];
+      that[type] = applier(type);
+    }
+
+    function parseType(type) {
+      var i = (type += "").indexOf("."), name = type;
+      if (i >= 0) type = type.slice(0, i); else name += ".";
+      if (type && !callbacksByType.hasOwnProperty(type)) throw new Error("unknown type: " + type);
+      return {type: type, name: name};
+    }
+
+    function applier(type) {
+      return function() {
+        var callbacks = callbacksByType[type], // Defensive reference; copy-on-remove.
+            callback,
+            callbackValue,
+            i = -1,
+            n = callbacks.length;
+
+        while (++i < n) {
+          if (callbackValue = (callback = callbacks[i]).value) {
+            callbackValue.apply(this, arguments);
+          }
+        }
+
+        return that;
+      };
+    }
+  }
+
+  function dispatch() {
+    return new Dispatch(arguments);
+  }
+
+  dispatch.prototype = Dispatch.prototype; // allow instanceof
+
+  exports.dispatch = dispatch;
+
+}));
+},{}]},{},[1])(1)
+});

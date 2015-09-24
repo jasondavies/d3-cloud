@@ -1,3 +1,5 @@
+var Canvas = require("canvas");
+
 var cloud = require("../");
 
 var words = ["Hello", "world", "normally", "you", "want", "more", "words", "than", "this"]
@@ -6,6 +8,7 @@ var words = ["Hello", "world", "normally", "you", "want", "more", "words", "than
     });
 
 cloud().size([960, 500])
+    .canvas(function() { return new Canvas(1, 1); })
     .words(words)
     .padding(5)
     .rotate(function() { return ~~(Math.random() * 2) * 90; })
