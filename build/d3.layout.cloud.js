@@ -12,6 +12,7 @@ module.exports = function() {
   var size = [256, 256],
       text = cloudText,
       font = cloudFont,
+      opacity = cloudOpacity,
       fontSize = cloudFontSize,
       fontStyle = cloudFontNormal,
       fontWeight = cloudFontNormal,
@@ -44,6 +45,7 @@ module.exports = function() {
           d.weight = fontWeight.call(this, d, i);
           d.rotate = rotate.call(this, d, i);
           d.size = ~~fontSize.call(this, d, i);
+          d.opacity = ~~opacity.call(this, d, i);
           d.padding = padding.call(this, d, i);
           return d;
         }).sort(function(a, b) { return b.size - a.size; });
@@ -188,6 +190,10 @@ module.exports = function() {
   cloud.fontSize = function(_) {
     return arguments.length ? (fontSize = functor(_), cloud) : fontSize;
   };
+  
+  cloud.opacity = function(_) {
+    return arguments.length ? (opacity = functor(_), cloud) : opacity;
+  };
 
   cloud.padding = function(_) {
     return arguments.length ? (padding = functor(_), cloud) : padding;
@@ -218,6 +224,10 @@ function cloudFontNormal() {
 }
 
 function cloudFontSize(d) {
+  return Math.sqrt(d.value);
+}
+
+function cloudOpacity(d) {
   return Math.sqrt(d.value);
 }
 
