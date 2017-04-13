@@ -13,6 +13,8 @@ demonstration along with implementation details.
 
 See the samples in `examples/`.
 
+Check out [this fiddle](http://jsfiddle.net/pqhe157q/) for a no setup option.
+
 ## API Reference
 
 <a name="cloud" href="#cloud">#</a> d3.layout.<b>cloud</b>()
