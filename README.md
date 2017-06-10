@@ -1,5 +1,7 @@
 # Word Cloud Layout
 
+[![CDNJS](https://img.shields.io/cdnjs/v/d3-cloud.svg)](https://cdnjs.com/libraries/d3-cloud)
+
 This is a [Wordle](http://www.wordle.net/)-inspired word cloud layout written
 in JavaScript. It uses HTML5 canvas and sprite masks to achieve
 near-interactive speeds.
