@@ -13,6 +13,12 @@ demonstration along with implementation details.
 
 See the samples in `examples/`.
 
+_Note:_ if on macOS, you'll need to install required deps for the Canvas package:
+
+```
+brew install pkg-config cairo libpng jpeg giflib
+```
+
 ## API Reference
 
 <a name="cloud" href="#cloud">#</a> d3.layout.<b>cloud</b>()
