@@ -1,7 +1,7 @@
 var d3 = require("d3"),
     cloud = require("../");
 
-var fill = d3.scale.category20();
+var fill = d3.scaleOrdinal(d3.schemeCategory20);
 
 var layout = cloud()
     .size([500, 500])
