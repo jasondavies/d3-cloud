@@ -11,6 +11,7 @@ var cloudRadians = Math.PI / 180,
 module.exports = function() {
   var size = [256, 256],
       text = cloudText,
+      position = cloudPosition,
       font = cloudFont,
       fontSize = cloudFontSize,
       fontStyle = cloudFontNormal,
@@ -58,8 +59,9 @@ module.exports = function() {
       var start = Date.now();
       while (Date.now() - start < timeInterval && ++i < n && timer) {
         var d = data[i];
-        d.x = (size[0] * (random() + .5)) >> 1;
-        d.y = (size[1] * (random() + .5)) >> 1;
+        var p = position(d);
+        d.x = (size[0] * (p.x + .5)) >> 1;
+        d.y = (size[1] * (p.y + .5)) >> 1;
         cloudSprite(contextAndRatio, d, data, i);
         if (d.hasText && place(board, d, bounds)) {
           tags.push(d);
@@ -181,6 +183,10 @@ module.exports = function() {
     return arguments.length ? (text = functor(_), cloud) : text;
   };
 
+  cloud.position = function(_) {
+      return arguments.length ? (position = functor(_), cloud) : position;
+  };
+
   cloud.spiral = function(_) {
     return arguments.length ? (spiral = spirals[_] || _, cloud) : spiral;
   };
@@ -207,6 +213,10 @@ module.exports = function() {
 
 function cloudText(d) {
   return d.text;
+}
+
+function cloudPosition() {
+  return {x: Math.random(), y: Math.random()};
 }
 
 function cloudFont() {
@@ -400,11 +410,11 @@ var spirals = {
 };
 
 },{"d3-dispatch":2}],2:[function(require,module,exports){
-// https://d3js.org/d3-dispatch/ Version 1.0.2. Copyright 2016 Mike Bostock.
+// https://d3js.org/d3-dispatch/ Version 1.0.3. Copyright 2017 Mike Bostock.
 (function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
-  typeof define === 'function' && define.amd ? define(['exports'], factory) :
-  (factory((global.d3 = global.d3 || {})));
+	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+	typeof define === 'function' && define.amd ? define(['exports'], factory) :
+	(factory((global.d3 = global.d3 || {})));
 }(this, (function (exports) { 'use strict';
 
 var noop = {value: function() {}};
