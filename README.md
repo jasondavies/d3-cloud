@@ -123,6 +123,18 @@ function(d) { return d.text; }
 
 A constant may be specified instead of a function.
 
+<a name="position" href="#position">#</a> <b>position</b>([<i>position</i>])
+
+If specified, sets the **position** accessor function, which indicates the desired
+x, y position for each word (must be between 0 and 1).  If not specified, returns the current position accessor
+function, which defaults to:
+
+```js
+function() { return {x: Math.random(), y: Math.random()}; }
+```
+
+A constant may be specified instead of a function.
+
 <a name="spiral" href="#spiral">#</a> <b>spiral</b>([<i>spiral</i>])
 
 If specified, sets the current type of spiral used for positioning words.  This
