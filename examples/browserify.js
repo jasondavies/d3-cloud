@@ -1,7 +1,7 @@
 var d3 = require("d3"),
     cloud = require("../");
 
-var fill = d3.scale.category20();
+var fill = d3.scaleOrdinal(d3.schemeCategory20);
 
 var layout = cloud()
     .size([500, 500])
@@ -22,6 +22,9 @@ function draw(words) {
   d3.select("body").append("svg")
       .attr("width", layout.size()[0])
       .attr("height", layout.size()[1])
+      .attr('viewBox', '0 0 ' + layout.size()[0] + ' ' + layout.size()[1])
+      .style('width', '100%')
+      .style('height', 'auto')
     .append("g")
       .attr("transform", "translate(" + layout.size()[0] / 2 + "," + layout.size()[1] / 2 + ")")
     .selectAll("text")
