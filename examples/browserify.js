@@ -1,8 +1,6 @@
 var d3 = require("d3"),
     cloud = require("../");
 
-var fill = d3.scale.category20();
-
 var layout = cloud()
     .size([500, 500])
     .words([
@@ -29,7 +27,6 @@ function draw(words) {
     .enter().append("text")
       .style("font-size", function(d) { return d.size + "px"; })
       .style("font-family", "Impact")
-      .style("fill", function(d, i) { return fill(i); })
       .attr("text-anchor", "middle")
       .attr("transform", function(d) {
         return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
