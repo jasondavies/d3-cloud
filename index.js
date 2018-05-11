@@ -62,7 +62,7 @@ module.exports = function() {
         cloudSprite(contextAndRatio, d, data, i);
         if (d.hasText && place(board, d, bounds)) {
           tags.push(d);
-          event.word(d);
+          event.call("word", cloud, d);
           if (bounds) cloudBounds(bounds, d);
           else bounds = [{x: d.x + d.x0, y: d.y + d.y0}, {x: d.x + d.x1, y: d.y + d.y1}];
           // Temporary hack
@@ -72,7 +72,7 @@ module.exports = function() {
       }
       if (i >= n) {
         cloud.stop();
-        event.end(tags, bounds);
+        event.call("end", cloud, tags, bounds);
       }
     }
   }
