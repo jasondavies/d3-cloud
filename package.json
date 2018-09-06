@@ -1,6 +1,6 @@
 {
   "name": "d3-cloud",
-  "version": "1.2.5",
+  "version": "1.3",
   "description": "Generate word clouds in JavaScript.",
   "keywords": [
     "word",
@@ -15,7 +15,7 @@
     "name": "Jason Davies",
     "url": "https://www.jasondavies.com/"
   },
-  "main": "build/d3.layout.cloud.js",
+  "main": "build/d3-cloud.js",
   "module": "index",
   "jsnext:main": "index",
   "repository": {
@@ -23,12 +23,17 @@
     "url": "https://github.com/jasondavies/d3-cloud.git"
   },
   "scripts": {
-    "build": "mkdir -p build && browserify --standalone d3.layout.cloud index.js > build/d3.layout.cloud.js"
+    "pretest": "rm -rf build && mkdir build && rollup -f umd -n d3 -o build/d3-cloud.js -- index.js",
+    "test": "tape 'test/**/*-test.js'",
+    "prepare": "npm run test && uglifyjs build/d3-cloud.js -c -m -o build/d3-cloud.min.js",
+    "postpublish": "zip -j build/d3-cloud.zip -- LICENSE README.md build/d3-cloud.js build/d3-cloud.min.js"
   },
   "dependencies": {
     "d3-dispatch": "^1.0.3"
   },
   "devDependencies": {
-    "browserify": "^11.2.0"
+    "rollup": "0.27",
+    "tape": "4",
+    "uglify-js": "2"
   }
 }
