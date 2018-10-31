@@ -1,1 +1,1 @@
-export {default as cloud} from "./src/cloud";
+export {cloud} from "./src/cloud";
