@@ -25,10 +25,11 @@
   "scripts": {
     "pretest": "rm -rf build && mkdir build && rollup -f umd -n d3 -o build/d3-cloud.js -- index.js",
     "test": "tape 'test/**/*-test.js'",
-    "prepare": "npm run test && uglifyjs build/d3-cloud.js -c -m -o build/d3-cloud.min.js",
+    "prepare": "uglifyjs build/d3-cloud.js -c -m -o build/d3-cloud.min.js",
     "postpublish": "zip -j build/d3-cloud.zip -- LICENSE README.md build/d3-cloud.js build/d3-cloud.min.js"
   },
   "dependencies": {
+    "d3": "^5.7.0",
     "d3-dispatch": "^1.0.3"
   },
   "devDependencies": {
