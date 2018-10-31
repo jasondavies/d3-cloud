@@ -7,7 +7,7 @@ var cloudRadians = Math.PI / 180,
     cw = 1 << 11 >> 5,
     ch = 1 << 11;
 
-export default function() {
+export function cloud() {
   var size = [256, 256],
       text = cloudText,
       font = cloudFont,
