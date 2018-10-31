@@ -15,7 +15,7 @@
     "name": "Jason Davies",
     "url": "https://www.jasondavies.com/"
   },
-  "main": "build/d3-cloud.js",
+  "main": "index.js",
   "module": "index",
   "jsnext:main": "index",
   "repository": {
@@ -23,10 +23,6 @@
     "url": "https://github.com/jasondavies/d3-cloud.git"
   },
   "scripts": {
-    "pretest": "rm -rf build && mkdir build && rollup -f umd -n d3 -o build/d3-cloud.js -- index.js",
-    "test": "tape 'test/**/*-test.js'",
-    "prepare": "uglifyjs build/d3-cloud.js -c -m -o build/d3-cloud.min.js",
-    "postpublish": "zip -j build/d3-cloud.zip -- LICENSE README.md build/d3-cloud.js build/d3-cloud.min.js"
   },
   "dependencies": {
     "d3": "^5.7.0",
