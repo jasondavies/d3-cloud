@@ -15,7 +15,7 @@
     "name": "Jason Davies",
     "url": "https://www.jasondavies.com/"
   },
-  "main": "index.js",
+  "main": "src/cloud.js",
   "module": "index",
   "jsnext:main": "index",
   "repository": {
