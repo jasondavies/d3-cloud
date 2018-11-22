@@ -67,6 +67,10 @@ interface Cloud<T extends Word> {
     padding(padding: number): Cloud<T>;
     padding(padding: (datum: T, index: number) => number): Cloud<T>;
 
+    random(): (datum: T, index: number) => number;
+    random(padding: number): Cloud<T>;
+    random(random: (datum: T, index: number) => number): Cloud<T>;
+
     on(type: "word", listener: (word: T) => void): Cloud<T>;
     on(type: "end", listener: (tags: T[], bounds: { x: number; y: number }[]) => void): Cloud<T>;
     on(type: string, listener: (...args: any[]) => void): Cloud<T>;
