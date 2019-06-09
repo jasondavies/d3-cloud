@@ -15,20 +15,27 @@
     "name": "Jason Davies",
     "url": "https://www.jasondavies.com/"
   },
-  "main": "build/d3.layout.cloud.js",
-  "module": "index",
+  "main": "dist/d3-cloud.js",
+  "unpkg": "dist/d3-cloud.js",
+  "jsdelivr": "dist/d3-cloud.js",
+  "module": "src/index.js",
   "jsnext:main": "index",
   "repository": {
     "type": "git",
     "url": "https://github.com/jasondavies/d3-cloud.git"
   },
   "scripts": {
-    "build": "mkdir -p build && browserify --standalone d3.layout.cloud index.js > build/d3.layout.cloud.js"
+    "build": "rollup -c",
+    "clean": "rimraf dist"
   },
   "dependencies": {
     "d3-dispatch": "^1.0.3"
   },
   "devDependencies": {
-    "browserify": "^11.2.0"
+    "canvas": "^2.5.0",
+    "rimraf": "2",
+    "rollup": "0.64",
+    "rollup-plugin-ascii": "0.0",
+    "rollup-plugin-terser": "1"
   }
 }

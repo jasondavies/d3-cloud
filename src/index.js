@@ -1,13 +1,13 @@
 // Word cloud layout by Jason Davies, https://www.jasondavies.com/wordcloud/
 // Algorithm due to Jonathan Feinberg, http://static.mrfeinberg.com/bv_ch03.pdf
 
-var dispatch = require("d3-dispatch").dispatch;
+import {dispatch} from "d3-dispatch";
 
 var cloudRadians = Math.PI / 180,
     cw = 1 << 11 >> 5,
     ch = 1 << 11;
 
-module.exports = function() {
+export default function() {
   var size = [256, 256],
       text = cloudText,
       font = cloudFont,
@@ -22,68 +22,15 @@ module.exports = function() {
       event = dispatch("word", "end"),
       timer = null,
       random = Math.random,
-      cloud = {},
       canvas = cloudCanvas;
 
-  cloud.canvas = function(_) {
-    return arguments.length ? (canvas = functor(_), cloud) : canvas;
-  };
+  function cloud() {
 
-  cloud.start = function() {
-    var contextAndRatio = getContext(canvas()),
-        board = zeroArray((size[0] >> 5) * size[1]),
-        bounds = null,
-        n = words.length,
-        i = -1,
-        tags = [],
-        data = words.map(function(d, i) {
-          d.text = text.call(this, d, i);
-          d.font = font.call(this, d, i);
-          d.style = fontStyle.call(this, d, i);
-          d.weight = fontWeight.call(this, d, i);
-          d.rotate = rotate.call(this, d, i);
-          d.size = ~~fontSize.call(this, d, i);
-          d.padding = padding.call(this, d, i);
-          return d;
-        }).sort(function(a, b) { return b.size - a.size; });
-
-    if (timer) clearInterval(timer);
-    timer = setInterval(step, 0);
-    step();
-
-    return cloud;
-
-    function step() {
-      var start = Date.now();
-      while (Date.now() - start < timeInterval && ++i < n && timer) {
-        var d = data[i];
-        d.x = (size[0] * (random() + .5)) >> 1;
-        d.y = (size[1] * (random() + .5)) >> 1;
-        cloudSprite(contextAndRatio, d, data, i);
-        if (d.hasText && place(board, d, bounds)) {
-          tags.push(d);
-          event.call("word", cloud, d);
-          if (bounds) cloudBounds(bounds, d);
-          else bounds = [{x: d.x + d.x0, y: d.y + d.y0}, {x: d.x + d.x1, y: d.y + d.y1}];
-          // Temporary hack
-          d.x -= size[0] >> 1;
-          d.y -= size[1] >> 1;
-        }
-      }
-      if (i >= n) {
-        cloud.stop();
-        event.call("end", cloud, tags, bounds);
-      }
-    }
   }
 
-  cloud.stop = function() {
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-    return cloud;
-  };
+  function initialize() {
+
+  }
 
   function getContext(canvas) {
     canvas.width = canvas.height = 1;
@@ -148,6 +95,70 @@ module.exports = function() {
     return false;
   }
 
+  cloud.initialize = function(_) {
+    initialize();
+  };
+
+  cloud.canvas = function(_) {
+    return arguments.length ? (canvas = functor(_), cloud) : canvas;
+  };
+
+  cloud.start = function() {
+    var contextAndRatio = getContext(canvas()),
+        board = zeroArray((size[0] >> 5) * size[1]),
+        bounds = null,
+        n = words.length,
+        i = -1,
+        tags = [],
+        data = words.map(function(d, i) {
+          d.text = text.call(this, d, i);
+          d.font = font.call(this, d, i);
+          d.style = fontStyle.call(this, d, i);
+          d.weight = fontWeight.call(this, d, i);
+          d.rotate = rotate.call(this, d, i);
+          d.size = ~~fontSize.call(this, d, i);
+          d.padding = padding.call(this, d, i);
+          return d;
+        }).sort(function(a, b) { return b.size - a.size; });
+
+    if (timer) clearInterval(timer);
+    timer = setInterval(step, 0);
+    step();
+
+    return cloud;
+
+    function step() {
+      var start = Date.now();
+      while (Date.now() - start < timeInterval && ++i < n && timer) {
+        var d = data[i];
+        d.x = (size[0] * (random() + .5)) >> 1;
+        d.y = (size[1] * (random() + .5)) >> 1;
+        cloudSprite(contextAndRatio, d, data, i);
+        if (d.hasText && place(board, d, bounds)) {
+          tags.push(d);
+          event.call("word", cloud, d);
+          if (bounds) cloudBounds(bounds, d);
+          else bounds = [{x: d.x + d.x0, y: d.y + d.y0}, {x: d.x + d.x1, y: d.y + d.y1}];
+          // Temporary hack
+          d.x -= size[0] >> 1;
+          d.y -= size[1] >> 1;
+        }
+      }
+      if (i >= n) {
+        cloud.stop();
+        event.call("end", cloud, tags, bounds);
+      }
+    }
+  };
+
+  cloud.stop = function() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+    return cloud;
+  };
+
   cloud.timeInterval = function(_) {
     return arguments.length ? (timeInterval = _ == null ? Infinity : _, cloud) : timeInterval;
   };
@@ -202,7 +213,7 @@ module.exports = function() {
   };
 
   return cloud;
-};
+}
 
 function cloudText(d) {
   return d.text;
