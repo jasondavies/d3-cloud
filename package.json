@@ -23,12 +23,38 @@
     "url": "https://github.com/jasondavies/d3-cloud.git"
   },
   "scripts": {
-    "build": "mkdir -p build && browserify --standalone d3.layout.cloud index.js > build/d3.layout.cloud.js"
+    "build": "mkdir -p build && browserify --standalone d3.layout.cloud index.js > build/d3.layout.cloud.js",
+    "storybook": "start-storybook",
+    "build-storybook": "build-storybook"
   },
   "dependencies": {
-    "d3-dispatch": "^1.0.3"
+    "d3-dispatch": "^1.0.3",
+    "canvas": "^1.2.3",
+    "d3": "3.x"
   },
   "devDependencies": {
-    "browserify": "^11.2.0"
+    "@babel/core": "^7.6.4",
+    "@storybook/addon-actions": "5.2.5",
+    "@storybook/addon-centered": "5.2.5",
+    "@storybook/addon-docs": "5.2.5",
+    "@storybook/addon-events": "5.2.5",
+    "@storybook/addon-knobs": "5.2.5",
+    "@storybook/addon-links": "5.2.5",
+    "@storybook/addon-notes": "5.2.5",
+    "@storybook/addon-options": "5.2.5",
+    "@storybook/addon-storyshots": "5.2.5",
+    "@storybook/addon-storysource": "5.2.5",
+    "@storybook/addon-viewport": "5.2.5",
+    "@storybook/addons": "5.2.5",
+    "@storybook/client-api": "5.2.5",
+    "@storybook/core": "5.2.5",
+    "@storybook/core-events": "5.2.5",
+    "@storybook/html": "5.2.5",
+    "@storybook/source-loader": "5.2.5",
+    "babel-loader": "^8.0.6",
+    "browserify": "^11.2.0",
+    "eventemitter3": "^4.0.0",
+    "format-json": "^1.0.3",
+    "global": "^4.3.2"
   }
 }
