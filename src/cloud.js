@@ -397,4 +397,4 @@ var spirals = {
   rectangular: rectangularSpiral
 };
 
-module.exports = { cloud }  
+module.exports = { cloud: cloud }  
