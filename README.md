@@ -15,7 +15,7 @@ See the samples in `examples/`.
 
 ## API Reference
 
-<a name="cloud" href="#cloud">#</a> d3.layout.<b>cloud</b>()
+<a name="cloud" href="#cloud">#</a> <b>cloud</b>()
 
 Constructs a new cloud layout instance.
 
