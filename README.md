@@ -1,4 +1,5 @@
 # Word Cloud Layout
+## useful for Word Cloud Layout
 
 This is a [Wordle](http://www.wordle.net/)-inspired word cloud layout written
 in JavaScript. It uses HTML5 canvas and sprite masks to achieve
