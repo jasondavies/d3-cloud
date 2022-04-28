@@ -9,6 +9,13 @@ demonstration along with implementation details.
 
 ![Example cloud of Twitter search results for “amazing”](http://www.jasondavies.com/wordcloud/amazing.png)
 
+## Installation
+Use npm install, run:
+```
+npm i d3-cloud
+```
+
+
 ## Usage
 
 See the samples in `examples/`.
