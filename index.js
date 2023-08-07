@@ -1,11 +1,17 @@
 // Word cloud layout by Jason Davies, https://www.jasondavies.com/wordcloud/
-// Algorithm due to Jonathan Feinberg, http://static.mrfeinberg.com/bv_ch03.pdf
+// Algorithm due to Jonathan Feinberg, https://s3.amazonaws.com/static.mrfeinberg.com/bv_ch03.pdf
 
-var dispatch = require("d3-dispatch").dispatch;
+const dispatch = require("d3-dispatch").dispatch;
 
-var cloudRadians = Math.PI / 180,
-    cw = 1 << 11 >> 5,
-    ch = 1 << 11;
+const RADIANS = Math.PI / 180;
+
+const SPIRALS = {
+  archimedean: archimedeanSpiral,
+  rectangular: rectangularSpiral
+};
+
+const cw = 1 << 11 >> 5;
+const ch = 1 << 11;
 
 module.exports = function() {
   var size = [256, 256],
@@ -82,20 +88,23 @@ module.exports = function() {
       clearInterval(timer);
       timer = null;
     }
+    for (const tag of tags) {
+      delete tag.sprite;
+    }
     return cloud;
   };
 
   function getContext(canvas) {
+    const context = canvas.getContext("2d", {willReadFrequently: true});
+
     canvas.width = canvas.height = 1;
-    var ratio = Math.sqrt(canvas.getContext("2d").getImageData(0, 0, 1, 1).data.length >> 2);
+    const ratio = Math.sqrt(context.getImageData(0, 0, 1, 1).data.length >> 2);
     canvas.width = (cw << 5) / ratio;
     canvas.height = ch / ratio;
 
-    var context = canvas.getContext("2d");
     context.fillStyle = context.strokeStyle = "red";
-    context.textAlign = "center";
 
-    return {context: context, ratio: ratio};
+    return {context, ratio};
   }
 
   function place(board, tag, bounds) {
@@ -122,8 +131,8 @@ module.exports = function() {
       if (tag.x + tag.x0 < 0 || tag.y + tag.y0 < 0 ||
           tag.x + tag.x1 > size[0] || tag.y + tag.y1 > size[1]) continue;
       // TODO only check for collisions within current bounds.
-      if (!bounds || !cloudCollide(tag, board, size[0])) {
-        if (!bounds || collideRects(tag, bounds)) {
+      if (!bounds || collideRects(tag, bounds)) {
+        if (!cloudCollide(tag, board, size[0])) {
           var sprite = tag.sprite,
               w = tag.width >> 5,
               sw = size[0] >> 5,
@@ -140,7 +149,6 @@ module.exports = function() {
             }
             x += sw;
           }
-          delete tag.sprite;
           return true;
         }
       }
@@ -181,7 +189,7 @@ module.exports = function() {
   };
 
   cloud.spiral = function(_) {
-    return arguments.length ? (spiral = spirals[_] || _, cloud) : spiral;
+    return arguments.length ? (spiral = SPIRALS[_] || _, cloud) : spiral;
   };
 
   cloud.fontSize = function(_) {
@@ -221,7 +229,7 @@ function cloudFontSize(d) {
 }
 
 function cloudRotate() {
-  return (~~(Math.random() * 6) - 3) * 30;
+  return (~~(random() * 6) - 3) * 30;
 }
 
 function cloudPadding() {
@@ -245,11 +253,13 @@ function cloudSprite(contextAndRatio, d, data, di) {
     d = data[di];
     c.save();
     c.font = d.style + " " + d.weight + " " + ~~((d.size + 1) / ratio) + "px " + d.font;
-    var w = c.measureText(d.text + "m").width * ratio,
-        h = d.size << 1;
+    const metrics = c.measureText(d.text);
+    const anchor = -Math.floor(metrics.width / 2);
+    let w = (metrics.width + 1) * ratio;
+    let h = d.size << 1;
     if (d.rotate) {
-      var sr = Math.sin(d.rotate * cloudRadians),
-          cr = Math.cos(d.rotate * cloudRadians),
+      var sr = Math.sin(d.rotate * RADIANS),
+          cr = Math.cos(d.rotate * RADIANS),
           wcr = w * cr,
           wsr = w * sr,
           hcr = h * cr,
@@ -267,9 +277,9 @@ function cloudSprite(contextAndRatio, d, data, di) {
     }
     if (y + h >= ch) break;
     c.translate((x + (w >> 1)) / ratio, (y + (h >> 1)) / ratio);
-    if (d.rotate) c.rotate(d.rotate * cloudRadians);
-    c.fillText(d.text, 0, 0);
-    if (d.padding) c.lineWidth = 2 * d.padding, c.strokeText(d.text, 0, 0);
+    if (d.rotate) c.rotate(d.rotate * RADIANS);
+    c.fillText(d.text, anchor, 0);
+    if (d.padding) c.lineWidth = 2 * d.padding, c.strokeText(d.text, anchor, 0);
     c.restore();
     d.width = w;
     d.height = h;
@@ -392,8 +402,3 @@ function cloudCanvas() {
 function functor(d) {
   return typeof d === "function" ? d : function() { return d; };
 }
-
-var spirals = {
-  archimedean: archimedeanSpiral,
-  rectangular: rectangularSpiral
-};

@@ -1,12 +1,18 @@
-(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g=(g.d3||(g.d3 = {}));g=(g.layout||(g.layout = {}));g.cloud = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g=(g.d3||(g.d3 = {}));g=(g.layout||(g.layout = {}));g.cloud = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 // Word cloud layout by Jason Davies, https://www.jasondavies.com/wordcloud/
-// Algorithm due to Jonathan Feinberg, http://static.mrfeinberg.com/bv_ch03.pdf
+// Algorithm due to Jonathan Feinberg, https://s3.amazonaws.com/static.mrfeinberg.com/bv_ch03.pdf
 
-var dispatch = require("d3-dispatch").dispatch;
+const dispatch = require("d3-dispatch").dispatch;
 
-var cloudRadians = Math.PI / 180,
-    cw = 1 << 11 >> 5,
-    ch = 1 << 11;
+const RADIANS = Math.PI / 180;
+
+const SPIRALS = {
+  archimedean: archimedeanSpiral,
+  rectangular: rectangularSpiral
+};
+
+const cw = 1 << 11 >> 5;
+const ch = 1 << 11;
 
 module.exports = function() {
   var size = [256, 256],
@@ -83,20 +89,23 @@ module.exports = function() {
       clearInterval(timer);
       timer = null;
     }
+    for (const tag of tags) {
+      delete tag.sprite;
+    }
     return cloud;
   };
 
   function getContext(canvas) {
+    const context = canvas.getContext("2d", {willReadFrequently: true});
+
     canvas.width = canvas.height = 1;
-    var ratio = Math.sqrt(canvas.getContext("2d").getImageData(0, 0, 1, 1).data.length >> 2);
+    const ratio = Math.sqrt(context.getImageData(0, 0, 1, 1).data.length >> 2);
     canvas.width = (cw << 5) / ratio;
     canvas.height = ch / ratio;
 
-    var context = canvas.getContext("2d");
     context.fillStyle = context.strokeStyle = "red";
-    context.textAlign = "center";
 
-    return {context: context, ratio: ratio};
+    return {context, ratio};
   }
 
   function place(board, tag, bounds) {
@@ -123,8 +132,8 @@ module.exports = function() {
       if (tag.x + tag.x0 < 0 || tag.y + tag.y0 < 0 ||
           tag.x + tag.x1 > size[0] || tag.y + tag.y1 > size[1]) continue;
       // TODO only check for collisions within current bounds.
-      if (!bounds || !cloudCollide(tag, board, size[0])) {
-        if (!bounds || collideRects(tag, bounds)) {
+      if (!bounds || collideRects(tag, bounds)) {
+        if (!cloudCollide(tag, board, size[0])) {
           var sprite = tag.sprite,
               w = tag.width >> 5,
               sw = size[0] >> 5,
@@ -141,7 +150,6 @@ module.exports = function() {
             }
             x += sw;
           }
-          delete tag.sprite;
           return true;
         }
       }
@@ -182,7 +190,7 @@ module.exports = function() {
   };
 
   cloud.spiral = function(_) {
-    return arguments.length ? (spiral = spirals[_] || _, cloud) : spiral;
+    return arguments.length ? (spiral = SPIRALS[_] || _, cloud) : spiral;
   };
 
   cloud.fontSize = function(_) {
@@ -222,7 +230,7 @@ function cloudFontSize(d) {
 }
 
 function cloudRotate() {
-  return (~~(Math.random() * 6) - 3) * 30;
+  return (~~(random() * 6) - 3) * 30;
 }
 
 function cloudPadding() {
@@ -246,11 +254,13 @@ function cloudSprite(contextAndRatio, d, data, di) {
     d = data[di];
     c.save();
     c.font = d.style + " " + d.weight + " " + ~~((d.size + 1) / ratio) + "px " + d.font;
-    var w = c.measureText(d.text + "m").width * ratio,
-        h = d.size << 1;
+    const metrics = c.measureText(d.text);
+    const anchor = -Math.floor(metrics.width / 2);
+    let w = (metrics.width + 1) * ratio;
+    let h = d.size << 1;
     if (d.rotate) {
-      var sr = Math.sin(d.rotate * cloudRadians),
-          cr = Math.cos(d.rotate * cloudRadians),
+      var sr = Math.sin(d.rotate * RADIANS),
+          cr = Math.cos(d.rotate * RADIANS),
           wcr = w * cr,
           wsr = w * sr,
           hcr = h * cr,
@@ -268,9 +278,9 @@ function cloudSprite(contextAndRatio, d, data, di) {
     }
     if (y + h >= ch) break;
     c.translate((x + (w >> 1)) / ratio, (y + (h >> 1)) / ratio);
-    if (d.rotate) c.rotate(d.rotate * cloudRadians);
-    c.fillText(d.text, 0, 0);
-    if (d.padding) c.lineWidth = 2 * d.padding, c.strokeText(d.text, 0, 0);
+    if (d.rotate) c.rotate(d.rotate * RADIANS);
+    c.fillText(d.text, anchor, 0);
+    if (d.padding) c.lineWidth = 2 * d.padding, c.strokeText(d.text, anchor, 0);
     c.restore();
     d.width = w;
     d.height = h;
@@ -394,24 +404,19 @@ function functor(d) {
   return typeof d === "function" ? d : function() { return d; };
 }
 
-var spirals = {
-  archimedean: archimedeanSpiral,
-  rectangular: rectangularSpiral
-};
-
 },{"d3-dispatch":2}],2:[function(require,module,exports){
-// https://d3js.org/d3-dispatch/ Version 1.0.3. Copyright 2017 Mike Bostock.
+// https://d3js.org/d3-dispatch/ v1.0.6 Copyright 2019 Mike Bostock
 (function (global, factory) {
-	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
-	typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	(factory((global.d3 = global.d3 || {})));
-}(this, (function (exports) { 'use strict';
+typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+typeof define === 'function' && define.amd ? define(['exports'], factory) :
+(global = global || self, factory(global.d3 = global.d3 || {}));
+}(this, function (exports) { 'use strict';
 
 var noop = {value: function() {}};
 
 function dispatch() {
   for (var i = 0, n = arguments.length, _ = {}, t; i < n; ++i) {
-    if (!(t = arguments[i] + "") || (t in _)) throw new Error("illegal type: " + t);
+    if (!(t = arguments[i] + "") || (t in _) || /[\s.]/.test(t)) throw new Error("illegal type: " + t);
     _[t] = [];
   }
   return new Dispatch(_);
@@ -494,7 +499,7 @@ exports.dispatch = dispatch;
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
-})));
+}));
 
 },{}]},{},[1])(1)
 });

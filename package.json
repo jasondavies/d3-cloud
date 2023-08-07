@@ -1,6 +1,6 @@
 {
   "name": "d3-cloud",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Generate word clouds in JavaScript.",
   "keywords": [
     "word",
@@ -29,6 +29,6 @@
     "d3-dispatch": "^1.0.3"
   },
   "devDependencies": {
-    "browserify": "^11.2.0"
+    "browserify": "^17.0.0"
   }
 }
