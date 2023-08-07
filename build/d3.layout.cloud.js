@@ -89,8 +89,8 @@ module.exports = function() {
       clearInterval(timer);
       timer = null;
     }
-    for (const tag of tags) {
-      delete tag.sprite;
+    for (const d of words) {
+      delete d.sprite;
     }
     return cloud;
   };
