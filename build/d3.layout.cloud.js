@@ -13,6 +13,7 @@ const SPIRALS = {
 
 const cw = 1 << 11 >> 5;
 const ch = 1 << 11;
+const random = Math.random;
 
 module.exports = function() {
   var size = [256, 256],
@@ -30,7 +31,9 @@ module.exports = function() {
       timer = null,
       random = Math.random,
       cloud = {},
-      canvas = cloudCanvas;
+      canvas = cloudCanvas,
+      mask = false
+      maskBoard = null;
 
   cloud.canvas = function(_) {
     return arguments.length ? (canvas = functor(_), cloud) : canvas;
@@ -38,7 +41,7 @@ module.exports = function() {
 
   cloud.start = function() {
     var contextAndRatio = getContext(canvas()),
-        board = zeroArray((size[0] >> 5) * size[1]),
+        board = mask ? maskBoard : zeroArray((size[0] >> 5) * size[1]),
         bounds = null,
         n = words.length,
         i = -1,
@@ -159,6 +162,16 @@ module.exports = function() {
 
   cloud.timeInterval = function(_) {
     return arguments.length ? (timeInterval = _ == null ? Infinity : _, cloud) : timeInterval;
+  };
+
+  cloud.mask = function(_){
+    if(arguments.length){
+      mask = _
+      maskBoard = createMaskBoard(_,size[0],size[1])
+      return cloud
+    }else{
+      return mask
+    } 
   };
 
   cloud.words = function(_) {
@@ -402,6 +415,38 @@ function cloudCanvas() {
 
 function functor(d) {
   return typeof d === "function" ? d : function() { return d; };
+}
+
+function get_mask_pixels(mask,w,h){
+  var canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h;
+  var ctx = canvas.getContext("2d");
+  ctx.drawImage(mask, 0, 0, w, h)
+  return ctx.getImageData(0, 0, w, h).data
+}
+
+function create_mask_board_from_pixels(mask_pixels, w,h){
+  var w32 = w >> 5 //divedes by 32
+  var sprite = []
+  // Zero the buffer
+  for (var i = 0; i < h * w32; i++){
+      sprite[i] = 0
+  }
+  for (var j = 0; j < h; j++) {
+    for (var i = 0; i < w; i++) {
+      var k = w32 * j + (i >> 5);
+      var  m = mask_pixels[(j * w + (i)) << 2] ? 1 << (31 - (i % 32)) : 0;
+      sprite[k] |= m;
+    }
+  }
+  return sprite.slice(0, w * w32)
+}
+
+function createMaskBoard(mask,w,h){
+  var pixels = get_mask_pixels(mask,w,h)
+  var board = create_mask_board_from_pixels(pixels,w,h)
+  return board
 }
 
 },{"d3-dispatch":2}],2:[function(require,module,exports){
