@@ -168,3 +168,23 @@ function() { return document.createElement("canvas"); }
 
 When using Node.js, you will almost definitely override this default, e.g.
 using the [canvas module](https://www.npmjs.com/package/canvas).
+
+<a name="mask" href="#mask">#</a> <b>mask</b>([<i>mask</i>])
+
+If specified, sets the **mask** image used internally
+to draw text fitting within the transaparent areas of the provided image.  If not specified, returns the current mask image, defaults to null. 
+
+```js
+// Mask Example
+var img = document.querySelector("img#mask")
+img.onload = ()=>{
+  d3.layout.cloud()
+    .size([500, 500])
+    .mask(img)
+}
+```
+
+Ensure the image is loaded before using it, typically using the onload event on the image.
+
+Note: The image must be hosted with the appropriate CORS headers if being hosted on a different origin. 
+
