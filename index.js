@@ -30,6 +30,7 @@ module.exports = function() {
       random = Math.random,
       cloud = {},
       canvas = cloudCanvas;
+      sort = 'size';
 
   cloud.canvas = function(_) {
     return arguments.length ? (canvas = functor(_), cloud) : canvas;
@@ -51,7 +52,7 @@ module.exports = function() {
           d.size = ~~fontSize.call(this, d, i);
           d.padding = padding.call(this, d, i);
           return d;
-        }).sort(function(a, b) { return b.size - a.size; });
+        }).sort(function(a, b) { return b[sort] - a[sort]; });
 
     if (timer) clearInterval(timer);
     timer = setInterval(step, 0);
@@ -208,6 +209,10 @@ module.exports = function() {
     var value = event.on.apply(event, arguments);
     return value === event ? cloud : value;
   };
+
+  cloud.sort = function(_) {
+    return arguments.length ? (sort = _, cloud) : sort;
+  }
 
   return cloud;
 };
