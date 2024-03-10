@@ -42,14 +42,14 @@ module.exports = function() {
         n = words.length,
         i = -1,
         tags = [],
-        data = words.map(function(d, i) {
-          d.text = text.call(this, d, i);
-          d.font = font.call(this, d, i);
-          d.style = fontStyle.call(this, d, i);
-          d.weight = fontWeight.call(this, d, i);
-          d.rotate = rotate.call(this, d, i);
-          d.size = ~~fontSize.call(this, d, i);
-          d.padding = padding.call(this, d, i);
+        data = words.map(function(d, i, words) {
+          d.text = text.call(this, d, i, words);
+          d.font = font.call(this, d, i, words);
+          d.style = fontStyle.call(this, d, i, words);
+          d.weight = fontWeight.call(this, d, i, words);
+          d.rotate = rotate.call(this, d, i, words);
+          d.size = ~~fontSize.call(this, d, i, words);
+          d.padding = padding.call(this, d, i, words);
           return d;
         }).sort(function(a, b) { return b.size - a.size; });
 
