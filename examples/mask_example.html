@@ -1,0 +1,67 @@
+<html>
+
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <script src="../build/d3.layout.cloud.js"></script>
+</head>
+
+<body>
+  <img src="./mask.png" id="mask" />
+  <script>
+    document.querySelector("#mask").onload = () => {
+      var count = 500
+      var scale = d3.scaleSqrt().range([20, 8]).domain([0, count])
+      var words = d3.range(0, count).map((d) => {
+        return {
+          text: "Hello",
+          size: scale(d),
+        };
+      });
+
+      var layout = d3.layout
+        .cloud()
+        .size([500, 500])
+        .mask(document.querySelector("#mask"))
+        .words(words)
+        .padding(1)
+        .font("Impact")
+        .fontSize(function (d) {
+          return d.size;
+        })
+        .on("end", function draw(words) {
+          d3.select("body")
+            .append('svg').
+            attr("viewBox", "0 0 500 500")
+            .attr("width", 500)
+            .append("g")
+            .attr(
+              "transform",
+              "translate(" +
+              layout.size()[0] / 2 +
+              "," +
+              layout.size()[1] / 2 +
+              ")"
+            )
+            .selectAll("text")
+            .data(words)
+            .enter()
+            .append("text")
+            .style("font-size", function (d) {
+              return d.size + "px";
+            })
+            .style("font-family", "Impact")
+            .attr("text-anchor", "middle")
+            .attr("transform", function (d) {
+              return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
+            })
+            .text(function (d) {
+              return d.text;
+            });
+        });
+      layout.start()
+    }
+
+  </script>
+</body>
+
+</html>
