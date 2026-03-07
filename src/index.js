@@ -10,7 +10,7 @@ const SPIRALS = {
   rectangular: rectangularSpiral
 };
 
-const cw = 1 << 11 >> 5;
+const cw = (1 << 11) >>> 5;
 const ch = 1 << 11;
 
 export default function() {
@@ -28,6 +28,7 @@ export default function() {
       timer = null,
       random = Math.random,
       rotate = () => (~~(random() * 6) - 3) * 30,
+      activeWords = null,
       cloud = {},
       canvas = cloudCanvas;
 
@@ -36,13 +37,17 @@ export default function() {
   };
 
   cloud.start = function() {
+    cloud.stop();
+
     var contextAndRatio = getContext(canvas()),
-        board = zeroArray((size[0] >> 5) * size[1]),
+        boardWidth = boardWidthWords(size[0]),
+        board = zeroArray(boardWidth * size[1]),
         bounds = null,
         n = words.length,
         i = -1,
         tags = [],
-        data = words.map(function(d, i) {
+        data = words.map(function(word, i) {
+          var d = {...word};
           d.text = text.call(this, d, i);
           d.font = font.call(this, d, i);
           d.style = fontStyle.call(this, d, i);
@@ -53,7 +58,8 @@ export default function() {
           return d;
         }).sort(function(a, b) { return b.size - a.size; });
 
-    if (timer) clearInterval(timer);
+    activeWords = data;
+
     timer = setInterval(step, 0);
     step();
 
@@ -66,7 +72,7 @@ export default function() {
         d.x = (size[0] * (random() + .5)) >> 1;
         d.y = (size[1] * (random() + .5)) >> 1;
         cloudSprite(contextAndRatio, d, data, i);
-        if (d.hasText && place(board, d, bounds)) {
+        if (d.hasText && place(board, boardWidth, d, bounds)) {
           tags.push(d);
           event.call("word", cloud, d);
           if (bounds) cloudBounds(bounds, d);
@@ -88,8 +94,11 @@ export default function() {
       clearInterval(timer);
       timer = null;
     }
-    for (const d of words) {
-      delete d.sprite;
+    if (activeWords) {
+      for (const d of activeWords) {
+        d.sprite = undefined;
+      }
+      activeWords = null;
     }
     return cloud;
   };
@@ -115,7 +124,7 @@ export default function() {
     };
   }
 
-  function place(board, tag, bounds) {
+  function place(board, boardWidth, tag, bounds) {
     var perimeter = [{x: 0, y: 0}, {x: size[0], y: size[1]}],
         startX = tag.x,
         startY = tag.y,
@@ -140,15 +149,15 @@ export default function() {
           tag.x + tag.x1 > size[0] || tag.y + tag.y1 > size[1]) continue;
       // TODO only check for collisions within current bounds.
       if (!bounds || collideRects(tag, bounds)) {
-        if (!cloudCollide(tag, board, size[0])) {
+        if (!cloudCollide(tag, board, boardWidth)) {
           var sprite = tag.sprite,
-              w = tag.width >> 5,
-              sw = size[0] >> 5,
+              w = tag.width >>> 5,
+              sw = boardWidth,
               lx = tag.x - (w << 4),
               sx = lx & 0x7f,
               msx = 32 - sx,
               h = tag.y1 - tag.y0,
-              x = (tag.y + tag.y0) * sw + (lx >> 5),
+              x = (tag.y + tag.y0) * sw + (lx >>> 5),
               last;
           for (var j = 0; j < h; j++) {
             last = 0;
@@ -244,6 +253,7 @@ function cloudPadding() {
 // Load in batches for speed.
 function cloudSprite(contextAndRatio, d, data, di) {
   if (d.sprite) return;
+  d.hasText = false;
   var c = contextAndRatio.context,
       ratio = contextAndRatio.ratio,
       pixelWidth = contextAndRatio.pixelWidth,
@@ -274,10 +284,10 @@ function cloudSprite(contextAndRatio, d, data, di) {
           wsr = w * sr,
           hcr = h * cr,
           hsr = h * sr;
-      w = (Math.max(Math.abs(wcr + hsr), Math.abs(wcr - hsr)) + 0x1f) >> 5 << 5;
+      w = (Math.max(Math.abs(wcr + hsr), Math.abs(wcr - hsr)) + 0x1f) >>> 5 << 5;
       h = ~~Math.max(Math.abs(wsr + hcr), Math.abs(wsr - hcr));
     } else {
-      w = (w + 0x1f) >> 5 << 5;
+      w = (w + 0x1f) >>> 5 << 5;
     }
     if (h > maxh) maxh = h;
     if (x + w >= (cw << 5)) {
@@ -316,7 +326,7 @@ function cloudSprite(contextAndRatio, d, data, di) {
     d = data[di];
     if (!d.hasText) continue;
     var w = d.width,
-        w32 = w >> 5,
+        w32 = w >>> 5,
         h = d.y1 - d.y0;
     // Zero the buffer
     sprite.fill(0, 0, h * w32);
@@ -327,7 +337,7 @@ function cloudSprite(contextAndRatio, d, data, di) {
         seenRow = -1;
     for (var j = 0; j < h; j++) {
       for (var i = 0; i < w; i++) {
-        var k = w32 * j + (i >> 5),
+        var k = w32 * j + (i >>> 5),
             m = pixels[((y + j) * pixelWidth + (x + i)) << 2] ? 1 << (31 - (i % 32)) : 0;
         sprite[k] |= m;
         seen |= m;
@@ -349,14 +359,13 @@ function cloudSprite(contextAndRatio, d, data, di) {
 
 // Use mask-based collision detection.
 function cloudCollide(tag, board, sw) {
-  sw >>= 5;
   var sprite = tag.sprite,
-      w = tag.width >> 5,
+      w = tag.width >>> 5,
       lx = tag.x - (w << 4),
       sx = lx & 0x7f,
       msx = 32 - sx,
       h = tag.y1 - tag.y0,
-      x = (tag.y + tag.y0) * sw + (lx >> 5),
+      x = (tag.y + tag.y0) * sw + (lx >>> 5),
       last;
   for (var j = 0; j < h; j++) {
     last = 0;
@@ -410,6 +419,10 @@ function rectangularSpiral(size) {
 // TODO reuse arrays?
 function zeroArray(n) {
   return new Uint32Array(n);
+}
+
+function boardWidthWords(width) {
+  return (width + 31) >>> 5;
 }
 
 function cloudCanvas() {

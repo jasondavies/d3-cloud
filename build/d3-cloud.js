@@ -1,3 +1,20 @@
+var __defProp = Object.defineProperty;
+var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __spreadValues = (a, b) => {
+  for (var prop in b || (b = {}))
+    if (__hasOwnProp.call(b, prop))
+      __defNormalProp(a, prop, b[prop]);
+  if (__getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(b)) {
+      if (__propIsEnum.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    }
+  return a;
+};
+
 // node_modules/d3-dispatch/src/dispatch.js
 var noop = { value: function() {
 } };
@@ -74,15 +91,17 @@ var SPIRALS = {
   archimedean: archimedeanSpiral,
   rectangular: rectangularSpiral
 };
-var cw = 1 << 11 >> 5;
+var cw = 1 << 11 >>> 5;
 var ch = 1 << 11;
 function index_default() {
-  var size = [256, 256], text = cloudText, font = cloudFont, fontSize = cloudFontSize, fontStyle = cloudFontNormal, fontWeight = cloudFontNormal, padding = cloudPadding, spiral = archimedeanSpiral, words = [], timeInterval = Infinity, event = dispatch_default("word", "end"), timer = null, random = Math.random, rotate = () => (~~(random() * 6) - 3) * 30, cloud = {}, canvas = cloudCanvas;
+  var size = [256, 256], text = cloudText, font = cloudFont, fontSize = cloudFontSize, fontStyle = cloudFontNormal, fontWeight = cloudFontNormal, padding = cloudPadding, spiral = archimedeanSpiral, words = [], timeInterval = Infinity, event = dispatch_default("word", "end"), timer = null, random = Math.random, rotate = () => (~~(random() * 6) - 3) * 30, activeWords = null, cloud = {}, canvas = cloudCanvas;
   cloud.canvas = function(_) {
     return arguments.length ? (canvas = functor(_), cloud) : canvas;
   };
   cloud.start = function() {
-    var contextAndRatio = getContext(canvas()), board = zeroArray((size[0] >> 5) * size[1]), bounds = null, n = words.length, i = -1, tags = [], data = words.map(function(d, i2) {
+    cloud.stop();
+    var contextAndRatio = getContext(canvas()), boardWidth = boardWidthWords(size[0]), board = zeroArray(boardWidth * size[1]), bounds = null, n = words.length, i = -1, tags = [], data = words.map(function(word, i2) {
+      var d = __spreadValues({}, word);
       d.text = text.call(this, d, i2);
       d.font = font.call(this, d, i2);
       d.style = fontStyle.call(this, d, i2);
@@ -94,7 +113,7 @@ function index_default() {
     }).sort(function(a, b) {
       return b.size - a.size;
     });
-    if (timer) clearInterval(timer);
+    activeWords = data;
     timer = setInterval(step, 0);
     step();
     return cloud;
@@ -105,7 +124,7 @@ function index_default() {
         d.x = size[0] * (random() + 0.5) >> 1;
         d.y = size[1] * (random() + 0.5) >> 1;
         cloudSprite(contextAndRatio, d, data, i);
-        if (d.hasText && place(board, d, bounds)) {
+        if (d.hasText && place(board, boardWidth, d, bounds)) {
           tags.push(d);
           event.call("word", cloud, d);
           if (bounds) cloudBounds(bounds, d);
@@ -125,8 +144,11 @@ function index_default() {
       clearInterval(timer);
       timer = null;
     }
-    for (const d of words) {
-      delete d.sprite;
+    if (activeWords) {
+      for (const d of activeWords) {
+        d.sprite = void 0;
+      }
+      activeWords = null;
     }
     return cloud;
   };
@@ -147,7 +169,7 @@ function index_default() {
       sprite: new Uint32Array(cw * ch)
     };
   }
-  function place(board, tag, bounds) {
+  function place(board, boardWidth, tag, bounds) {
     var perimeter = [{ x: 0, y: 0 }, { x: size[0], y: size[1] }], startX = tag.x, startY = tag.y, maxDelta = Math.sqrt(size[0] * size[0] + size[1] * size[1]), s = spiral(size), dt = random() < 0.5 ? 1 : -1, t = -dt, dxdy, dx, dy;
     while (dxdy = s(t += dt)) {
       dx = ~~dxdy[0];
@@ -157,8 +179,8 @@ function index_default() {
       tag.y = startY + dy;
       if (tag.x + tag.x0 < 0 || tag.y + tag.y0 < 0 || tag.x + tag.x1 > size[0] || tag.y + tag.y1 > size[1]) continue;
       if (!bounds || collideRects(tag, bounds)) {
-        if (!cloudCollide(tag, board, size[0])) {
-          var sprite = tag.sprite, w = tag.width >> 5, sw = size[0] >> 5, lx = tag.x - (w << 4), sx = lx & 127, msx = 32 - sx, h = tag.y1 - tag.y0, x = (tag.y + tag.y0) * sw + (lx >> 5), last;
+        if (!cloudCollide(tag, board, boardWidth)) {
+          var sprite = tag.sprite, w = tag.width >>> 5, sw = boardWidth, lx = tag.x - (w << 4), sx = lx & 127, msx = 32 - sx, h = tag.y1 - tag.y0, x = (tag.y + tag.y0) * sw + (lx >>> 5), last;
           for (var j = 0; j < h; j++) {
             last = 0;
             for (var i = 0; i <= w; i++) {
@@ -231,6 +253,7 @@ function cloudPadding() {
 }
 function cloudSprite(contextAndRatio, d, data, di) {
   if (d.sprite) return;
+  d.hasText = false;
   var c = contextAndRatio.context, ratio = contextAndRatio.ratio, pixelWidth = contextAndRatio.pixelWidth, batchStart = di;
   if (contextAndRatio.clearWidth && contextAndRatio.clearHeight) {
     c.clearRect(0, 0, contextAndRatio.clearWidth / ratio, contextAndRatio.clearHeight / ratio);
@@ -247,10 +270,10 @@ function cloudSprite(contextAndRatio, d, data, di) {
     let h2 = d.size << 1;
     if (d.rotate) {
       var sr = Math.sin(d.rotate * RADIANS), cr = Math.cos(d.rotate * RADIANS), wcr = w2 * cr, wsr = w2 * sr, hcr = h2 * cr, hsr = h2 * sr;
-      w2 = Math.max(Math.abs(wcr + hsr), Math.abs(wcr - hsr)) + 31 >> 5 << 5;
+      w2 = Math.max(Math.abs(wcr + hsr), Math.abs(wcr - hsr)) + 31 >>> 5 << 5;
       h2 = ~~Math.max(Math.abs(wsr + hcr), Math.abs(wsr - hcr));
     } else {
-      w2 = w2 + 31 >> 5 << 5;
+      w2 = w2 + 31 >>> 5 << 5;
     }
     if (h2 > maxh) maxh = h2;
     if (x + w2 >= cw << 5) {
@@ -284,7 +307,7 @@ function cloudSprite(contextAndRatio, d, data, di) {
   while (--di >= batchStart) {
     d = data[di];
     if (!d.hasText) continue;
-    var w = d.width, w32 = w >> 5, h = d.y1 - d.y0;
+    var w = d.width, w32 = w >>> 5, h = d.y1 - d.y0;
     sprite.fill(0, 0, h * w32);
     x = d.xoff;
     if (x == null) return;
@@ -292,7 +315,7 @@ function cloudSprite(contextAndRatio, d, data, di) {
     var seen = 0, seenRow = -1;
     for (var j = 0; j < h; j++) {
       for (var i = 0; i < w; i++) {
-        var k = w32 * j + (i >> 5), m = pixels[(y + j) * pixelWidth + (x + i) << 2] ? 1 << 31 - i % 32 : 0;
+        var k = w32 * j + (i >>> 5), m = pixels[(y + j) * pixelWidth + (x + i) << 2] ? 1 << 31 - i % 32 : 0;
         sprite[k] |= m;
         seen |= m;
       }
@@ -311,8 +334,7 @@ function cloudSprite(contextAndRatio, d, data, di) {
   }
 }
 function cloudCollide(tag, board, sw) {
-  sw >>= 5;
-  var sprite = tag.sprite, w = tag.width >> 5, lx = tag.x - (w << 4), sx = lx & 127, msx = 32 - sx, h = tag.y1 - tag.y0, x = (tag.y + tag.y0) * sw + (lx >> 5), last;
+  var sprite = tag.sprite, w = tag.width >>> 5, lx = tag.x - (w << 4), sx = lx & 127, msx = 32 - sx, h = tag.y1 - tag.y0, x = (tag.y + tag.y0) * sw + (lx >>> 5), last;
   for (var j = 0; j < h; j++) {
     last = 0;
     for (var i = 0; i <= w; i++) {
@@ -361,6 +383,9 @@ function rectangularSpiral(size) {
 }
 function zeroArray(n) {
   return new Uint32Array(n);
+}
+function boardWidthWords(width) {
+  return width + 31 >>> 5;
 }
 function cloudCanvas() {
   return document.createElement("canvas");

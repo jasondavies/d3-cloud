@@ -42,15 +42,18 @@ has been placed.
 An "end" event is dispatched when the layout has finished attempting to place
 all words.  Registered listeners are called with two arguments: an array of the
 word objects that were successfully placed, and a *bounds* object of the form
-`[{x0, y0}, {x1, y1}]` representing the extent of the placed objects.
+`[{x, y}, {x, y}]` representing the extent of the placed objects.
 
 <a name="start" href="#start">#</a> <b>start</b>()
 
-Starts the layout algorithm.  This initialises various attributes on the word
-objects, and attempts to place each word, starting with the largest word.
+Starts the layout algorithm. It derives internal layout objects from the input
+words and attempts to place each word, starting with the largest word.
 Starting with the centre of the rectangular area, each word is tested for
 collisions with all previously-placed words.  If a collision is found, it tries
 to place the word in a new position along the spiral.
+
+The configured input word objects are not mutated. Event listeners receive the
+derived layout objects for successfully placed words.
 
 **Note:** if a word cannot be placed in any of the positions attempted along
 the spiral, it is **not included** in the final word layout.  This may be
@@ -75,7 +78,7 @@ words array, which defaults to `[]`.
 <a name="size" href="#size">#</a> <b>size</b>([<i>size</i>])
 
 If specified, sets the rectangular `[width, height]` of the layout.  If not
-specified, returns the current size, which defaults to `[1, 1]`.
+specified, returns the current size, which defaults to `[256, 256]`.
 
 <a name="font" href="#font">#</a> <b>font</b>([<i>font</i>])
 
@@ -117,7 +120,7 @@ rotation angle (in degrees) for each word.  If not specified, returns the
 current rotate accessor function, which defaults to:
 
 ```js
-() => ~~(random() * 6) - 3) * 30
+() => (~~(random() * 6) - 3) * 30
 ```
 
 A constant may be specified instead of a function.
