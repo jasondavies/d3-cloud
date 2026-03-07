@@ -57,6 +57,33 @@ test("layout places a simple word and cleans up sprite data", async () => {
   assert.ok(bounds[0].y < bounds[1].y);
 });
 
+test("layout handles multiple sprite batches and cleans up sprite data", async () => {
+  const words = Array.from({ length: 40 }, (_, index) => ({
+    text: `batch-${String(index).padStart(2, "0")}-xxxxxxxxxxxxxxxxxxxxxxxxxx`,
+    value: 1
+  }));
+  const layout = cloud()
+    .size([4096, 4096])
+    .canvas(() => createFakeCanvas())
+    .random(createSeededRandom(1))
+    .rotate(() => 0)
+    .padding(0)
+    .font("serif")
+    .fontSize(() => 160)
+    .words(words);
+
+  const placedWords = await new Promise(resolve => {
+    layout.on("end", placed => {
+      resolve(placed);
+    }).start();
+  });
+
+  assert.ok(placedWords.length > 0);
+  for (const word of words) {
+    assert.equal(word.sprite, undefined);
+  }
+});
+
 function createFakeCanvas() {
   const boxes = [];
   const stack = [];
@@ -139,5 +166,14 @@ function createBox(context, text, x, y, inflate) {
     y0: Math.floor(context._ty + y - fontSize - inflate),
     x1: Math.ceil(context._tx + x + width + inflate),
     y1: Math.ceil(context._ty + y + fontSize + inflate)
+  };
+}
+
+function createSeededRandom(seed) {
+  let state = seed >>> 0;
+
+  return function() {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
   };
 }

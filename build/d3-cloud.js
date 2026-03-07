@@ -132,12 +132,20 @@ function index_default() {
   };
   function getContext(canvas2) {
     const context = canvas2.getContext("2d", { willReadFrequently: true });
+    const pixelWidth = cw << 5;
     canvas2.width = canvas2.height = 1;
     const ratio = Math.sqrt(context.getImageData(0, 0, 1, 1).data.length >> 2);
-    canvas2.width = (cw << 5) / ratio;
+    canvas2.width = pixelWidth / ratio;
     canvas2.height = ch / ratio;
     context.fillStyle = context.strokeStyle = "red";
-    return { context, ratio };
+    return {
+      context,
+      ratio,
+      pixelWidth,
+      clearWidth: 0,
+      clearHeight: 0,
+      sprite: new Uint32Array(cw * ch)
+    };
   }
   function place(board, tag, bounds) {
     var perimeter = [{ x: 0, y: 0 }, { x: size[0], y: size[1] }], startX = tag.x, startY = tag.y, maxDelta = Math.sqrt(size[0] * size[0] + size[1] * size[1]), s = spiral(size), dt = random() < 0.5 ? 1 : -1, t = -dt, dxdy, dx, dy;
@@ -223,9 +231,11 @@ function cloudPadding() {
 }
 function cloudSprite(contextAndRatio, d, data, di) {
   if (d.sprite) return;
-  var c = contextAndRatio.context, ratio = contextAndRatio.ratio;
-  c.clearRect(0, 0, (cw << 5) / ratio, ch / ratio);
-  var x = 0, y = 0, maxh = 0, n = data.length;
+  var c = contextAndRatio.context, ratio = contextAndRatio.ratio, pixelWidth = contextAndRatio.pixelWidth, batchStart = di;
+  if (contextAndRatio.clearWidth && contextAndRatio.clearHeight) {
+    c.clearRect(0, 0, contextAndRatio.clearWidth / ratio, contextAndRatio.clearHeight / ratio);
+  }
+  var x = 0, y = 0, maxh = 0, n = data.length, usedWidth = 0, usedHeight = 0;
   --di;
   while (++di < n) {
     d = data[di];
@@ -264,20 +274,25 @@ function cloudSprite(contextAndRatio, d, data, di) {
     d.y0 = -d.y1;
     d.hasText = true;
     x += w2;
+    if (x > usedWidth) usedWidth = x;
+    if (y + h2 > usedHeight) usedHeight = y + h2;
   }
-  var pixels = c.getImageData(0, 0, (cw << 5) / ratio, ch / ratio).data, sprite = [];
-  while (--di >= 0) {
+  contextAndRatio.clearWidth = usedWidth;
+  contextAndRatio.clearHeight = usedHeight;
+  if (!usedWidth || !usedHeight) return;
+  var pixels = c.getImageData(0, 0, usedWidth / ratio, usedHeight / ratio).data, sprite = contextAndRatio.sprite;
+  while (--di >= batchStart) {
     d = data[di];
     if (!d.hasText) continue;
     var w = d.width, w32 = w >> 5, h = d.y1 - d.y0;
-    for (var i = 0; i < h * w32; i++) sprite[i] = 0;
+    sprite.fill(0, 0, h * w32);
     x = d.xoff;
     if (x == null) return;
     y = d.yoff;
     var seen = 0, seenRow = -1;
     for (var j = 0; j < h; j++) {
       for (var i = 0; i < w; i++) {
-        var k = w32 * j + (i >> 5), m = pixels[(y + j) * (cw << 5) + (x + i) << 2] ? 1 << 31 - i % 32 : 0;
+        var k = w32 * j + (i >> 5), m = pixels[(y + j) * pixelWidth + (x + i) << 2] ? 1 << 31 - i % 32 : 0;
         sprite[k] |= m;
         seen |= m;
       }
@@ -290,7 +305,9 @@ function cloudSprite(contextAndRatio, d, data, di) {
       }
     }
     d.y1 = d.y0 + seenRow;
-    d.sprite = sprite.slice(0, (d.y1 - d.y0) * w32);
+    var spriteLength = (d.y1 - d.y0) * w32;
+    d.sprite = new Uint32Array(spriteLength);
+    d.sprite.set(sprite.subarray(0, spriteLength));
   }
 }
 function cloudCollide(tag, board, sw) {
@@ -343,9 +360,7 @@ function rectangularSpiral(size) {
   };
 }
 function zeroArray(n) {
-  var a = [], i = -1;
-  while (++i < n) a[i] = 0;
-  return a;
+  return new Uint32Array(n);
 }
 function cloudCanvas() {
   return document.createElement("canvas");
