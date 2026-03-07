@@ -303,7 +303,7 @@ function cloudSprite(contextAndRatio, d, data, di) {
   contextAndRatio.clearWidth = usedWidth;
   contextAndRatio.clearHeight = usedHeight;
   if (!usedWidth || !usedHeight) return;
-  var pixels = c.getImageData(0, 0, usedWidth / ratio, usedHeight / ratio).data, sprite = contextAndRatio.sprite;
+  var pixels = c.getImageData(0, 0, usedWidth / ratio, usedHeight / ratio).data, readbackWidth = usedWidth, sprite = contextAndRatio.sprite;
   while (--di >= batchStart) {
     d = data[di];
     if (!d.hasText) continue;
@@ -315,7 +315,7 @@ function cloudSprite(contextAndRatio, d, data, di) {
     var seen = 0, seenRow = -1;
     for (var j = 0; j < h; j++) {
       for (var i = 0; i < w; i++) {
-        var k = w32 * j + (i >>> 5), m = pixels[(y + j) * pixelWidth + (x + i) << 2] ? 1 << 31 - i % 32 : 0;
+        var k = w32 * j + (i >>> 5), m = pixels[(y + j) * readbackWidth + (x + i) << 2] ? 1 << 31 - i % 32 : 0;
         sprite[k] |= m;
         seen |= m;
       }

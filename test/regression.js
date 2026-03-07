@@ -86,6 +86,27 @@ test("layout handles multiple sprite batches and cleans up sprite data", async (
   }
 });
 
+test("layout collision detection survives partial sprite readback", async () => {
+  const words = [
+    { text: "tall-a", value: 1 },
+    { text: "tall-b", value: 1 }
+  ];
+  const placedWords = await runLayout(
+    cloud()
+      .size([128, 128])
+      .canvas(() => createFakeCanvas())
+      .random(createSequenceRandom([0.5, 0.5, 0.6, 0.5, 0.578125, 0.6]))
+      .rotate(() => 0)
+      .padding(0)
+      .font("serif")
+      .fontSize(() => 16)
+      .spiral(() => t => t === 0 ? [0, 0] : null)
+      .words(words)
+  );
+
+  assert.equal(placedWords.length, 1);
+});
+
 test("layout can rerun the same input words after accessors change", async () => {
   const words = [{ text: "huge-word", value: 1 }];
   const layout = cloud()
@@ -308,6 +329,16 @@ function createSeededRandom(seed) {
   return function() {
     state = (state * 1664525 + 1013904223) >>> 0;
     return state / 0x100000000;
+  };
+}
+
+function createSequenceRandom(values) {
+  let index = 0;
+
+  return function() {
+    const value = values[index];
+    index += 1;
+    return value === undefined ? 0.5 : value;
   };
 }
 

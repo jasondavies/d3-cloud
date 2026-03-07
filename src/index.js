@@ -321,6 +321,7 @@ function cloudSprite(contextAndRatio, d, data, di) {
   if (!usedWidth || !usedHeight) return;
 
   var pixels = c.getImageData(0, 0, usedWidth / ratio, usedHeight / ratio).data,
+      readbackWidth = usedWidth,
       sprite = contextAndRatio.sprite;
   while (--di >= batchStart) {
     d = data[di];
@@ -338,7 +339,7 @@ function cloudSprite(contextAndRatio, d, data, di) {
     for (var j = 0; j < h; j++) {
       for (var i = 0; i < w; i++) {
         var k = w32 * j + (i >>> 5),
-            m = pixels[((y + j) * pixelWidth + (x + i)) << 2] ? 1 << (31 - (i % 32)) : 0;
+            m = pixels[((y + j) * readbackWidth + (x + i)) << 2] ? 1 << (31 - (i % 32)) : 0;
         sprite[k] |= m;
         seen |= m;
       }

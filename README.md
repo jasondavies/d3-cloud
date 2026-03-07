@@ -13,6 +13,9 @@ demonstration along with implementation details.
 
 See the samples in `examples/`.
 
+For a browser-loadable example, run `npm run build`, serve the repository root
+with any static file server, and open `examples/`.
+
 This package is ESM-only.
 
 For Node and bundler consumers:
