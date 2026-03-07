@@ -1,5 +1,5 @@
-var d3 = require("d3"),
-    cloud = require("../");
+import * as d3 from "d3";
+import cloud from "../src/index.js";
 
 var layout = cloud()
     .size([500, 500])

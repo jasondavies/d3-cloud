@@ -1,5 +1,5 @@
-const { createCanvas } = require("canvas");
-const cloud = require("d3-cloud");
+import { createCanvas } from "canvas";
+import cloud from "d3-cloud";
 
 const words = ["Hello", "world", "normally", "you", "want", "more", "words", "than", "this"]
     .map(function(d) {
