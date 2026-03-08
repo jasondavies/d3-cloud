@@ -18,6 +18,19 @@ root with any static file server, and open `examples/`.
 
 This package is ESM-only.
 
+## Install
+
+```sh
+npm install d3-cloud
+```
+
+If you want to rasterize text in Node.js, you will typically also install and
+configure a canvas implementation such as:
+
+```sh
+npm install canvas
+```
+
 For Node and bundler consumers:
 
 ```js
