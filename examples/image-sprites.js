@@ -69,7 +69,7 @@ function createIconDescriptors(random) {
 }
 
 async function createSprites(layout, descriptors) {
-  const sprites = await Promise.all(descriptors.map(async (descriptor, index) => {
+  const sprites = await Promise.all(descriptors.map(async descriptor => {
     const src = buildIconDataUrl(descriptor);
     const image = await loadImage(src);
     return layout.getSprite(image, {
@@ -78,8 +78,7 @@ async function createSprites(layout, descriptors) {
       height: descriptor.size,
       padding: descriptor.shape === "star" || descriptor.shape === "planet" ? 4 : 2,
       imageHref: image.currentSrc || image.src,
-      shape: descriptor.shape,
-      index
+      shape: descriptor.shape
     });
   }));
 

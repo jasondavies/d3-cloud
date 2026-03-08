@@ -80,9 +80,8 @@ function runLayout(scenario, words, seed) {
 
   const start = performance.now();
   const sprites = sortedWords
-    .map((word, index) => layout.getSprite(word.text, {
+    .map(word => layout.getSprite(word.text, {
       ...word,
-      index,
       font: "sans-serif"
     }))
     .filter(Boolean);

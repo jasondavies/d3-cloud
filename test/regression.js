@@ -1013,13 +1013,12 @@ function runLayout(layout, words = []) {
 }
 
 function extractSprites(layout, words) {
-  return Array.from(words, (word, index) => extractSprite(layout, word, index)).filter(Boolean);
+  return Array.from(words, word => extractSprite(layout, word)).filter(Boolean);
 }
 
-function extractSprite(layout, word, index = 0) {
+function extractSprite(layout, word) {
   return layout.getSprite(word.text, {
     ...word,
-    index,
     font: word.font ?? "serif",
     style: word.style ?? "normal",
     weight: word.weight ?? "normal",

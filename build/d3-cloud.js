@@ -47,9 +47,7 @@ var CloudSprite = class {
       weight = "normal",
       rotate = 0,
       size = 1,
-      padding = 1,
-      x = 0,
-      y = 0
+      padding = 1
     } = _b, rest = __objRest(_b, [
       "text",
       "image",
@@ -60,9 +58,7 @@ var CloudSprite = class {
       "weight",
       "rotate",
       "size",
-      "padding",
-      "x",
-      "y"
+      "padding"
     ]);
     Object.assign(this, rest);
     this.text = text == null ? "" : String(text);
@@ -75,8 +71,8 @@ var CloudSprite = class {
     this.rotate = normalizeNumber(rotate);
     this.size = normalizeInteger(size);
     this.padding = normalizeNumber(padding);
-    this.x = normalizeNumber(x);
-    this.y = normalizeNumber(y);
+    this.x = 0;
+    this.y = 0;
     this.hasPixels = false;
     this.width = 0;
     this.height = 0;

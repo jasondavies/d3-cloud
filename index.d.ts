@@ -63,9 +63,6 @@ export interface BaseSpriteOptions {
   size?: number;
   rotate?: number;
   padding?: number;
-  x?: number;
-  y?: number;
-  index?: number;
 }
 
 export type SpriteMetadata = Record<string, unknown>;
@@ -89,8 +86,6 @@ export type CloudSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & 
   rotate?: number;
   size?: number;
   padding?: number;
-  x?: number;
-  y?: number;
 };
 
 export type PlacedWord<T extends SpriteMetadata = SpriteMetadata> = T & {

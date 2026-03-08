@@ -26,9 +26,8 @@ import CloudLayout from "d3-cloud";
 const layout = new CloudLayout();
 const sprites = [...words]
   .sort((a, b) => b.size - a.size)
-  .map((word, index) => layout.getSprite(word.text, {
+  .map(word => layout.getSprite(word.text, {
     ...word,
-    index,
     font: "Impact",
     padding: 1,
     rotate: 0
@@ -101,7 +100,7 @@ becomes completely empty.
 <a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>[, <i>options</i>])
 
 Attempts to place a single prepared `CloudSprite` immediately and returns the
-placed derived word object, or `null` if it could not be placed.
+placed sprite snapshot, or `null` if it could not be placed.
 
 The returned object is a plain placed-word snapshot. Internal raster fields
 such as `sprite`, `spriteWidth`, and `hasPixels` are omitted, while custom
@@ -110,6 +109,9 @@ metadata from `getSprite(..., options)` is preserved.
 If specified, the optional *options* object may include `x` and `y` to control
 the initial placement attempt before the strategy search begins. Any omitted axis
 still uses the normal seeded position from `size()`.
+
+If specified, `options.strategy` overrides the layout-level default strategy
+for this placement only.
 
 For both text and image sprites, the returned `x` and `y` coordinates mark the
 sprite center. When rendering text in SVG, use `text-anchor="middle"` together
@@ -124,8 +126,8 @@ The returned value is a prepared reusable `CloudSprite`, not the plain placed
 word snapshot returned by `place()`.
 
 The optional *options* object may include `font`, `style`, `weight`, `rotate`,
-`size`, `padding`, `index`, and any additional fields you want accessor
-fields to carry through to the resulting sprite. The defaults are `font:
+`size`, `padding`, and any additional fields you want to carry through to the
+resulting sprite. The defaults are `font:
 "serif"`, `style: "normal"`, `weight: "normal"`, `size: 1`, `rotate: 0`, and
 `padding: 1`.
 
@@ -136,9 +138,6 @@ dimension is provided, the other is derived from the source aspect ratio.
 
 Words that cannot be placed simply return `null`. To place multiple sprites,
 call `place()` in your own loop.
-
-If specified, `options.strategy` overrides the layout-level default strategy
-for this placement only.
 
 <a name="size" href="#size">#</a> <b>size</b>([<i>size</i>])
 

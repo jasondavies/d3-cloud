@@ -55,9 +55,8 @@ function createWords(random) {
 
 function createSprites(layout, words, rotateRandom) {
   return words
-    .map((word, index) => layout.getSprite(word.text, {
+    .map(word => layout.getSprite(word.text, {
       ...word,
-      index,
       font: "Impact",
       padding: 0,
       rotate: rotateRandom() < 0.18 ? 90 : 0

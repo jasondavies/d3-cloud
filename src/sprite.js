@@ -15,8 +15,6 @@ export default class CloudSprite {
     rotate = 0,
     size = 1,
     padding = 1,
-    x = 0,
-    y = 0,
     ...rest
   } = {}) {
     Object.assign(this, rest);
@@ -30,8 +28,8 @@ export default class CloudSprite {
     this.rotate = normalizeNumber(rotate);
     this.size = normalizeInteger(size);
     this.padding = normalizeNumber(padding);
-    this.x = normalizeNumber(x);
-    this.y = normalizeNumber(y);
+    this.x = 0;
+    this.y = 0;
     this.hasPixels = false;
     this.width = 0;
     this.height = 0;
