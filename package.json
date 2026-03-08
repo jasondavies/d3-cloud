@@ -34,9 +34,6 @@
     "pretest": "npm run build",
     "test": "node --test"
   },
-  "dependencies": {
-    "d3-dispatch": "^1.0.3"
-  },
   "devDependencies": {
     "esbuild": "^0.25.0"
   }

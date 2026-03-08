@@ -2,7 +2,7 @@ import { performance } from "node:perf_hooks";
 
 import { createCanvas } from "canvas";
 
-import cloud from "./src/index.js";
+import CloudLayout from "./src/index.js";
 
 const DEFAULT_RUNS = 5;
 const DEFAULT_BLOCK_SIZE = 512;
@@ -31,10 +31,10 @@ const runs = args.runs ?? DEFAULT_RUNS;
 const selected = args.scenario ? [pickScenario(args.scenario)] : Object.values(scenarios);
 
 for (const scenario of selected) {
-  await benchmarkScenario(scenario, runs);
+  benchmarkScenario(scenario, runs);
 }
 
-async function benchmarkScenario(scenario, runs) {
+function benchmarkScenario(scenario, runs) {
   const words = createWords(scenario.count, scenario.seed);
 
   console.log(`\nScenario: ${scenario.name}`);
@@ -47,17 +47,17 @@ async function benchmarkScenario(scenario, runs) {
     `words=${scenario.count} runs=${runs}`
   );
 
-  const result = await measureScenario(scenario, words, runs);
+  const result = measureScenario(scenario, words, runs);
   printResult(result);
 }
 
-async function measureScenario(scenario, words, runs) {
+function measureScenario(scenario, words, runs) {
   const samples = [];
 
-  await runLayout(scenario, words, scenario.seed);
+  runLayout(scenario, words, scenario.seed);
 
   for (let run = 0; run < runs; run += 1) {
-    const sample = await runLayout(scenario, words, scenario.seed + run);
+    const sample = runLayout(scenario, words, scenario.seed + run);
     samples.push(sample);
   }
 
@@ -72,29 +72,29 @@ async function measureScenario(scenario, words, runs) {
   };
 }
 
-async function runLayout(scenario, words, seed) {
-  const layout = cloud()
+function runLayout(scenario, words, seed) {
+  const sortedWords = [...words].sort((a, b) => b.size - a.size);
+  const layout = new CloudLayout()
     .canvas(() => createCanvas(1, 1))
     .aspectRatio(scenario.aspectRatio ?? 1)
     .startBox(scenario.startBox ?? [256, 256])
     .blockSize(args.blockSize ?? DEFAULT_BLOCK_SIZE)
-    .random(createRandom(seed))
-    .rotate(d => d.rotate)
-    .padding(d => d.padding)
-    .font("sans-serif")
-    .fontSize(d => d.size)
-    .words(words);
+    .random(createRandom(seed));
 
   if (scenario.maxDelta != null) {
     layout.maxDelta(scenario.maxDelta);
   }
 
   const start = performance.now();
-  const { placed, bounds } = await new Promise(resolve => {
-    layout.on("end", (placedWords, nextBounds) => {
-      resolve({ placed: placedWords, bounds: nextBounds });
-    }).start();
-  });
+  const sprites = sortedWords
+    .map((word, index) => layout.getSprite(word.text, {
+      ...word,
+      index,
+      font: "sans-serif"
+    }))
+    .filter(Boolean);
+  const placed = layout.placeAll(sprites);
+  const bounds = layout.bounds();
   const duration = performance.now() - start;
 
   return {

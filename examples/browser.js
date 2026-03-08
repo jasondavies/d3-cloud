@@ -1,4 +1,4 @@
-import cloud from "../build/d3-cloud.js";
+import CloudLayout from "../build/d3-cloud.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const width = 720;
@@ -6,14 +6,18 @@ const height = 480;
 const displaySvg = document.querySelector("[data-cloud]");
 const status = document.querySelector("[data-status]");
 const rerender = document.querySelector("[data-rerender]");
-const wordBank = [
-  "Aurora", "Signal", "Canvas", "Layout", "Cloud", "Vector", "Pixel",
-  "Bitmap", "Archive", "Render", "Orbit", "Quiet", "Ribbon", "Current",
-  "Library", "Spiral", "Dispatch", "Impact", "Glyph", "Scale", "Kernel",
-  "Drift", "Tangent", "Contour", "Static", "Bundle", "Rotate", "Margin",
-  "Center", "Browser", "Module", "Density", "Sprite", "Field", "Weight"
+const wordQualifiers = [
+  "Aurora", "Signal", "Canvas", "Vector", "Pixel", "Archive", "Render",
+  "Orbit", "Ribbon", "Current", "Spiral", "Impact", "Glyph", "Scale",
+  "Kernel", "Drift", "Contour", "Static", "Tangent", "Density"
 ];
-let currentLayout = null;
+const wordSubjects = [
+  "Cloud", "Layout", "Bitmap", "Browser", "Module",
+  "Library", "Bundle", "Sprite", "Field", "Weight"
+];
+const wordBank = wordQualifiers.flatMap(qualifier =>
+  wordSubjects.map(subject => `${qualifier} ${subject}`)
+);
 let renderSeed = 0x243f6a88;
 
 displaySvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
@@ -25,40 +29,41 @@ render();
 function render() {
   renderSeed = (renderSeed * 1664525 + 1013904223) >>> 0;
   const sizeRandom = createRandom(renderSeed ^ 0x9e3779b9);
+  const rotateRandom = createRandom(renderSeed ^ 0x85ebca6b);
   const layoutRandom = createRandom(renderSeed);
 
   status.textContent = "Placing words...";
   displaySvg.replaceChildren();
 
-  if (currentLayout) {
-    currentLayout.stop();
-  }
-
-  const layout = cloud()
+  const layout = new CloudLayout()
     .aspectRatio(width / height)
     .startBox([width, height])
-    .words(createWords(sizeRandom))
-    .padding(0)
-    .rotate(() => (layoutRandom() < 0.18 ? 90 : 0))
-    .font("Impact")
-    .fontSize(d => d.size)
-    .random(layoutRandom)
-    .on("end", (words, bounds) => {
-      if (layout !== currentLayout) {
-        return;
-      }
-      draw(words, bounds || measureBounds(words));
-    });
+    .random(layoutRandom);
 
-  currentLayout = layout;
-  layout.start();
+  const sprites = createSprites(layout, createWords(sizeRandom), rotateRandom);
+  const placedWords = layout.placeAll(sprites);
+  draw(placedWords, layout.bounds() || measureBounds(placedWords));
 }
 
 function createWords(random) {
-  return wordBank.map(text => ({
-    text,
-    size: 18 + Math.floor(random() * 72)
-  }));
+  return wordBank
+    .map(text => ({
+      text,
+      size: 18 + Math.floor(random() * 72)
+    }))
+    .sort((a, b) => b.size - a.size);
+}
+
+function createSprites(layout, words, rotateRandom) {
+  return words
+    .map((word, index) => layout.getSprite(word.text, {
+      ...word,
+      index,
+      font: "Impact",
+      padding: 0,
+      rotate: rotateRandom() < 0.18 ? 90 : 0
+    }))
+    .filter(Boolean);
 }
 
 function draw(words, bounds) {

@@ -21,7 +21,20 @@ This package is ESM-only.
 For Node and bundler consumers:
 
 ```js
-import cloud from "d3-cloud";
+import CloudLayout from "d3-cloud";
+
+const layout = new CloudLayout();
+const sprites = [...words]
+  .sort((a, b) => b.size - a.size)
+  .map((word, index) => layout.getSprite(word.text, {
+    ...word,
+    index,
+    font: "Impact",
+    padding: 1,
+    rotate: 0
+  }))
+  .filter(Boolean);
+const placed = layout.placeAll(sprites);
 ```
 
 Run `npm run build` to generate the browser bundle at `build/d3-cloud.js`,
@@ -31,79 +44,53 @@ Placement uses sparse packed occupancy blocks for collision checks, so the
 final cloud may extend arbitrarily far if the search limit allows it. Use
 `startBox()` to jitter initial placements around the origin and
 `aspectRatio()` to bias the built-in spirals toward wider or taller clouds.
+Word order is controlled by the caller; in most cases you will want to place
+larger words first.
 
 ## API Reference
 
-<a name="cloud" href="#cloud">#</a> <b>cloud</b>()
+<a name="cloudlayout" href="#cloudlayout">#</a> <b>new CloudLayout()</b>
 
 Constructs a new cloud layout instance.
 
-<a name="on" href="#on">#</a> <b>on</b>(<i>type</i>, <i>listener</i>)
+<a name="clear" href="#clear">#</a> <b>clear</b>()
 
-Registers the specified *listener* to receive events of the specified *type*
-from the layout. Currently, only "word" and "end" events are supported.
+Clears the current placement state and bounds so the instance can be reused for
+a fresh layout.
 
-A "word" event is dispatched every time a word is successfully placed.
-Registered listeners are called with a single argument: the word object that
-has been placed.
+<a name="bounds" href="#bounds">#</a> <b>bounds</b>()
 
-An "end" event is dispatched when the layout has finished attempting to place
-all words.  Registered listeners are called with two arguments: an array of the
-word objects that were successfully placed, and a *bounds* object of the form
-`[{x, y}, {x, y}]` representing the extent of the placed objects.
+Returns the current placement extent as `[{x, y}, {x, y}]`, or `null` if no
+words have been placed yet.
 
-<a name="start" href="#start">#</a> <b>start</b>()
+<a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>)
 
-Starts the layout algorithm. It derives internal layout objects from the input
-words and attempts to place each word, starting with the largest word. Each
-word starts from a random point inside the configured `startBox()`, centered on
-the origin, and is then tested for collisions with previously-placed words. If
-a collision is found, it tries to place the word in a new position along the
-spiral.
+Attempts to place a single prepared `CloudSprite` immediately and returns the
+placed derived word object, or `null` if it could not be placed.
 
-The configured input word objects are not mutated. Event listeners receive the
-derived layout objects for successfully placed words.
+<a name="getsprite" href="#getsprite">#</a> <b>getSprite</b>(<i>text</i>[, <i>options</i>])
 
-**Note:** if a word cannot be placed in any of the positions attempted along
-the spiral, it is **not included** in the final word layout.  This may be
-addressed in a future release.
+Builds and returns a `CloudSprite` for the specified text, or `null` if the
+text could not be rasterized into the internal scratch canvas.
 
-<a name="stop" href="#stop">#</a> <b>stop</b>()
+The optional *options* object may include `font`, `style`, `weight`, `rotate`,
+`size`, `padding`, `index`, and any additional fields you want accessor
+fields to carry through to the resulting sprite. The defaults are `font:
+"serif"`, `style: "normal"`, `weight: "normal"`, `size: 1`, `rotate: 0`, and
+`padding: 1`.
 
-Stops the layout algorithm.
+<a name="placeall" href="#placeall">#</a> <b>placeAll</b>(<i>sprites</i>)
 
-<a name="timeInterval" href="#timeInterval">#</a> <b>timeInterval</b>([<i>time</i>])
+Attempts to place the specified batch of prepared sprites, in the order
+provided, and places each one synchronously.
 
-Internally, the layout uses `setInterval` to avoid locking up the browser’s
-event loop.  If specified, **time** is the maximum amount of time that can be
-spent during the current timestep.  If not specified, returns the current
-maximum time interval, which defaults to `Infinity`.
+Returns an array containing only the successfully placed derived word objects.
+The supplied `CloudSprite` instances are reused for placement; the returned
+objects are plain placed-word snapshots with `sprite` omitted.
 
-<a name="words" href="#words">#</a> <b>words</b>([<i>words</i>])
-
-If specified, sets the **words** array.  If not specified, returns the current
-words array, which defaults to `[]`.
-
-<a name="font" href="#font">#</a> <b>font</b>([<i>font</i>])
-
-If specified, sets the **font** accessor function, which indicates the font
-face for each word.  If not specified, returns the current font accessor
-function, which defaults to `"serif"`.
-A constant may be specified instead of a function.
-
-<a name="fontStyle" href="#fontStyle">#</a> <b>fontStyle</b>([<i>fontStyle</i>])
-
-If specified, sets the **fontStyle** accessor function, which indicates the
-font style for each word.  If not specified, returns the current fontStyle
-accessor function, which defaults to `"normal"`.
-A constant may be specified instead of a function.
-
-<a name="fontWeight" href="#fontWeight">#</a> <b>fontWeight</b>([<i>fontWeight</i>])
-
-If specified, sets the **fontWeight** accessor function, which indicates the
-font weight for each word.  If not specified, returns the current fontWeight
-accessor function, which defaults to `"normal"`.
-A constant may be specified instead of a function.
+Words that cannot be placed are simply omitted from the returned array. To
+spread work across frames, call `getSprite()`, `place()`, or `placeAll()`
+yourself with smaller batches.
 
 <a name="aspectRatio" href="#aspectRatio">#</a> <b>aspectRatio</b>([<i>ratio</i>])
 
@@ -117,42 +104,6 @@ If specified, sets the centered seed box used for initial word positions before
 spiral placement. The value should be `[width, height]`. If not specified,
 returns the current seed box, which defaults to `[256, 256]`. Use `[0, 0]` to
 start every word exactly at the origin.
-
-<a name="fontSize" href="#fontSize">#</a> <b>fontSize</b>([<i>fontSize</i>])
-
-If specified, sets the **fontSize** accessor function, which indicates the
-numerical font size for each word.  If not specified, returns the current
-fontSize accessor function, which defaults to:
-
-```js
-function(d) { return Math.sqrt(d.value); }
-```
-
-A constant may be specified instead of a function.
-
-<a name="rotate" href="#rotate">#</a> <b>rotate</b>([<i>rotate</i>])
-
-If specified, sets the **rotate** accessor function, which indicates the
-rotation angle (in degrees) for each word.  If not specified, returns the
-current rotate accessor function, which defaults to:
-
-```js
-() => (~~(random() * 6) - 3) * 30
-```
-
-A constant may be specified instead of a function.
-
-<a name="text" href="#text">#</a> <b>text</b>([<i>text</i>])
-
-If specified, sets the **text** accessor function, which indicates the text for
-each word.  If not specified, returns the current text accessor function, which
-defaults to:
-
-```js
-function(d) { return d.text; }
-```
-
-A constant may be specified instead of a function.
 
 <a name="spiral" href="#spiral">#</a> <b>spiral</b>([<i>spiral</i>])
 
@@ -171,18 +122,12 @@ function(aspectRatio) {
 If not specified, returns the current spiral generator, which defaults to the
 built-in "archimedean" spiral.
 
-<a name="padding" href="#padding">#</a> <b>padding</b>([<i>padding</i>])
-
-If specified, sets the **padding** accessor function, which indicates the
-numerical padding for each word.  If not specified, returns the current
-padding, which defaults to 1.
-
 <a name="random" href="#random">#</a> <b>random</b>([<i>random</i>])
 
 If specified, sets the internal random number generator, used for selecting the
-initial position of each word inside `startBox()`, and the
-clockwise/counterclockwise direction of the spiral for each word. This should
-return a number in the range `[0, 1)`.
+initial position of each sprite inside `startBox()`, and the
+clockwise/counterclockwise direction of the spiral during placement. This
+should return a number in the range `[0, 1)`.
 
 If not specified, returns the current random number generator, which defaults
 to `Math.random`.
