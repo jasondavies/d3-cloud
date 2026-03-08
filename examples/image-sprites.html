@@ -4,143 +4,28 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>d3-cloud Image Sprite Example</title>
+    <link rel="stylesheet" href="./shared.css">
     <style>
       :root {
         --ink: #111111;
         --paper: #eef3f1;
         --panel: rgba(255, 255, 255, 0.86);
-        --shadow: rgba(24, 43, 38, 0.14);
         --accent: #155e63;
         --accent-soft: rgba(21, 94, 99, 0.12);
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        font-family: "Trebuchet MS", "Gill Sans", sans-serif;
-        color: var(--ink);
-        background:
+        --body-background:
           radial-gradient(circle at top left, rgba(21, 94, 99, 0.18), transparent 34%),
           radial-gradient(circle at bottom right, rgba(226, 120, 80, 0.18), transparent 28%),
           linear-gradient(160deg, #f7fbfa 0%, var(--paper) 42%, #dfe9e5 100%);
-      }
-
-      main {
-        width: min(980px, calc(100vw - 32px));
-        margin: 32px auto;
-      }
-
-      .frame {
-        border: 2px solid rgba(17, 17, 17, 0.1);
-        border-radius: 24px;
-        padding: 28px;
-        background: var(--panel);
-        box-shadow: 0 18px 45px var(--shadow);
-        backdrop-filter: blur(8px);
-      }
-
-      .masthead {
-        display: flex;
-        justify-content: space-between;
-        gap: 16px;
-        align-items: end;
-        margin-bottom: 20px;
-      }
-
-      h1 {
-        margin: 0;
-        font: 700 clamp(2rem, 4vw, 3.3rem) / 0.95 "Georgia", "Times New Roman", serif;
-        letter-spacing: -0.03em;
-      }
-
-      p {
-        margin: 8px 0 0;
-        max-width: 58ch;
-        line-height: 1.5;
-      }
-
-      .controls {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 10px;
-      }
-
-      .actions {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      a,
-      button {
-        border: 0;
-        border-radius: 999px;
-        padding: 12px 18px;
-        font: 700 0.95rem/1 "Trebuchet MS", "Gill Sans", sans-serif;
-        text-decoration: none;
-        cursor: pointer;
-      }
-
-      button {
-        color: #f4fffd;
-        background: linear-gradient(135deg, #155e63, #2e7b72);
-        box-shadow: 0 10px 20px rgba(21, 94, 99, 0.2);
-      }
-
-      a {
-        color: var(--accent);
-        background: rgba(255, 255, 255, 0.75);
-        box-shadow: inset 0 0 0 1px rgba(21, 94, 99, 0.16);
-      }
-
-      .status {
-        min-height: 1.2em;
-        font-size: 0.92rem;
-        color: rgba(17, 17, 17, 0.72);
-      }
-
-      .canvas {
-        overflow: hidden;
-        border-radius: 18px;
-        border: 1px solid rgba(17, 17, 17, 0.12);
-        background:
+        --frame-border: rgba(17, 17, 17, 0.1);
+        --frame-shadow: rgba(24, 43, 38, 0.14);
+        --button-text: #f4fffd;
+        --button-background: linear-gradient(135deg, #155e63, #2e7b72);
+        --button-shadow: rgba(21, 94, 99, 0.2);
+        --link-background: rgba(255, 255, 255, 0.75);
+        --link-shadow: inset 0 0 0 1px rgba(21, 94, 99, 0.16);
+        --canvas-background:
           linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(247, 251, 249, 0.92)),
           radial-gradient(circle at center, rgba(21, 94, 99, 0.06), transparent 60%);
-      }
-
-      svg {
-        display: block;
-        width: 100%;
-        height: auto;
-        aspect-ratio: 720 / 480;
-      }
-
-      .note {
-        margin-top: 14px;
-        font-size: 0.9rem;
-        color: rgba(17, 17, 17, 0.68);
-      }
-
-      code {
-        padding: 0.15em 0.35em;
-        border-radius: 0.4em;
-        background: var(--accent-soft);
-      }
-
-      @media (max-width: 720px) {
-        .masthead {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-
-        .controls {
-          align-items: flex-start;
-        }
       }
     </style>
   </head>
