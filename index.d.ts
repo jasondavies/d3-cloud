@@ -46,7 +46,6 @@ export interface StrategyContext {
   bounds: Bounds | null;
   overflow: boolean;
   random: RandomSource;
-  maxDelta: number;
 }
 
 export type StrategyCandidate = { x: number; y: number } | null | undefined;
@@ -159,7 +158,7 @@ declare class CloudLayout {
 
   clear(): this;
   bounds(): Bounds | null;
-  removeSprite<T extends SpriteMetadata = SpriteMetadata>(sprite: CloudSprite<T>): boolean;
+  eraseSprite<T extends SpriteMetadata = SpriteMetadata>(sprite: CloudSprite<T>): void;
 
   size(): [number, number];
   size(value: [number, number] | number): this;
@@ -175,9 +174,6 @@ declare class CloudLayout {
 
   blockSize(): number;
   blockSize(value: number): this;
-
-  maxDelta(): number | null;
-  maxDelta(value: number | null | undefined): this;
 
   getSprite<T extends SpriteMetadata = SpriteMetadata>(source: TextSource, options?: TextSpriteOptions<T>): CloudSprite<T> | null;
   getSprite<T extends SpriteMetadata = SpriteMetadata>(source: ImageLike, options?: ImageSpriteOptions<T>): CloudSprite<T> | null;

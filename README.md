@@ -84,16 +84,19 @@ a fresh layout.
 <a name="bounds" href="#bounds">#</a> <b>bounds</b>()
 
 Returns the current placement extent as `[{x, y}, {x, y}]`, or `null` if no
-words have been placed yet.
+sprites have been placed yet. After `eraseSprite()`, these bounds are only
+reset when the layout becomes completely empty; otherwise they may remain
+conservative.
 
-<a name="removesprite" href="#removesprite">#</a> <b>removeSprite</b>(<i>sprite</i>)
+<a name="erasesprite" href="#erasesprite">#</a> <b>eraseSprite</b>(<i>sprite</i>)
 
-Removes a previously placed `CloudSprite` from the layout and returns `true`.
+Erases a previously placed `CloudSprite` from the layout.
 
 Pass the original `CloudSprite` instance that was given to `place()`, not the
 plain placed-word snapshot returned by `place()`. This call is unchecked: pass
 only the same sprite instance that was actually placed and has not already been
-removed.
+removed. This low-level operation does not shrink `bounds()` unless the layout
+becomes completely empty.
 
 <a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>[, <i>options</i>])
 
@@ -173,8 +176,7 @@ function(initial, context) {
 ```
 
 The `initial` argument is the initial `{x, y}` seed for this placement.
-`context` includes `size`, `aspectRatio`, `bounds`, `overflow`, `random`, and
-`maxDelta`.
+`context` includes `size`, `aspectRatio`, `bounds`, `overflow`, and `random`.
 
 Each generated candidate must be returned as `{x, y}`. Returning `null` stops
 the search.
@@ -204,12 +206,6 @@ If specified, sets the sparse block size used during placement. Block sizes
 are rounded up to the next multiple of 32 pixels so they align with the
 packed sprite representation. If not specified, returns the current size,
 which defaults to `512`.
-
-<a name="maxDelta" href="#maxDelta">#</a> <b>maxDelta</b>([<i>distance</i>])
-
-If specified, sets the maximum search delta used while searching for a
-placement. If not specified, returns the current limit. By default, this grows
-with the current word and the extent of the words already placed.
 
 <a name="canvas" href="#canvas">#</a> <b>canvas</b>([<i>canvas</i>])
 

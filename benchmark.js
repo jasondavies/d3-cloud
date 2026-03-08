@@ -13,8 +13,7 @@ const scenarios = {
     count: 220,
     seed: 11,
     size: [512, 384],
-    overflow: true,
-    maxDelta: 1280
+    overflow: true
   },
   overflow: {
     name: "overflow",
@@ -22,8 +21,7 @@ const scenarios = {
     count: 320,
     seed: 29,
     size: [512, 512],
-    overflow: true,
-    maxDelta: 4096
+    overflow: true
   }
 };
 const args = parseArgs(process.argv.slice(2));
@@ -42,7 +40,6 @@ function benchmarkScenario(scenario, runs) {
   console.log(
     `size=${formatPair(scenario.size ?? [256, 256])} ` +
     `overflow=${scenario.overflow ?? true} ` +
-    `maxDelta=${scenario.maxDelta ?? "default"} ` +
     `blockSize=${args.blockSize ?? DEFAULT_BLOCK_SIZE} ` +
     `words=${scenario.count} runs=${runs}`
   );
@@ -80,10 +77,6 @@ function runLayout(scenario, words, seed) {
     .overflow(scenario.overflow ?? true)
     .blockSize(args.blockSize ?? DEFAULT_BLOCK_SIZE)
     .random(createRandom(seed));
-
-  if (scenario.maxDelta != null) {
-    layout.maxDelta(scenario.maxDelta);
-  }
 
   const start = performance.now();
   const sprites = sortedWords

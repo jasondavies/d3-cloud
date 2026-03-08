@@ -394,7 +394,6 @@ var CloudLayout = class {
     this._strategy = archimedeanStrategy;
     this._random = Math.random;
     this._blockSize = 512;
-    this._maxDelta = null;
     this._canvasFactory = defaultCanvasFactory;
     this._spriteContext = null;
     this._bounds = null;
@@ -459,13 +458,6 @@ var CloudLayout = class {
     this._blocks = createOccupancyBlocks(this._blockSize);
     return this;
   }
-  maxDelta(_) {
-    if (!arguments.length) {
-      return this._maxDelta;
-    }
-    this._maxDelta = _ == null ? null : +_;
-    return this;
-  }
   getSprite(source, options = {}) {
     if (!options || typeof options !== "object" || Array.isArray(options)) {
       throw new TypeError("getSprite() expects an options object");
@@ -474,15 +466,14 @@ var CloudLayout = class {
     sprite.rasterize(this._getContext());
     return sprite.hasPixels ? sprite : null;
   }
-  removeSprite(sprite) {
+  eraseSprite(sprite) {
     if (!(sprite instanceof CloudSprite)) {
-      throw new TypeError("removeSprite() expects a CloudSprite");
+      throw new TypeError("eraseSprite() expects a CloudSprite");
     }
     this._blocks.remove(sprite);
     if (this._blocks.isEmpty()) {
       this._bounds = null;
     }
-    return true;
   }
   place(sprite, options = void 0) {
     if (!(sprite instanceof CloudSprite)) {
@@ -498,7 +489,7 @@ var CloudLayout = class {
     if (!sprite.hasPixels) {
       return null;
     }
-    if (!tryPlaceSprite(this._blocks, sprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
+    if (!tryPlaceSprite(this._blocks, sprite, this._bounds, strategy, this._size, this._overflow, this._random)) {
       return null;
     }
     extendBounds(this, sprite);
@@ -529,8 +520,8 @@ function createCloudSprite(source, options) {
   }
   throw new TypeError("getSprite() expects text or an image-like source");
 }
-function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random, maxDelta) {
-  var startX = sprite.x, startY = sprite.y, deltaLimit = resolveMaxDelta(sprite, bounds, maxDelta, size, overflow), clipBounds = overflow ? null : sizeBounds(size), next, candidate, dx, dy;
+function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random) {
+  var startX = sprite.x, startY = sprite.y, deltaLimit = resolveMaxDelta(sprite, bounds, size, overflow), clipBounds = overflow ? null : sizeBounds(size), next, candidate, dx, dy;
   if ((!clipBounds || withinBounds(sprite, clipBounds)) && (!bounds || collideRects(sprite, bounds)) && !blocks.collides(sprite)) {
     blocks.insert(sprite);
     return true;
@@ -542,8 +533,7 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
       aspectRatio: sizeAspectRatio(size),
       bounds: cloneBounds(bounds),
       overflow,
-      random,
-      maxDelta: deltaLimit
+      random
     }
   );
   if (typeof next !== "function") {
@@ -746,10 +736,7 @@ function getRangeForBounds(left, top, right, bottom, cellSize) {
 function blockKey(x, y) {
   return x + "," + y;
 }
-function resolveMaxDelta(sprite, bounds, maxDelta, size, overflow) {
-  if (maxDelta != null) {
-    return maxDelta;
-  }
+function resolveMaxDelta(sprite, bounds, size, overflow) {
   var wordExtent = Math.max(sprite.width || 0, sprite.height || 0), sizeExtent = overflow ? 0 : Math.max(size[0], size[1]), boundsExtent = bounds ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y) : 0;
   return Math.max(256, wordExtent * 4, boundsExtent * 2, sizeExtent);
 }

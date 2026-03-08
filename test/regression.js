@@ -279,7 +279,6 @@ test("custom strategies receive the initial seed and layout context", () => {
   assert.deepEqual(receivedContext.size, [60, 20]);
   assert.equal(receivedContext.overflow, true);
   assert.equal(typeof receivedContext.random, "function");
-  assert.equal(typeof receivedContext.maxDelta, "number");
   assert.ok(receivedContext.bounds);
   assert.ok(placed);
   assert.equal(placed.x, 31);
@@ -398,7 +397,7 @@ test("place accepts a per-call strategy override", () => {
   assert.equal(second.y, 0);
 });
 
-test("removeSprite removes a placed sprite and frees its occupied space", () => {
+test("eraseSprite removes a placed sprite and frees its occupied space", () => {
   const layout = new CloudLayout()
     .canvas(() => createRightEdgeCanvas())
     .size([0, 0])
@@ -409,7 +408,7 @@ test("removeSprite removes a placed sprite and frees its occupied space", () => 
 
   assert.ok(layout.place(firstSprite, { x: 0, y: 0 }));
   assert.equal(layout.place(secondSprite, { x: 0, y: 0 }), null);
-  assert.equal(layout.removeSprite(firstSprite), true);
+  layout.eraseSprite(firstSprite);
   assert.equal(layout.bounds(), null);
 
   const secondPlacement = layout.place(secondSprite, { x: 0, y: 0 });
@@ -523,7 +522,6 @@ test("layout handles multiple sprite batches and cleans up sprite data", () => {
     .canvas(() => createFakeCanvas())
     .size([0, 0])
     .overflow(true)
-      .maxDelta(4096)
       .random(createSeededRandom(1));
 
   const { placedWords } = runLayout(layout, words);
@@ -558,7 +556,6 @@ test("layout can rerun the same input words after sprite options change", () => 
     .canvas(() => createFakeCanvas())
     .size([0, 0])
     .overflow(true)
-      .maxDelta(4096)
       .random(() => 0.5);
 
   const { placedWords: firstPlacedWords } = runLayout(layout, words);

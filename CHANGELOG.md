@@ -27,7 +27,7 @@ release was `v1.2.9`.
   `place()` for caller-controlled placement.
 - Added built-in placement strategies including `noneStrategy` for single-attempt
   placement.
-- Added `removeSprite()` for removing previously placed `CloudSprite` instances.
+- Added `eraseSprite()` for erasing previously placed `CloudSprite` instances.
 - Added image sprite extraction from alpha masks, including optional image
   resizing with `options.width` and `options.height`.
 - Added sparse packed block placement for effectively unbounded layouts.
@@ -40,5 +40,7 @@ release was `v1.2.9`.
   mask storage.
 - Fixed layout state reuse between runs and corrected right-edge occupancy for
   non-word-aligned widths.
+- Removed `maxDelta()` and now always derives the placement search limit from
+  the current sprite, bounds, and layout size.
 - Simplified the public examples and aligned the browser demo with the modern
   ESM build.
