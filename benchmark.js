@@ -93,7 +93,7 @@ function runLayout(scenario, words, seed) {
       font: "sans-serif"
     }))
     .filter(Boolean);
-  const placed = layout.placeAll(sprites);
+  const placed = placeSprites(layout, sprites);
   const bounds = layout.bounds();
   const duration = performance.now() - start;
 
@@ -102,6 +102,19 @@ function runLayout(scenario, words, seed) {
     placed: placed.length,
     area: boundsArea(bounds)
   };
+}
+
+function placeSprites(layout, sprites) {
+  const placedWords = [];
+
+  for (const sprite of sprites) {
+    const word = layout.place(sprite);
+    if (word) {
+      placedWords.push(word);
+    }
+  }
+
+  return placedWords;
 }
 
 function createWords(count, seed) {

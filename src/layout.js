@@ -136,20 +136,6 @@ export default class CloudLayout {
     return outputWord(placedSprite);
   }
 
-  placeAll(sprites) {
-    const placedWords = [];
-    const batch = normalizeSpriteBatch(sprites);
-
-    for (let index = 0; index < batch.length; index += 1) {
-      const placed = this.place(batch[index]);
-      if (placed) {
-        placedWords.push(placed);
-      }
-    }
-
-    return placedWords;
-  }
-
   _getContext() {
     if (!this._spriteContext) {
       this._spriteContext = createSpriteContext(this._canvas());
@@ -409,10 +395,38 @@ function resolveMaxDelta(tag, bounds, maxDelta, size, overflow) {
 }
 
 function outputWord(d) {
-  return {
-    ...d,
-    sprite: undefined
-  };
+  const word = {};
+
+  for (const key in d) {
+    if (!Object.prototype.hasOwnProperty.call(d, key) || INTERNAL_WORD_FIELDS.has(key) || PUBLIC_WORD_FIELDS.has(key)) {
+      continue;
+    }
+    word[key] = d[key];
+  }
+
+  word.text = d.text;
+  word.image = d.image;
+  word.imageWidth = d.imageWidth;
+  word.imageHeight = d.imageHeight;
+  word.font = d.font;
+  word.style = d.style;
+  word.weight = d.weight;
+  word.rotate = d.rotate;
+  word.size = d.size;
+  word.padding = d.padding;
+  word.x = d.x;
+  word.y = d.y;
+  word.width = d.width;
+  word.height = d.height;
+  word.trimX = d.trimX;
+  word.trimY = d.trimY;
+  word.trimWidth = d.trimWidth;
+  word.trimHeight = d.trimHeight;
+  word.x0 = d.x0;
+  word.y0 = d.y0;
+  word.x1 = d.x1;
+  word.y1 = d.y1;
+  return word;
 }
 
 function cloneBounds(bounds) {
@@ -487,29 +501,6 @@ function normalizeCoordinate(value) {
   return Number.isFinite(value) ? value : 0;
 }
 
-function normalizeSpriteBatch(sprites) {
-  if (sprites == null) {
-    return [];
-  }
-  const batch = typeof sprites[Symbol.iterator] === "function"
-    ? Array.from(sprites)
-    : typeof sprites.length === "number"
-      ? Array.from(sprites)
-      : null;
-
-  if (!batch) {
-    throw new TypeError("placeAll() expects an iterable or array-like collection of CloudSprite instances");
-  }
-
-  for (const sprite of batch) {
-    if (!(sprite instanceof CloudSprite)) {
-      throw new TypeError("placeAll() expects CloudSprite instances");
-    }
-  }
-
-  return batch;
-}
-
 function spriteWords(sprite) {
   return (sprite.spriteWidth ?? sprite.width) >>> 5;
 }
@@ -565,3 +556,34 @@ function seedCoordinate(size, random) {
 function functor(d) {
   return typeof d === "function" ? d : function() { return d; };
 }
+
+const INTERNAL_WORD_FIELDS = new Set([
+  "hasText",
+  "sprite",
+  "spriteWidth"
+]);
+
+const PUBLIC_WORD_FIELDS = new Set([
+  "text",
+  "image",
+  "imageWidth",
+  "imageHeight",
+  "font",
+  "style",
+  "weight",
+  "rotate",
+  "size",
+  "padding",
+  "x",
+  "y",
+  "width",
+  "height",
+  "trimX",
+  "trimY",
+  "trimWidth",
+  "trimHeight",
+  "x0",
+  "y0",
+  "x1",
+  "y1"
+]);

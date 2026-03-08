@@ -1,0 +1,173 @@
+export type TextSource = string | number | boolean | String;
+
+export interface ImageLike {
+  width?: number;
+  height?: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
+  videoWidth?: number;
+  videoHeight?: number;
+  alt?: string;
+  src?: string;
+  currentSrc?: string;
+}
+
+export interface BoundsPoint {
+  x: number;
+  y: number;
+}
+
+export type Bounds = [BoundsPoint, BoundsPoint];
+
+export type RandomSource = () => number;
+
+export interface CanvasLike {
+  width: number;
+  height: number;
+  getContext(contextId: "2d", options?: { willReadFrequently?: boolean }): unknown;
+}
+
+export type CanvasFactory = () => CanvasLike;
+
+export interface PlaceOptions {
+  x?: number;
+  y?: number;
+}
+
+export type SpiralStep = [number, number] | null | undefined;
+export type SpiralGenerator = (t: number) => SpiralStep;
+export type SpiralFactory = (aspectRatio: number) => SpiralGenerator;
+export type SpiralName = "archimedean" | "rectangular";
+
+export interface BaseSpriteOptions {
+  font?: string;
+  fontStyle?: string;
+  style?: string;
+  fontWeight?: string | number;
+  weight?: string | number;
+  fontSize?: number;
+  size?: number;
+  rotate?: number;
+  padding?: number;
+  x?: number;
+  y?: number;
+  index?: number;
+}
+
+export type SpriteMetadata = Record<string, unknown>;
+
+export type TextSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & BaseSpriteOptions;
+
+export type ImageSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & BaseSpriteOptions & {
+  text?: string;
+  width?: number;
+  height?: number;
+};
+
+export type CloudSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & {
+  text?: string;
+  image?: ImageLike | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
+  font?: string;
+  style?: string;
+  weight?: string | number;
+  rotate?: number;
+  size?: number;
+  padding?: number;
+  x?: number;
+  y?: number;
+};
+
+export type PlacedWord<T extends SpriteMetadata = SpriteMetadata> = T & {
+  text: string;
+  image: ImageLike | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  font: string;
+  style: string;
+  weight: string | number;
+  rotate: number;
+  size: number;
+  padding: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  trimX: number;
+  trimY: number;
+  trimWidth: number;
+  trimHeight: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+};
+
+declare class CloudSprite<T extends SpriteMetadata = SpriteMetadata> {
+  constructor(options?: CloudSpriteOptions<T>);
+
+  text: string;
+  image: ImageLike | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  font: string;
+  style: string;
+  weight: string | number;
+  rotate: number;
+  size: number;
+  padding: number;
+  x: number;
+  y: number;
+  hasText: boolean;
+  width: number;
+  height: number;
+  spriteWidth: number;
+  trimX: number;
+  trimY: number;
+  trimWidth: number;
+  trimHeight: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  sprite?: Uint32Array;
+
+  rasterize(contextAndRatio: unknown): this;
+}
+
+declare class CloudLayout {
+  constructor();
+
+  canvas(): CanvasFactory;
+  canvas(value: CanvasFactory | CanvasLike): this;
+
+  clear(): this;
+  bounds(): Bounds | null;
+
+  size(): [number, number];
+  size(value: [number, number] | number): this;
+
+  overflow(): boolean;
+  overflow(value: boolean): this;
+
+  spiral(): SpiralFactory;
+  spiral(value: SpiralName | SpiralFactory): this;
+
+  random(): RandomSource;
+  random(value: RandomSource): this;
+
+  blockSize(): number;
+  blockSize(value: number): this;
+
+  maxDelta(): number | null;
+  maxDelta(value: number | null | undefined): this;
+
+  getSprite<T extends SpriteMetadata = SpriteMetadata>(source: TextSource, options?: TextSpriteOptions<T>): CloudSprite<T> | null;
+  getSprite<T extends SpriteMetadata = SpriteMetadata>(source: ImageLike, options?: ImageSpriteOptions<T>): CloudSprite<T> | null;
+
+  place<T extends SpriteMetadata = SpriteMetadata>(sprite: CloudSprite<T>, options?: PlaceOptions): PlacedWord<T> | null;
+}
+
+export default CloudLayout;
+export { CloudLayout, CloudSprite };

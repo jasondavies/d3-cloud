@@ -39,7 +39,7 @@ async function render() {
     .random(layoutRandom);
   const descriptors = createIconDescriptors(sizeRandom);
   const sprites = await createSprites(layout, descriptors);
-  const placedWords = layout.placeAll(sprites);
+  const placedWords = placeSprites(layout, sprites);
 
   draw(placedWords, layout.bounds() || measureBounds(placedWords));
 }
@@ -84,6 +84,19 @@ async function createSprites(layout, descriptors) {
   }));
 
   return sprites.filter(Boolean);
+}
+
+function placeSprites(layout, sprites) {
+  const placedWords = [];
+
+  for (const sprite of sprites) {
+    const word = layout.place(sprite);
+    if (word) {
+      placedWords.push(word);
+    }
+  }
+
+  return placedWords;
 }
 
 function draw(words, bounds) {

@@ -23,7 +23,7 @@ release was `v1.2.9`.
 ### Added
 
 - Added `CloudLayout.getSprite(...)` for explicit sprite preparation and
-  `place()` / `placeAll()` for caller-controlled placement.
+  `place()` for caller-controlled placement.
 - Added image sprite extraction from alpha masks, including optional image
   resizing with `options.width` and `options.height`.
 - Added sparse packed block placement for effectively unbounded layouts.

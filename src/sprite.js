@@ -39,10 +39,6 @@ export default class CloudSprite {
     this.trimY = 0;
     this.trimWidth = 0;
     this.trimHeight = 0;
-    this.renderWidth = 0;
-    this.renderHeight = 0;
-    this.renderX0 = 0;
-    this.renderY0 = 0;
     this.x0 = 0;
     this.y0 = 0;
     this.x1 = 0;
@@ -110,10 +106,6 @@ function resetSprite(sprite) {
   sprite.trimY = 0;
   sprite.trimWidth = 0;
   sprite.trimHeight = 0;
-  sprite.renderWidth = 0;
-  sprite.renderHeight = 0;
-  sprite.renderX0 = 0;
-  sprite.renderY0 = 0;
   sprite.x0 = 0;
   sprite.y0 = 0;
   sprite.x1 = 0;
@@ -139,6 +131,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
 
   context.save();
   context.font = `${sprite.style} ${sprite.weight} ${Math.trunc((sprite.size + 1) / ratio)}px ${sprite.font}`;
+  context.textBaseline = "middle";
 
   const metrics = context.measureText(sprite.text);
   const anchor = -Math.floor(metrics.width / 2);
@@ -186,10 +179,6 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   sprite.x0 = -sprite.x1;
   sprite.y0 = -sprite.y1;
   sprite.trimWidth = width;
-  sprite.renderWidth = width;
-  sprite.renderHeight = height;
-  sprite.renderX0 = sprite.x0;
-  sprite.renderY0 = sprite.y0;
   sprite.hasText = true;
 
   const pixels = context.getImageData(0, 0, width / ratio, height / ratio).data;
@@ -294,10 +283,6 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   sprite.trimY = alphaBounds.y0;
   sprite.trimWidth = alphaBounds.width;
   sprite.trimHeight = alphaBounds.height;
-  sprite.renderWidth = drawWidth;
-  sprite.renderHeight = drawHeight;
-  sprite.renderX0 = -(drawWidth >> 1);
-  sprite.renderY0 = -(drawHeight >> 1);
   sprite.x0 = originX + alphaBounds.x0;
   sprite.y0 = originY + alphaBounds.y0;
   sprite.x1 = sprite.x0 + sprite.width;

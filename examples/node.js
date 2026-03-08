@@ -19,6 +19,13 @@ const sprites = words
     rotate: Math.floor(Math.random() * 2) * 90
   }))
   .filter(Boolean);
-const placedWords = layout.placeAll(sprites);
+const placedWords = [];
+
+for (const sprite of sprites) {
+  const word = layout.place(sprite);
+  if (word) {
+    placedWords.push(word);
+  }
+}
 
 console.log(JSON.stringify(placedWords));

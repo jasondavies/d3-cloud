@@ -23,7 +23,6 @@ test("browser bundle exports the layout class as ESM", async () => {
 
   assert.equal(typeof BundledCloudLayout, "function");
   assert.equal(typeof new BundledCloudLayout().place, "function");
-  assert.equal(typeof new BundledCloudLayout().placeAll, "function");
   assert.equal(typeof BundledCloudSprite, "function");
 });
 
@@ -89,6 +88,24 @@ test("layout can build a reusable CloudSprite", () => {
   assert.ok(sprite.height > 0);
 });
 
+test("layout rasterizes text with a middle baseline", () => {
+  let seenBaseline = null;
+  const layout = new CloudLayout()
+    .canvas(() => createBaselineCanvas(value => {
+      seenBaseline = value;
+    }));
+
+  const sprite = layout.getSprite("hello", {
+    font: "serif",
+    size: 20,
+    rotate: 0,
+    padding: 0
+  });
+
+  assert.ok(sprite instanceof CloudSprite);
+  assert.equal(seenBaseline, "middle");
+});
+
 test("layout can build a CloudSprite from image alpha", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas());
@@ -116,10 +133,6 @@ test("layout can build a CloudSprite from image alpha", () => {
   assert.equal(sprite.y0, -1);
   assert.equal(sprite.x1, 1);
   assert.equal(sprite.y1, 1);
-  assert.equal(sprite.renderWidth, 4);
-  assert.equal(sprite.renderHeight, 4);
-  assert.equal(sprite.renderX0, -2);
-  assert.equal(sprite.renderY0, -2);
   assert.ok(sprite.sprite instanceof Uint32Array);
 });
 
@@ -170,6 +183,49 @@ test("layout preserves image aspect ratio when only one resize dimension is prov
   assert.equal(sprite.height, 20);
 });
 
+test("overflow false constrains image sprites to the layout size", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas())
+    .size([4, 4])
+    .overflow(false)
+    .random(() => 0.5)
+    .spiral(() => t => t === 0 ? [0, 0] : null);
+  const image = createFakeImage(
+    4,
+    4,
+    Array.from({ length: 16 }, (_, index) => [index % 4, Math.floor(index / 4)])
+  );
+
+  const sprite = layout.getSprite(image, { width: 4, height: 4 });
+
+  assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+  layout.clear();
+  assert.equal(layout.place(sprite, { x: 1, y: 0 }), null);
+});
+
+test("custom spirals receive the layout aspect ratio", () => {
+  let receivedAspectRatio;
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas())
+    .size([60, 20])
+    .overflow(true)
+    .random(() => 0.5)
+    .spiral(aspectRatio => {
+      receivedAspectRatio = aspectRatio;
+      return t => t === 0 ? [0, 0] : null;
+    });
+
+  const placedWord = layout.place(layout.getSprite("hello", {
+    font: "serif",
+    size: 12,
+    rotate: 0,
+    padding: 0
+  }));
+
+  assert.equal(receivedAspectRatio, 3);
+  assert.ok(placedWord);
+});
+
 test("place accepts a prepared CloudSprite", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
@@ -189,6 +245,31 @@ test("place accepts a prepared CloudSprite", () => {
   assert.equal(placedWord.text, "hello");
   assert.equal(placedWord.x, 0);
   assert.equal(placedWord.y, 0);
+});
+
+test("placed words omit internal raster state and preserve custom fields", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas())
+    .size([0, 0])
+    .overflow(true)
+    .random(() => 0.5);
+
+  const sprite = layout.getSprite("hello", {
+    font: "serif",
+    size: 20,
+    rotate: 0,
+    padding: 0,
+    id: "greeting"
+  });
+  const placedWord = layout.place(sprite);
+
+  assert.equal(placedWord.id, "greeting");
+  assert.equal("sprite" in placedWord, false);
+  assert.equal("spriteWidth" in placedWord, false);
+  assert.equal("hasText" in placedWord, false);
+  assert.equal(typeof placedWord.text, "string");
+  assert.equal(typeof placedWord.x, "number");
+  assert.equal(typeof placedWord.trimHeight, "number");
 });
 
 test("place accepts explicit initial coordinates", () => {
@@ -463,6 +544,7 @@ function createFakeCanvas() {
     fillStyle: "",
     strokeStyle: "",
     font: "10px sans-serif",
+    textBaseline: "alphabetic",
     lineWidth: 1,
     clearRect() {
       boxes.length = 0;
@@ -471,6 +553,7 @@ function createFakeCanvas() {
     save() {
       stack.push({
         font: this.font,
+        textBaseline: this.textBaseline,
         lineWidth: this.lineWidth,
         tx: this._tx,
         ty: this._ty
@@ -479,6 +562,7 @@ function createFakeCanvas() {
     restore() {
       const state = stack.pop();
       this.font = state.font;
+      this.textBaseline = state.textBaseline;
       this.lineWidth = state.lineWidth;
       this._tx = state.tx;
       this._ty = state.ty;
@@ -544,6 +628,7 @@ function createRightEdgeCanvas() {
     fillStyle: "",
     strokeStyle: "",
     font: "10px sans-serif",
+    textBaseline: "alphabetic",
     lineWidth: 1,
     clearRect() {
       boxes.length = 0;
@@ -552,6 +637,7 @@ function createRightEdgeCanvas() {
     save() {
       stack.push({
         font: this.font,
+        textBaseline: this.textBaseline,
         lineWidth: this.lineWidth,
         tx: this._tx,
         ty: this._ty
@@ -560,6 +646,7 @@ function createRightEdgeCanvas() {
     restore() {
       const state = stack.pop();
       this.font = state.font;
+      this.textBaseline = state.textBaseline;
       this.lineWidth = state.lineWidth;
       this._tx = state.tx;
       this._ty = state.ty;
@@ -625,6 +712,46 @@ function createBox(context, text, x, y, inflate) {
     y0: Math.floor(context._ty + y - fontSize - inflate),
     x1: Math.ceil(context._tx + x + width + inflate),
     y1: Math.ceil(context._ty + y + fontSize + inflate)
+  };
+}
+
+function createBaselineCanvas(onFillText) {
+  const context = {
+    fillStyle: "",
+    strokeStyle: "",
+    font: "10px sans-serif",
+    textBaseline: "alphabetic",
+    lineWidth: 1,
+    clearRect() {},
+    save() {},
+    restore() {},
+    translate() {},
+    rotate() {},
+    measureText(text) {
+      return { width: text.length * 10 };
+    },
+    fillText(_text, _x, _y) {
+      onFillText(this.textBaseline);
+    },
+    strokeText() {},
+    getImageData(_x, _y, width, height) {
+      const data = new Uint8ClampedArray(width * height * 4);
+      for (let row = 4; row < Math.min(height, 12); row += 1) {
+        for (let column = 4; column < Math.min(width, 20); column += 1) {
+          data[(row * width + column) * 4 + 3] = 255;
+        }
+      }
+      return { data };
+    }
+  };
+
+  return {
+    width: 1,
+    height: 1,
+    getContext(type) {
+      assert.equal(type, "2d");
+      return context;
+    }
   };
 }
 
@@ -770,7 +897,15 @@ function summarizeWords(words) {
 }
 
 function runLayout(layout, words = []) {
-  const placedWords = layout.placeAll(extractSprites(layout, words));
+  const placedWords = [];
+
+  for (const sprite of extractSprites(layout, words)) {
+    const word = layout.place(sprite);
+    if (word) {
+      placedWords.push(word);
+    }
+  }
+
   return {
     placedWords,
     bounds: layout.bounds()

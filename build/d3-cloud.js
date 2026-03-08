@@ -84,10 +84,6 @@ var CloudSprite = class {
     this.trimY = 0;
     this.trimWidth = 0;
     this.trimHeight = 0;
-    this.renderWidth = 0;
-    this.renderHeight = 0;
-    this.renderX0 = 0;
-    this.renderY0 = 0;
     this.x0 = 0;
     this.y0 = 0;
     this.x1 = 0;
@@ -143,10 +139,6 @@ function resetSprite(sprite) {
   sprite.trimY = 0;
   sprite.trimWidth = 0;
   sprite.trimHeight = 0;
-  sprite.renderWidth = 0;
-  sprite.renderHeight = 0;
-  sprite.renderX0 = 0;
-  sprite.renderY0 = 0;
   sprite.x0 = 0;
   sprite.y0 = 0;
   sprite.x1 = 0;
@@ -167,6 +159,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   const pixelWidth = contextAndRatio.pixelWidth;
   context.save();
   context.font = `${sprite.style} ${sprite.weight} ${Math.trunc((sprite.size + 1) / ratio)}px ${sprite.font}`;
+  context.textBaseline = "middle";
   const metrics = context.measureText(sprite.text);
   const anchor = -Math.floor(metrics.width / 2);
   let width = (metrics.width + 1) * ratio;
@@ -209,10 +202,6 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   sprite.x0 = -sprite.x1;
   sprite.y0 = -sprite.y1;
   sprite.trimWidth = width;
-  sprite.renderWidth = width;
-  sprite.renderHeight = height;
-  sprite.renderX0 = sprite.x0;
-  sprite.renderY0 = sprite.y0;
   sprite.hasText = true;
   const pixels = context.getImageData(0, 0, width / ratio, height / ratio).data;
   const scratch = contextAndRatio.sprite;
@@ -302,10 +291,6 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   sprite.trimY = alphaBounds.y0;
   sprite.trimWidth = alphaBounds.width;
   sprite.trimHeight = alphaBounds.height;
-  sprite.renderWidth = drawWidth;
-  sprite.renderHeight = drawHeight;
-  sprite.renderX0 = -(drawWidth >> 1);
-  sprite.renderY0 = -(drawHeight >> 1);
   sprite.x0 = originX + alphaBounds.x0;
   sprite.y0 = originY + alphaBounds.y0;
   sprite.x1 = sprite.x0 + sprite.width;
@@ -512,17 +497,6 @@ var CloudLayout = class {
     }
     return outputWord(placedSprite);
   }
-  placeAll(sprites) {
-    const placedWords = [];
-    const batch = normalizeSpriteBatch(sprites);
-    for (let index = 0; index < batch.length; index += 1) {
-      const placed = this.place(batch[index]);
-      if (placed) {
-        placedWords.push(placed);
-      }
-    }
-    return placedWords;
-  }
   _getContext() {
     if (!this._spriteContext) {
       this._spriteContext = createSpriteContext(this._canvas());
@@ -701,9 +675,36 @@ function resolveMaxDelta(tag, bounds, maxDelta, size, overflow) {
   return Math.max(256, wordExtent * 4, boundsExtent * 2, sizeExtent);
 }
 function outputWord(d) {
-  return __spreadProps(__spreadValues({}, d), {
-    sprite: void 0
-  });
+  const word = {};
+  for (const key in d) {
+    if (!Object.prototype.hasOwnProperty.call(d, key) || INTERNAL_WORD_FIELDS.has(key) || PUBLIC_WORD_FIELDS.has(key)) {
+      continue;
+    }
+    word[key] = d[key];
+  }
+  word.text = d.text;
+  word.image = d.image;
+  word.imageWidth = d.imageWidth;
+  word.imageHeight = d.imageHeight;
+  word.font = d.font;
+  word.style = d.style;
+  word.weight = d.weight;
+  word.rotate = d.rotate;
+  word.size = d.size;
+  word.padding = d.padding;
+  word.x = d.x;
+  word.y = d.y;
+  word.width = d.width;
+  word.height = d.height;
+  word.trimX = d.trimX;
+  word.trimY = d.trimY;
+  word.trimWidth = d.trimWidth;
+  word.trimHeight = d.trimHeight;
+  word.x0 = d.x0;
+  word.y0 = d.y0;
+  word.x1 = d.x1;
+  word.y1 = d.y1;
+  return word;
 }
 function cloneBounds(bounds) {
   if (!bounds) {
@@ -771,21 +772,6 @@ function normalizeCoordinate(value) {
   value = +value;
   return Number.isFinite(value) ? value : 0;
 }
-function normalizeSpriteBatch(sprites) {
-  if (sprites == null) {
-    return [];
-  }
-  const batch = typeof sprites[Symbol.iterator] === "function" ? Array.from(sprites) : typeof sprites.length === "number" ? Array.from(sprites) : null;
-  if (!batch) {
-    throw new TypeError("placeAll() expects an iterable or array-like collection of CloudSprite instances");
-  }
-  for (const sprite of batch) {
-    if (!(sprite instanceof CloudSprite)) {
-      throw new TypeError("placeAll() expects CloudSprite instances");
-    }
-  }
-  return batch;
-}
 function spriteWords(sprite) {
   var _a;
   return ((_a = sprite.spriteWidth) != null ? _a : sprite.width) >>> 5;
@@ -829,6 +815,35 @@ function functor(d) {
     return d;
   };
 }
+var INTERNAL_WORD_FIELDS = /* @__PURE__ */ new Set([
+  "hasText",
+  "sprite",
+  "spriteWidth"
+]);
+var PUBLIC_WORD_FIELDS = /* @__PURE__ */ new Set([
+  "text",
+  "image",
+  "imageWidth",
+  "imageHeight",
+  "font",
+  "style",
+  "weight",
+  "rotate",
+  "size",
+  "padding",
+  "x",
+  "y",
+  "width",
+  "height",
+  "trimX",
+  "trimY",
+  "trimWidth",
+  "trimHeight",
+  "x0",
+  "y0",
+  "x1",
+  "y1"
+]);
 export {
   CloudLayout,
   CloudSprite,

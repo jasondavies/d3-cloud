@@ -12,10 +12,13 @@
   "homepage": "https://www.jasondavies.com/wordcloud/",
   "license": "BSD-3-Clause",
   "type": "module",
+  "types": "./index.d.ts",
   "files": [
     "src/",
     "build/",
+    "index.d.ts",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "author": {
@@ -25,6 +28,7 @@
   "main": "src/index.js",
   "exports": {
     ".": {
+      "types": "./index.d.ts",
       "import": "./src/index.js"
     },
     "./build/d3-cloud.js": "./build/d3-cloud.js"
@@ -37,6 +41,8 @@
   },
   "scripts": {
     "build": "esbuild src/index.js --bundle --format=esm --platform=browser --target=es2015 --outfile=build/d3-cloud.js",
+    "check:examples": "node --check examples/browser.js && node --check examples/image-sprites.js && node --check examples/mask.js && node --check examples/node.js && node --check benchmark.js",
+    "check:package": "npm test && npm run check:examples && npm pack --dry-run --cache .npm-cache",
     "pretest": "npm run build",
     "test": "node --test"
   },

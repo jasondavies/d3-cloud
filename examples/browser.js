@@ -40,7 +40,7 @@ function render() {
     .random(layoutRandom);
 
   const sprites = createSprites(layout, createWords(sizeRandom), rotateRandom);
-  const placedWords = layout.placeAll(sprites);
+  const placedWords = placeSprites(layout, sprites);
   draw(placedWords, layout.bounds() || measureBounds(placedWords));
 }
 
@@ -65,6 +65,19 @@ function createSprites(layout, words, rotateRandom) {
     .filter(Boolean);
 }
 
+function placeSprites(layout, sprites) {
+  const placedWords = [];
+
+  for (const sprite of sprites) {
+    const word = layout.place(sprite);
+    if (word) {
+      placedWords.push(word);
+    }
+  }
+
+  return placedWords;
+}
+
 function draw(words, bounds) {
   const extent = bounds || measureBounds(words);
   const padding = 28;
@@ -80,6 +93,7 @@ function draw(words, bounds) {
     const textNode = document.createElementNS(SVG_NS, "text");
     textNode.setAttribute("transform", `translate(${word.x} ${word.y}) rotate(${word.rotate})`);
     textNode.setAttribute("text-anchor", "middle");
+    textNode.setAttribute("dominant-baseline", "middle");
     textNode.setAttribute("font-family", word.font);
     textNode.setAttribute("font-size", `${word.size + 1}px`);
     textNode.setAttribute("font-style", word.style);

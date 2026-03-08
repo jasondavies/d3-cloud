@@ -34,7 +34,14 @@ const sprites = [...words]
     rotate: 0
   }))
   .filter(Boolean);
-const placed = layout.placeAll(sprites);
+const placed = [];
+
+for (const sprite of sprites) {
+  const word = layout.place(sprite);
+  if (word) {
+    placed.push(word);
+  }
+}
 ```
 
 Run `npm run build` to generate the browser bundle at `build/d3-cloud.js`,
@@ -46,6 +53,21 @@ hints for the built-in spirals. By default, `overflow(true)` allows placement
 to extend beyond that centered size box; switch to `overflow(false)` for a
 bounded layout. Word order is controlled by the caller; in most cases you
 will want to place larger words first.
+
+## Migrating From 1.x
+
+- The package is now ESM-only. `require("d3-cloud")` is no longer supported.
+- The old factory and event API is gone. Use `new CloudLayout()` together with
+  `getSprite()` and `place()` instead of `start()`, `stop()`, `on()`,
+  `words()`, and `timeInterval()`.
+- Text and image styling now lives on `getSprite(source, options)` rather than
+  layout-wide accessors such as `text()`, `font()`, `fontSize()`, `rotate()`,
+  and `padding()`.
+- `size([width, height])` now describes a centered layout box around `[0, 0]`.
+  Use `overflow(false)` to keep placement inside that box or `overflow(true)`
+  to allow the layout to grow beyond it.
+- Custom spiral generators now receive an aspect ratio number instead of the
+  old `[width, height]` size array.
 
 ## API Reference
 
@@ -72,6 +94,10 @@ If specified, the optional *options* object may include `x` and `y` to control
 the initial placement attempt before the spiral search begins. Any omitted axis
 still uses the normal seeded position from `size()`.
 
+For both text and image sprites, the returned `x` and `y` coordinates mark the
+sprite center. When rendering text in SVG, use `text-anchor="middle"` together
+with `dominant-baseline="middle"` to match the layout coordinates.
+
 <a name="getsprite" href="#getsprite">#</a> <b>getSprite</b>(<i>source</i>[, <i>options</i>])
 
 Builds and returns a `CloudSprite` for the specified text or image-like source,
@@ -88,18 +114,12 @@ pixels are ignored automatically. For image sources, `options.width` and
 `options.height` may be used to resize the image before extraction; if only one
 dimension is provided, the other is derived from the source aspect ratio.
 
-<a name="placeall" href="#placeall">#</a> <b>placeAll</b>(<i>sprites</i>)
+The returned object is a plain placed-word snapshot. Internal raster fields
+such as `sprite`, `spriteWidth`, and `hasText` are omitted, while custom
+metadata from `getSprite(..., options)` is preserved.
 
-Attempts to place the specified batch of prepared sprites, in the order
-provided, and places each one synchronously.
-
-Returns an array containing only the successfully placed derived word objects.
-The supplied `CloudSprite` instances are reused for placement; the returned
-objects are plain placed-word snapshots with `sprite` omitted.
-
-Words that cannot be placed are simply omitted from the returned array. To
-spread work across frames, call `getSprite()`, `place()`, or `placeAll()`
-yourself with smaller batches.
+Words that cannot be placed simply return `null`. To place multiple sprites,
+call `place()` in your own loop.
 
 <a name="size" href="#size">#</a> <b>size</b>([<i>size</i>])
 
