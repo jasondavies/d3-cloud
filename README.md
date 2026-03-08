@@ -89,15 +89,20 @@ words have been placed yet.
 <a name="removesprite" href="#removesprite">#</a> <b>removeSprite</b>(<i>sprite</i>)
 
 Removes a previously placed `CloudSprite` from the layout and returns `true`.
-If the sprite is not currently placed, returns `false`.
 
 Pass the original `CloudSprite` instance that was given to `place()`, not the
-plain placed-word snapshot returned by `place()`.
+plain placed-word snapshot returned by `place()`. This call is unchecked: pass
+only the same sprite instance that was actually placed and has not already been
+removed.
 
 <a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>[, <i>options</i>])
 
 Attempts to place a single prepared `CloudSprite` immediately and returns the
 placed derived word object, or `null` if it could not be placed.
+
+The returned object is a plain placed-word snapshot. Internal raster fields
+such as `sprite`, `spriteWidth`, and `hasText` are omitted, while custom
+metadata from `getSprite(..., options)` is preserved.
 
 If specified, the optional *options* object may include `x` and `y` to control
 the initial placement attempt before the strategy search begins. Any omitted axis
@@ -112,6 +117,9 @@ with `dominant-baseline="middle"` to match the layout coordinates.
 Builds and returns a `CloudSprite` for the specified text or image-like source,
 or `null` if it could not be rasterized into the internal scratch canvas.
 
+The returned value is a prepared reusable `CloudSprite`, not the plain placed
+word snapshot returned by `place()`.
+
 The optional *options* object may include `font`, `style`, `weight`, `rotate`,
 `size`, `padding`, `index`, and any additional fields you want accessor
 fields to carry through to the resulting sprite. The defaults are `font:
@@ -122,10 +130,6 @@ Image sprites are extracted from the source alpha channel, so transparent
 pixels are ignored automatically. For image sources, `options.width` and
 `options.height` may be used to resize the image before extraction; if only one
 dimension is provided, the other is derived from the source aspect ratio.
-
-The returned object is a plain placed-word snapshot. Internal raster fields
-such as `sprite`, `spriteWidth`, and `hasText` are omitted, while custom
-metadata from `getSprite(..., options)` is preserved.
 
 Words that cannot be placed simply return `null`. To place multiple sprites,
 call `place()` in your own loop.
@@ -210,8 +214,8 @@ with the current word and the extent of the words already placed.
 <a name="canvas" href="#canvas">#</a> <b>canvas</b>([<i>canvas</i>])
 
 If specified, sets the **canvas** generator function, which is used internally
-to draw text.  If not specified, returns the current generator function, which
-defaults to:
+to draw text. This must be a function that returns a canvas-like object. If not
+specified, returns the current generator function, which defaults to:
 
 ```js
 function() { return document.createElement("canvas"); }

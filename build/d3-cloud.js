@@ -395,16 +395,19 @@ var CloudLayout = class {
     this._random = Math.random;
     this._blockSize = 512;
     this._maxDelta = null;
-    this._canvas = cloudCanvas;
+    this._canvasFactory = defaultCanvasFactory;
     this._spriteContext = null;
     this._bounds = null;
     this._blockState = createSparseBlocks(this._blockSize);
   }
   canvas(_) {
     if (!arguments.length) {
-      return this._canvas;
+      return this._canvasFactory;
     }
-    this._canvas = functor(_);
+    if (typeof _ !== "function") {
+      throw new TypeError("canvas() expects a canvas factory function");
+    }
+    this._canvasFactory = _;
     this._spriteContext = null;
     return this;
   }
@@ -488,48 +491,40 @@ var CloudLayout = class {
     if (options != null && (!options || typeof options !== "object" || Array.isArray(options))) {
       throw new TypeError("place() expects an options object");
     }
-    const placedSprite = sprite;
     const strategy = (options == null ? void 0 : options.strategy) == null ? this._strategy : resolveStrategy(options.strategy);
-    placedSprite.x = (options == null ? void 0 : options.x) == null ? seedCoordinate(this._size[0], this._random) : normalizeCoordinate(options.x);
-    placedSprite.y = (options == null ? void 0 : options.y) == null ? seedCoordinate(this._size[1], this._random) : normalizeCoordinate(options.y);
-    placedSprite.rasterize(this._getContext());
-    if (!placedSprite.hasText) {
+    sprite.x = (options == null ? void 0 : options.x) == null ? seedCoordinate(this._size[0], this._random) : normalizeCoordinate(options.x);
+    sprite.y = (options == null ? void 0 : options.y) == null ? seedCoordinate(this._size[1], this._random) : normalizeCoordinate(options.y);
+    sprite.rasterize(this._getContext());
+    if (!sprite.hasText) {
       return null;
     }
-    if (!placeTag(this._blockState, placedSprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
+    if (!placeTag(this._blockState, sprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
       return null;
     }
-    extendBounds(this, placedSprite);
-    return outputWord(placedSprite);
+    extendBounds(this, sprite);
+    return outputWord(sprite);
   }
   _getContext() {
     if (!this._spriteContext) {
-      this._spriteContext = createSpriteContext(this._canvas());
+      this._spriteContext = createSpriteContext(this._canvasFactory());
     }
     return this._spriteContext;
   }
 };
 function createCloudSprite(text, options) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+  var _a, _b;
+  const spriteOptions = normalizeSpriteOptions(options, isImageSource(text) ? 0 : 1);
   if (isTextSource(text)) {
-    return new CloudSprite(__spreadProps(__spreadValues({}, options), {
-      text,
-      style: (_a = options.style) != null ? _a : options.fontStyle,
-      weight: (_b = options.weight) != null ? _b : options.fontWeight,
-      size: (_c = options.size) != null ? _c : options.fontSize,
-      padding: (_d = options.padding) != null ? _d : 1
+    return new CloudSprite(__spreadProps(__spreadValues({}, spriteOptions), {
+      text
     }));
   }
   if (isImageSource(text)) {
-    return new CloudSprite(__spreadProps(__spreadValues({}, options), {
-      text: (_f = (_e = options.text) != null ? _e : text.alt) != null ? _f : "",
+    return new CloudSprite(__spreadProps(__spreadValues({}, spriteOptions), {
+      text: (_b = (_a = spriteOptions.text) != null ? _a : text.alt) != null ? _b : "",
       image: text,
       imageWidth: options.width,
-      imageHeight: options.height,
-      style: (_g = options.style) != null ? _g : options.fontStyle,
-      weight: (_h = options.weight) != null ? _h : options.fontWeight,
-      size: (_i = options.size) != null ? _i : options.fontSize,
-      padding: (_j = options.padding) != null ? _j : 0
+      imageHeight: options.height
     }));
   }
   throw new TypeError("getSprite() expects text or an image-like source");
@@ -554,7 +549,7 @@ function placeTag(state, tag, bounds, strategy, size, overflow, random, maxDelta
   if (typeof next !== "function") {
     throw new TypeError("strategy factories must return a candidate generator");
   }
-  while (candidate = normalizeStrategyCandidate(next == null ? void 0 : next())) {
+  while (candidate = normalizeStrategyCandidate(next())) {
     dx = candidate.x - startX;
     dy = candidate.y - startY;
     if (Math.min(Math.abs(dx), Math.abs(dy)) >= deltaLimit) break;
@@ -574,7 +569,6 @@ function createSparseBlocks(cellSize) {
   const blocks = /* @__PURE__ */ new Map();
   const blockSize = normalizeBlockSize(cellSize);
   const blockWords = blockSize >>> 5;
-  const emptyBlock = new Uint32Array(blockWords * blockSize);
   return {
     isEmpty() {
       return blocks.size === 0;
@@ -760,35 +754,7 @@ function resolveMaxDelta(tag, bounds, maxDelta, size, overflow) {
   return Math.max(256, wordExtent * 4, boundsExtent * 2, sizeExtent);
 }
 function outputWord(d) {
-  const word = {};
-  for (const key in d) {
-    if (!Object.prototype.hasOwnProperty.call(d, key) || INTERNAL_WORD_FIELDS.has(key) || PUBLIC_WORD_FIELDS.has(key)) {
-      continue;
-    }
-    word[key] = d[key];
-  }
-  word.text = d.text;
-  word.image = d.image;
-  word.imageWidth = d.imageWidth;
-  word.imageHeight = d.imageHeight;
-  word.font = d.font;
-  word.style = d.style;
-  word.weight = d.weight;
-  word.rotate = d.rotate;
-  word.size = d.size;
-  word.padding = d.padding;
-  word.x = d.x;
-  word.y = d.y;
-  word.width = d.width;
-  word.height = d.height;
-  word.trimX = d.trimX;
-  word.trimY = d.trimY;
-  word.trimWidth = d.trimWidth;
-  word.trimHeight = d.trimHeight;
-  word.x0 = d.x0;
-  word.y0 = d.y0;
-  word.x1 = d.x1;
-  word.y1 = d.y1;
+  const _a = d, { hasText, sprite, spriteWidth } = _a, word = __objRest(_a, ["hasText", "sprite", "spriteWidth"]);
   return word;
 }
 function extendBounds(layout, sprite) {
@@ -876,7 +842,7 @@ function rectangularOffsets(aspectRatio) {
     return [x, y];
   };
 }
-function cloudCanvas() {
+function defaultCanvasFactory() {
   return document.createElement("canvas");
 }
 function normalizeAspectRatio(value) {
@@ -915,6 +881,15 @@ function normalizeSizeDimension(value) {
   value = +value;
   return value > 0 && Number.isFinite(value) ? value : 0;
 }
+function normalizeSpriteOptions(options, padding) {
+  var _a, _b, _c, _d;
+  return __spreadProps(__spreadValues({}, options), {
+    style: (_a = options.style) != null ? _a : options.fontStyle,
+    weight: (_b = options.weight) != null ? _b : options.fontWeight,
+    size: (_c = options.size) != null ? _c : options.fontSize,
+    padding: (_d = options.padding) != null ? _d : padding
+  });
+}
 function sizeAspectRatio(size) {
   return normalizeAspectRatio(size[0] / size[1]);
 }
@@ -949,40 +924,6 @@ function normalizeStrategyCandidate(value) {
   }
   throw new TypeError("strategy candidates must be {x, y} or null");
 }
-function functor(d) {
-  return typeof d === "function" ? d : function() {
-    return d;
-  };
-}
-var INTERNAL_WORD_FIELDS = /* @__PURE__ */ new Set([
-  "hasText",
-  "sprite",
-  "spriteWidth"
-]);
-var PUBLIC_WORD_FIELDS = /* @__PURE__ */ new Set([
-  "text",
-  "image",
-  "imageWidth",
-  "imageHeight",
-  "font",
-  "style",
-  "weight",
-  "rotate",
-  "size",
-  "padding",
-  "x",
-  "y",
-  "width",
-  "height",
-  "trimX",
-  "trimY",
-  "trimWidth",
-  "trimHeight",
-  "x0",
-  "y0",
-  "x1",
-  "y1"
-]);
 export {
   CloudLayout,
   CloudSprite,

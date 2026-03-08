@@ -104,6 +104,13 @@ test("layout exposes a blockSize accessor", () => {
   assert.equal(layout.blockSize(), 160);
 });
 
+test("layout canvas accessor requires a factory function", () => {
+  const layout = new CloudLayout();
+
+  assert.equal(typeof layout.canvas(), "function");
+  assert.throws(() => layout.canvas(createFakeCanvas()), /canvas\(\) expects a canvas factory function/);
+});
+
 test("layout can build a reusable CloudSprite", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas());

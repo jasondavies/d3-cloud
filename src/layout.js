@@ -17,7 +17,7 @@ export default class CloudLayout {
     this._random = Math.random;
     this._blockSize = 512;
     this._maxDelta = null;
-    this._canvas = cloudCanvas;
+    this._canvasFactory = defaultCanvasFactory;
     this._spriteContext = null;
     this._bounds = null;
     this._blockState = createSparseBlocks(this._blockSize);
@@ -25,9 +25,12 @@ export default class CloudLayout {
 
   canvas(_) {
     if (!arguments.length) {
-      return this._canvas;
+      return this._canvasFactory;
     }
-    this._canvas = functor(_);
+    if (typeof _ !== "function") {
+      throw new TypeError("canvas() expects a canvas factory function");
+    }
+    this._canvasFactory = _;
     this._spriteContext = null;
     return this;
   }
@@ -125,55 +128,48 @@ export default class CloudLayout {
       throw new TypeError("place() expects an options object");
     }
 
-    const placedSprite = sprite;
     const strategy = options?.strategy == null ? this._strategy : resolveStrategy(options.strategy);
-    placedSprite.x = options?.x == null ? seedCoordinate(this._size[0], this._random) : normalizeCoordinate(options.x);
-    placedSprite.y = options?.y == null ? seedCoordinate(this._size[1], this._random) : normalizeCoordinate(options.y);
+    sprite.x = options?.x == null ? seedCoordinate(this._size[0], this._random) : normalizeCoordinate(options.x);
+    sprite.y = options?.y == null ? seedCoordinate(this._size[1], this._random) : normalizeCoordinate(options.y);
 
-    placedSprite.rasterize(this._getContext());
-    if (!placedSprite.hasText) {
+    sprite.rasterize(this._getContext());
+    if (!sprite.hasText) {
       return null;
     }
-    if (!placeTag(this._blockState, placedSprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
+    if (!placeTag(this._blockState, sprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
       return null;
     }
 
-    extendBounds(this, placedSprite);
+    extendBounds(this, sprite);
 
-    return outputWord(placedSprite);
+    return outputWord(sprite);
   }
 
   _getContext() {
     if (!this._spriteContext) {
-      this._spriteContext = createSpriteContext(this._canvas());
+      this._spriteContext = createSpriteContext(this._canvasFactory());
     }
     return this._spriteContext;
   }
 }
 
 function createCloudSprite(text, options) {
+  const spriteOptions = normalizeSpriteOptions(options, isImageSource(text) ? 0 : 1);
+
   if (isTextSource(text)) {
     return new CloudSprite({
-      ...options,
-      text,
-      style: options.style ?? options.fontStyle,
-      weight: options.weight ?? options.fontWeight,
-      size: options.size ?? options.fontSize,
-      padding: options.padding ?? 1
+      ...spriteOptions,
+      text
     });
   }
 
   if (isImageSource(text)) {
     return new CloudSprite({
-      ...options,
-      text: options.text ?? text.alt ?? "",
+      ...spriteOptions,
+      text: spriteOptions.text ?? text.alt ?? "",
       image: text,
       imageWidth: options.width,
-      imageHeight: options.height,
-      style: options.style ?? options.fontStyle,
-      weight: options.weight ?? options.fontWeight,
-      size: options.size ?? options.fontSize,
-      padding: options.padding ?? 0
+      imageHeight: options.height
     });
   }
 
@@ -212,7 +208,7 @@ function placeTag(state, tag, bounds, strategy, size, overflow, random, maxDelta
     throw new TypeError("strategy factories must return a candidate generator");
   }
 
-  while (candidate = normalizeStrategyCandidate(next?.())) {
+  while (candidate = normalizeStrategyCandidate(next())) {
     dx = candidate.x - startX;
     dy = candidate.y - startY;
 
@@ -237,7 +233,6 @@ function createSparseBlocks(cellSize) {
   const blocks = new Map();
   const blockSize = normalizeBlockSize(cellSize);
   const blockWords = blockSize >>> 5;
-  const emptyBlock = new Uint32Array(blockWords * blockSize);
 
   return {
     isEmpty() {
@@ -388,32 +383,6 @@ function packedRegionCollides(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, 
   return false;
 }
 
-function packedRegionContainedIn(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, bTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
-  var rows = overlapBottom - overlapTop,
-      words = (overlapRight - overlapLeft + 31) >>> 5,
-      aStartBit = overlapLeft - aLeft,
-      bStartBit = overlapLeft - bLeft,
-      aStartRow = overlapTop - aTop,
-      bStartRow = overlapTop - bTop,
-      trailing = (overlapRight - overlapLeft) & 31,
-      lastMask = trailing ? (~0 << (32 - trailing)) >>> 0 : 0xffffffff;
-
-  for (var row = 0; row < rows; row++) {
-    var aRowOffset = (aStartRow + row) * aWidth,
-        bRowOffset = (bStartRow + row) * bWidth;
-    for (var word = 0; word < words; word++) {
-      var mask = word === words - 1 ? lastMask : 0xffffffff,
-          aWord = readPackedWord(aData, aRowOffset, aWidth, aStartBit + (word << 5)) & mask,
-          bWord = readPackedWord(bData, bRowOffset, bWidth, bStartBit + (word << 5));
-      if ((aWord & ~bWord) !== 0) {
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
-
 function stampPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targetData, targetWidth, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
   var rows = overlapBottom - overlapTop,
       words = (overlapRight - overlapLeft + 31) >>> 5,
@@ -536,37 +505,7 @@ function resolveMaxDelta(tag, bounds, maxDelta, size, overflow) {
 }
 
 function outputWord(d) {
-  const word = {};
-
-  for (const key in d) {
-    if (!Object.prototype.hasOwnProperty.call(d, key) || INTERNAL_WORD_FIELDS.has(key) || PUBLIC_WORD_FIELDS.has(key)) {
-      continue;
-    }
-    word[key] = d[key];
-  }
-
-  word.text = d.text;
-  word.image = d.image;
-  word.imageWidth = d.imageWidth;
-  word.imageHeight = d.imageHeight;
-  word.font = d.font;
-  word.style = d.style;
-  word.weight = d.weight;
-  word.rotate = d.rotate;
-  word.size = d.size;
-  word.padding = d.padding;
-  word.x = d.x;
-  word.y = d.y;
-  word.width = d.width;
-  word.height = d.height;
-  word.trimX = d.trimX;
-  word.trimY = d.trimY;
-  word.trimWidth = d.trimWidth;
-  word.trimHeight = d.trimHeight;
-  word.x0 = d.x0;
-  word.y0 = d.y0;
-  word.x1 = d.x1;
-  word.y1 = d.y1;
+  const { hasText, sprite, spriteWidth, ...word } = d;
   return word;
 }
 
@@ -667,7 +606,7 @@ function rectangularOffsets(aspectRatio) {
   };
 }
 
-function cloudCanvas() {
+function defaultCanvasFactory() {
   return document.createElement("canvas");
 }
 
@@ -721,6 +660,16 @@ function normalizeSizeDimension(value) {
   return value > 0 && Number.isFinite(value) ? value : 0;
 }
 
+function normalizeSpriteOptions(options, padding) {
+  return {
+    ...options,
+    style: options.style ?? options.fontStyle,
+    weight: options.weight ?? options.fontWeight,
+    size: options.size ?? options.fontSize,
+    padding: options.padding ?? padding
+  };
+}
+
 function sizeAspectRatio(size) {
   return normalizeAspectRatio(size[0] / size[1]);
 }
@@ -759,38 +708,3 @@ function normalizeStrategyCandidate(value) {
   }
   throw new TypeError("strategy candidates must be {x, y} or null");
 }
-
-function functor(d) {
-  return typeof d === "function" ? d : function() { return d; };
-}
-
-const INTERNAL_WORD_FIELDS = new Set([
-  "hasText",
-  "sprite",
-  "spriteWidth"
-]);
-
-const PUBLIC_WORD_FIELDS = new Set([
-  "text",
-  "image",
-  "imageWidth",
-  "imageHeight",
-  "font",
-  "style",
-  "weight",
-  "rotate",
-  "size",
-  "padding",
-  "x",
-  "y",
-  "width",
-  "height",
-  "trimX",
-  "trimY",
-  "trimWidth",
-  "trimHeight",
-  "x0",
-  "y0",
-  "x1",
-  "y1"
-]);

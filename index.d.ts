@@ -155,7 +155,7 @@ declare class CloudLayout {
   constructor();
 
   canvas(): CanvasFactory;
-  canvas(value: CanvasFactory | CanvasLike): this;
+  canvas(value: CanvasFactory): this;
 
   clear(): this;
   bounds(): Bounds | null;
