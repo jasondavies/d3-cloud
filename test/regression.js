@@ -80,6 +80,40 @@ test("layout can build a reusable CloudSprite", () => {
   assert.ok(sprite.height > 0);
 });
 
+test("layout can build a CloudSprite from image alpha", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas());
+  const image = createFakeImage(4, 4, [
+    [1, 1],
+    [2, 1],
+    [1, 2],
+    [2, 2]
+  ]);
+
+  const sprite = layout.getSprite(image, { text: "icon" });
+
+  assert.ok(sprite instanceof CloudSprite);
+  assert.equal(sprite.image, image);
+  assert.equal(sprite.text, "icon");
+  assert.equal(sprite.imageWidth, 4);
+  assert.equal(sprite.imageHeight, 4);
+  assert.equal(sprite.width, 2);
+  assert.equal(sprite.height, 2);
+  assert.equal(sprite.trimX, 1);
+  assert.equal(sprite.trimY, 1);
+  assert.equal(sprite.trimWidth, 2);
+  assert.equal(sprite.trimHeight, 2);
+  assert.equal(sprite.x0, -1);
+  assert.equal(sprite.y0, -1);
+  assert.equal(sprite.x1, 1);
+  assert.equal(sprite.y1, 1);
+  assert.equal(sprite.renderWidth, 4);
+  assert.equal(sprite.renderHeight, 4);
+  assert.equal(sprite.renderX0, -2);
+  assert.equal(sprite.renderY0, -2);
+  assert.ok(sprite.sprite instanceof Uint32Array);
+});
+
 test("place accepts a prepared CloudSprite", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
@@ -297,6 +331,7 @@ test("layout can place words beyond the initial seeded position", () => {
 
 function createFakeCanvas() {
   const boxes = [];
+  const images = [];
   const stack = [];
   const context = {
     _tx: 0,
@@ -307,6 +342,7 @@ function createFakeCanvas() {
     lineWidth: 1,
     clearRect() {
       boxes.length = 0;
+      images.length = 0;
     },
     save() {
       stack.push({
@@ -337,6 +373,9 @@ function createFakeCanvas() {
     strokeText(text, x, y) {
       boxes.push(createBox(this, text, x, y, this.lineWidth));
     },
+    drawImage(image, x, y, width = image.width, height = image.height) {
+      images.push(createImageDraw(this, image, x, y, width, height));
+    },
     getImageData(_x, _y, width, height) {
       const data = new Uint8ClampedArray(width * height * 4);
 
@@ -348,9 +387,13 @@ function createFakeCanvas() {
 
         for (let row = y0; row < y1; row += 1) {
           for (let column = x0; column < x1; column += 1) {
-            data[(row * width + column) * 4] = 255;
+            data[(row * width + column) * 4 + 3] = 255;
           }
         }
+      }
+
+       for (const image of images) {
+        paintImageDraw(data, width, height, image);
       }
 
       return { data };
@@ -369,6 +412,7 @@ function createFakeCanvas() {
 
 function createRightEdgeCanvas() {
   const boxes = [];
+  const images = [];
   const stack = [];
   const context = {
     _tx: 0,
@@ -379,6 +423,7 @@ function createRightEdgeCanvas() {
     lineWidth: 1,
     clearRect() {
       boxes.length = 0;
+      images.length = 0;
     },
     save() {
       stack.push({
@@ -409,6 +454,9 @@ function createRightEdgeCanvas() {
     strokeText(_text, _x, y) {
       boxes.push(createRightEdgeBox(this, y, this.lineWidth));
     },
+    drawImage(image, x, y, width = image.width, height = image.height) {
+      images.push(createImageDraw(this, image, x, y, width, height));
+    },
     getImageData(_x, _y, width, height) {
       const data = new Uint8ClampedArray(width * height * 4);
 
@@ -420,9 +468,13 @@ function createRightEdgeCanvas() {
 
         for (let row = y0; row < y1; row += 1) {
           for (let column = x0; column < x1; column += 1) {
-            data[(row * width + column) * 4] = 255;
+            data[(row * width + column) * 4 + 3] = 255;
           }
         }
+      }
+
+      for (const image of images) {
+        paintImageDraw(data, width, height, image);
       }
 
       return { data };
@@ -461,6 +513,59 @@ function createRightEdgeBox(context, y, inflate) {
     y0: Math.floor(context._ty + y - fontSize - inflate),
     x1: Math.ceil(context._tx + 16 + inflate),
     y1: Math.ceil(context._ty + y + fontSize + inflate)
+  };
+}
+
+function createImageDraw(context, image, x, y, width, height) {
+  return {
+    image,
+    x0: context._tx + x,
+    y0: context._ty + y,
+    width,
+    height
+  };
+}
+
+function paintImageDraw(data, width, height, draw) {
+  const sourceWidth = draw.image.naturalWidth ?? draw.image.width;
+  const sourceHeight = draw.image.naturalHeight ?? draw.image.height;
+  const sourceData = draw.image.data;
+  const x0 = Math.max(0, Math.floor(draw.x0));
+  const y0 = Math.max(0, Math.floor(draw.y0));
+  const x1 = Math.min(width, Math.ceil(draw.x0 + draw.width));
+  const y1 = Math.min(height, Math.ceil(draw.y0 + draw.height));
+
+  for (let row = y0; row < y1; row += 1) {
+    const sourceRow = Math.min(
+      sourceHeight - 1,
+      Math.max(0, Math.floor(((row - draw.y0) / draw.height) * sourceHeight))
+    );
+    for (let column = x0; column < x1; column += 1) {
+      const sourceColumn = Math.min(
+        sourceWidth - 1,
+        Math.max(0, Math.floor(((column - draw.x0) / draw.width) * sourceWidth))
+      );
+      const alpha = sourceData[((sourceRow * sourceWidth + sourceColumn) << 2) + 3];
+      if (alpha) {
+        data[((row * width + column) << 2) + 3] = alpha;
+      }
+    }
+  }
+}
+
+function createFakeImage(width, height, opaquePixels) {
+  const data = new Uint8ClampedArray(width * height * 4);
+
+  for (const [x, y, alpha = 255] of opaquePixels) {
+    data[((y * width + x) << 2) + 3] = alpha;
+  }
+
+  return {
+    width,
+    height,
+    naturalWidth: width,
+    naturalHeight: height,
+    data
   };
 }
 

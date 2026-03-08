@@ -68,16 +68,19 @@ words have been placed yet.
 Attempts to place a single prepared `CloudSprite` immediately and returns the
 placed derived word object, or `null` if it could not be placed.
 
-<a name="getsprite" href="#getsprite">#</a> <b>getSprite</b>(<i>text</i>[, <i>options</i>])
+<a name="getsprite" href="#getsprite">#</a> <b>getSprite</b>(<i>source</i>[, <i>options</i>])
 
-Builds and returns a `CloudSprite` for the specified text, or `null` if the
-text could not be rasterized into the internal scratch canvas.
+Builds and returns a `CloudSprite` for the specified text or image-like source,
+or `null` if it could not be rasterized into the internal scratch canvas.
 
 The optional *options* object may include `font`, `style`, `weight`, `rotate`,
 `size`, `padding`, `index`, and any additional fields you want accessor
 fields to carry through to the resulting sprite. The defaults are `font:
 "serif"`, `style: "normal"`, `weight: "normal"`, `size: 1`, `rotate: 0`, and
 `padding: 1`.
+
+Image sprites are extracted from the source alpha channel, so transparent
+pixels are ignored automatically.
 
 <a name="placeall" href="#placeall">#</a> <b>placeAll</b>(<i>sprites</i>)
 

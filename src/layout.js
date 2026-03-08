@@ -94,12 +94,12 @@ export default class CloudLayout {
     return this;
   }
 
-  getSprite(text, options = {}) {
+  getSprite(source, options = {}) {
     if (!options || typeof options !== "object" || Array.isArray(options)) {
       throw new TypeError("getSprite() expects an options object");
     }
 
-    const sprite = createCloudSprite(text, options);
+    const sprite = createCloudSprite(source, options);
     sprite.rasterize(this._getContext());
     return sprite.hasText ? sprite : null;
   }
@@ -156,14 +156,32 @@ export default class CloudLayout {
 }
 
 function createCloudSprite(text, options) {
-  return new CloudSprite({
-    ...options,
-    text,
-    style: options.style ?? options.fontStyle,
-    weight: options.weight ?? options.fontWeight,
-    size: options.size ?? options.fontSize,
-    padding: options.padding ?? 1
-  });
+  if (isTextSource(text)) {
+    return new CloudSprite({
+      ...options,
+      text,
+      style: options.style ?? options.fontStyle,
+      weight: options.weight ?? options.fontWeight,
+      size: options.size ?? options.fontSize,
+      padding: options.padding ?? 1
+    });
+  }
+
+  if (isImageSource(text)) {
+    return new CloudSprite({
+      ...options,
+      text: options.text ?? text.alt ?? "",
+      image: text,
+      imageWidth: options.width,
+      imageHeight: options.height,
+      style: options.style ?? options.fontStyle,
+      weight: options.weight ?? options.fontWeight,
+      size: options.size ?? options.fontSize,
+      padding: options.padding ?? 0
+    });
+  }
+
+  throw new TypeError("getSprite() expects text or an image-like source");
 }
 
 function placeTag(state, tag, bounds, spiral, aspectRatio, random, maxDelta) {
@@ -222,7 +240,7 @@ function createSparseBlocks(cellSize) {
           if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
           if (packedRegionCollides(
             tag.sprite,
-            tag.width >>> 5,
+            spriteWords(tag),
             left,
             top,
             block,
@@ -264,7 +282,7 @@ function createSparseBlocks(cellSize) {
           }
           stampPackedRegion(
             tag.sprite,
-            tag.width >>> 5,
+            spriteWords(tag),
             left,
             top,
             block,
@@ -474,6 +492,25 @@ function normalizeSpriteBatch(sprites) {
   }
 
   return batch;
+}
+
+function spriteWords(sprite) {
+  return (sprite.spriteWidth ?? sprite.width) >>> 5;
+}
+
+function isTextSource(source) {
+  return typeof source === "string" || typeof source === "number" || typeof source === "boolean" || source instanceof String;
+}
+
+function isImageSource(source) {
+  return !!source &&
+    typeof source === "object" &&
+    !Array.isArray(source) &&
+    (
+      typeof source.width === "number" ||
+      typeof source.naturalWidth === "number" ||
+      typeof source.videoWidth === "number"
+    );
 }
 
 function normalizeStartBox(value) {
