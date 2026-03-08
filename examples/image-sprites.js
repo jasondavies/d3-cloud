@@ -41,7 +41,7 @@ async function render() {
   const sprites = await createSprites(layout, descriptors);
   const placedWords = placeSprites(layout, sprites);
 
-  draw(placedWords, layout.bounds() || measureBounds(placedWords));
+  draw(placedWords, layout.bounds());
 }
 
 function createIconDescriptors(random) {
@@ -100,7 +100,7 @@ function placeSprites(layout, sprites) {
 }
 
 function draw(words, bounds) {
-  const extent = bounds ? expandBoundsToImageBox(bounds, words) : measureBounds(words);
+  const extent = bounds;
   const padding = 32;
   const extentWidth = Math.max(1, extent[1].x - extent[0].x);
   const extentHeight = Math.max(1, extent[1].y - extent[0].y);
@@ -214,54 +214,6 @@ function loadImage(src) {
 
   imageCache.set(src, imagePromise);
   return imagePromise;
-}
-
-function measureBounds(words) {
-  if (!words.length) {
-    return [{ x: 0, y: 0 }, { x: 1, y: 1 }];
-  }
-
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-
-  for (const word of words) {
-    const drawWidth = word.imageWidth || word.width;
-    const drawHeight = word.imageHeight || word.height;
-    const left = word.x - drawWidth / 2;
-    const top = word.y - drawHeight / 2;
-    const right = left + drawWidth;
-    const bottom = top + drawHeight;
-    if (left < x0) x0 = left;
-    if (top < y0) y0 = top;
-    if (right > x1) x1 = right;
-    if (bottom > y1) y1 = bottom;
-  }
-
-  return [{ x: x0, y: y0 }, { x: x1, y: y1 }];
-}
-
-function expandBoundsToImageBox(bounds, words) {
-  const extent = [
-    { x: bounds[0].x, y: bounds[0].y },
-    { x: bounds[1].x, y: bounds[1].y }
-  ];
-
-  for (const word of words) {
-    const drawWidth = word.imageWidth || word.width;
-    const drawHeight = word.imageHeight || word.height;
-    const left = word.x - drawWidth / 2;
-    const top = word.y - drawHeight / 2;
-    const right = left + drawWidth;
-    const bottom = top + drawHeight;
-    if (left < extent[0].x) extent[0].x = left;
-    if (top < extent[0].y) extent[0].y = top;
-    if (right > extent[1].x) extent[1].x = right;
-    if (bottom > extent[1].y) extent[1].y = bottom;
-  }
-
-  return extent;
 }
 
 function createRandom(seed) {

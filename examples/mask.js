@@ -50,7 +50,7 @@ async function render() {
     const maskPlacement = placeMask(layout, maskImage);
     const sprites = createSprites(layout, createWords(sizeRandom), rotateRandom);
     const placedWords = placeSprites(layout, sprites);
-    draw(placedWords, measureBounds(maskPlacement, placedWords));
+    draw(placedWords, layout.bounds());
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : String(error);
   }
@@ -88,7 +88,7 @@ function createSprites(layout, words, rotateRandom) {
       ...word,
       index,
       font: "Impact",
-      padding: 1,
+      padding: 2,
       rotate: rotateRandom() < 0.18 ? 90 : 0
     }))
     .filter(Boolean);
@@ -168,39 +168,4 @@ function createRandom(seed) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function measureBounds(maskPlacement, words) {
-  const placed = maskPlacement ? [maskPlacement, ...words] : words;
-
-  if (!placed.length) {
-    return [{ x: 0, y: 0 }, { x: 1, y: 1 }];
-  }
-
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-
-  for (const word of placed) {
-    if (word.imageWidth || word.imageHeight) {
-      const drawWidth = word.imageWidth || word.width;
-      const drawHeight = word.imageHeight || word.height;
-      const left = word.x - drawWidth / 2;
-      const top = word.y - drawHeight / 2;
-      const right = left + drawWidth;
-      const bottom = top + drawHeight;
-      if (left < x0) x0 = left;
-      if (top < y0) y0 = top;
-      if (right > x1) x1 = right;
-      if (bottom > y1) y1 = bottom;
-      continue;
-    }
-    if (word.x + word.x0 < x0) x0 = word.x + word.x0;
-    if (word.y + word.y0 < y0) y0 = word.y + word.y0;
-    if (word.x + word.x1 > x1) x1 = word.x + word.x1;
-    if (word.y + word.y1 > y1) y1 = word.y + word.y1;
-  }
-
-  return [{ x: x0, y: y0 }, { x: x1, y: y1 }];
 }

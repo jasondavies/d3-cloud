@@ -41,7 +41,7 @@ function render() {
 
   const sprites = createSprites(layout, createWords(sizeRandom), rotateRandom);
   const placedWords = placeSprites(layout, sprites);
-  draw(placedWords, layout.bounds() || measureBounds(placedWords));
+  draw(placedWords, layout.bounds());
 }
 
 function createWords(random) {
@@ -122,24 +122,4 @@ function createRandom(seed) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function measureBounds(words) {
-  if (!words.length) {
-    return [{ x: 0, y: 0 }, { x: 1, y: 1 }];
-  }
-
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-
-  for (const word of words) {
-    if (word.x + word.x0 < x0) x0 = word.x + word.x0;
-    if (word.y + word.y0 < y0) y0 = word.y + word.y0;
-    if (word.x + word.x1 > x1) x1 = word.x + word.x1;
-    if (word.y + word.y1 > y1) y1 = word.y + word.y1;
-  }
-
-  return [{ x: x0, y: y0 }, { x: x1, y: y1 }];
 }
