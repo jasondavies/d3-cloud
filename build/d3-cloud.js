@@ -475,9 +475,6 @@ var CloudLayout = class {
     if (!(sprite instanceof CloudSprite)) {
       throw new TypeError("removeSprite() expects a CloudSprite");
     }
-    if (!this._blockState.contains(sprite)) {
-      return false;
-    }
     this._blockState.remove(sprite);
     if (this._blockState.isEmpty()) {
       this._bounds = null;
@@ -582,37 +579,6 @@ function createSparseBlocks(cellSize) {
     isEmpty() {
       return blocks.size === 0;
     },
-    contains(tag) {
-      if (!(tag == null ? void 0 : tag.sprite)) {
-        return false;
-      }
-      var left = tag.x + tag.x0, top = tag.y + tag.y0, right = tag.x + tag.x1, bottom = tag.y + tag.y1, range = getRangeForBounds(left, top, right, bottom, blockSize);
-      for (var blockY = range.y0; blockY <= range.y1; blockY++) {
-        var blockTop = blockY * blockSize, overlapTop = Math.max(top, blockTop), overlapBottom = Math.min(bottom, blockTop + blockSize);
-        for (var blockX = range.x0; blockX <= range.x1; blockX++) {
-          var blockLeft = blockX * blockSize, overlapLeft = Math.max(left, blockLeft), overlapRight = Math.min(right, blockLeft + blockSize);
-          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
-          var block = blocks.get(blockKey(blockX, blockY)) || emptyBlock;
-          if (!packedRegionContainedIn(
-            tag.sprite,
-            spriteWords(tag),
-            left,
-            top,
-            block,
-            blockWords,
-            blockLeft,
-            blockTop,
-            overlapLeft,
-            overlapTop,
-            overlapRight,
-            overlapBottom
-          )) {
-            return false;
-          }
-        }
-      }
-      return true;
-    },
     collides(tag) {
       var left = tag.x + tag.x0, top = tag.y + tag.y0, right = tag.x + tag.x1, bottom = tag.y + tag.y1, range = getRangeForBounds(left, top, right, bottom, blockSize);
       for (var blockY = range.y0; blockY <= range.y1; blockY++) {
@@ -714,19 +680,6 @@ function packedRegionCollides(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, 
     }
   }
   return false;
-}
-function packedRegionContainedIn(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, bTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
-  var rows = overlapBottom - overlapTop, words = overlapRight - overlapLeft + 31 >>> 5, aStartBit = overlapLeft - aLeft, bStartBit = overlapLeft - bLeft, aStartRow = overlapTop - aTop, bStartRow = overlapTop - bTop, trailing = overlapRight - overlapLeft & 31, lastMask = trailing ? ~0 << 32 - trailing >>> 0 : 4294967295;
-  for (var row = 0; row < rows; row++) {
-    var aRowOffset = (aStartRow + row) * aWidth, bRowOffset = (bStartRow + row) * bWidth;
-    for (var word = 0; word < words; word++) {
-      var mask = word === words - 1 ? lastMask : 4294967295, aWord = readPackedWord(aData, aRowOffset, aWidth, aStartBit + (word << 5)) & mask, bWord = readPackedWord(bData, bRowOffset, bWidth, bStartBit + (word << 5));
-      if ((aWord & ~bWord) !== 0) {
-        return false;
-      }
-    }
-  }
-  return true;
 }
 function stampPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targetData, targetWidth, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
   var rows = overlapBottom - overlapTop, words = overlapRight - overlapLeft + 31 >>> 5, sourceStartBit = overlapLeft - sourceLeft, targetStartBit = overlapLeft - targetLeft, sourceStartRow = overlapTop - sourceTop, targetStartRow = overlapTop - targetTop, trailing = overlapRight - overlapLeft & 31, lastMask = trailing ? ~0 << 32 - trailing >>> 0 : 4294967295;

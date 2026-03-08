@@ -412,19 +412,6 @@ test("removeSprite removes a placed sprite and frees its occupied space", () => 
   assert.equal(secondPlacement.y, 0);
 });
 
-test("removeSprite returns false for sprites that are not placed", () => {
-  const layout = new CloudLayout()
-    .canvas(() => createFakeCanvas());
-  const sprite = layout.getSprite("ghost", {
-    font: "serif",
-    size: 16,
-    rotate: 0,
-    padding: 0
-  });
-
-  assert.equal(layout.removeSprite(sprite), false);
-});
-
 test("clear resets bounds and unlocks blockSize changes", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
