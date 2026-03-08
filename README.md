@@ -49,7 +49,7 @@ which exports the layout as an ESM module for browser use.
 
 Placement uses sparse packed occupancy blocks for collision checks, so the
 final cloud uses `size()` both as the initial seed box and as the aspect ratio
-hints for the built-in spirals. By default, `overflow(true)` allows placement
+hints for the built-in strategies. By default, `overflow(true)` allows placement
 to extend beyond that centered size box; switch to `overflow(false)` for a
 bounded layout. Word order is controlled by the caller; in most cases you
 will want to place larger words first.
@@ -66,8 +66,9 @@ will want to place larger words first.
 - `size([width, height])` now describes a centered layout box around `[0, 0]`.
   Use `overflow(false)` to keep placement inside that box or `overflow(true)`
   to allow the layout to grow beyond it.
-- Custom spiral generators now receive an aspect ratio number instead of the
-  old `[width, height]` size array.
+- `strategy()` replaces the old `spiral()` API. Built-in strategies are
+  `"archimedean"` and `"rectangular"`, and custom strategies now receive an
+  initial `{x, y}` seed plus layout context.
 
 ## API Reference
 
@@ -85,13 +86,21 @@ a fresh layout.
 Returns the current placement extent as `[{x, y}, {x, y}]`, or `null` if no
 words have been placed yet.
 
+<a name="removesprite" href="#removesprite">#</a> <b>removeSprite</b>(<i>sprite</i>)
+
+Removes a previously placed `CloudSprite` from the layout and returns `true`.
+If the sprite is not currently placed, returns `false`.
+
+Pass the original `CloudSprite` instance that was given to `place()`, not the
+plain placed-word snapshot returned by `place()`.
+
 <a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>[, <i>options</i>])
 
 Attempts to place a single prepared `CloudSprite` immediately and returns the
 placed derived word object, or `null` if it could not be placed.
 
 If specified, the optional *options* object may include `x` and `y` to control
-the initial placement attempt before the spiral search begins. Any omitted axis
+the initial placement attempt before the strategy search begins. Any omitted axis
 still uses the normal seeded position from `size()`.
 
 For both text and image sprites, the returned `x` and `y` coordinates mark the
@@ -121,11 +130,14 @@ metadata from `getSprite(..., options)` is preserved.
 Words that cannot be placed simply return `null`. To place multiple sprites,
 call `place()` in your own loop.
 
+If specified, `options.strategy` overrides the layout-level default strategy
+for this placement only.
+
 <a name="size" href="#size">#</a> <b>size</b>([<i>size</i>])
 
 If specified, sets the centered layout size as `[width, height]`. This size is
 used both for the initial random seed box and for the aspect ratio of the
-built-in `"archimedean"` and `"rectangular"` spirals.
+built-in `"archimedean"` and `"rectangular"` strategies.
 
 If not specified, returns the current layout size, which defaults to
 `[256, 256]`. Use `[0, 0]` together with `overflow(true)` to start every word
@@ -135,33 +147,48 @@ exactly at the origin without any bounding box.
 
 If specified, enables or disables overflow beyond `size()`. When `true`, the
 layout may expand beyond the centered `size()` box, which is then used only for
-seeding and spiral shaping. When `false`, placement is bounded to that centered
-box and `place()` returns `null` if no in-bounds position is found.
+seeding and built-in strategy shaping. When `false`, placement is bounded to
+that centered box and `place()` returns `null` if no in-bounds position is
+found.
 
 If not specified, returns the current overflow mode, which defaults to `true`.
 
-<a name="spiral" href="#spiral">#</a> <b>spiral</b>([<i>spiral</i>])
+<a name="strategy" href="#strategy">#</a> <b>strategy</b>([<i>strategy</i>])
 
-If specified, sets the current type of spiral used for positioning words.  This
-can either be one of the two built-in spirals, "archimedean" and "rectangular",
-or an arbitrary spiral generator can be used, of the following form:
+If specified, sets the current placement strategy used after the initial seed
+position fails. This can either be one of the built-in strategies,
+`"archimedean"`, `"rectangular"`, and `"none"`, or an arbitrary strategy
+factory of the following form:
 
 ```js
-function(aspectRatio) {
-  // t indicates the current step along the spiral; it may monotonically
-  // increase or decrease indicating clockwise or counterclockwise motion.
-  return function(t) { return [x, y]; };
+function(initial, context) {
+  return function() {
+    return { x, y };
+  };
 }
 ```
 
-If not specified, returns the current spiral generator, which defaults to the
-built-in "archimedean" spiral.
+The `initial` argument is the initial `{x, y}` seed for this placement.
+`context` includes `size`, `aspectRatio`, `bounds`, `overflow`, `random`, and
+`maxDelta`.
+
+Each generated candidate must be returned as `{x, y}`. Returning `null` stops
+the search.
+
+The built-in strategies are also exported as `archimedeanStrategy`,
+`rectangularStrategy`, and `noneStrategy`, so callers do not need to use string
+names. Use `noneStrategy` or `"none"` for a single-attempt placement that tries
+only the initial `{x, y}`.
+
+If not specified, returns the current strategy factory, which defaults to the
+built-in `archimedeanStrategy`.
 
 <a name="random" href="#random">#</a> <b>random</b>([<i>random</i>])
 
 If specified, sets the internal random number generator, used for selecting the
 initial position of each sprite inside `size()`, and the
-clockwise/counterclockwise direction of the spiral during placement. This
+clockwise/counterclockwise direction of the built-in strategies during
+placement. This
 should return a number in the range `[0, 1)`.
 
 If not specified, returns the current random number generator, which defaults
@@ -176,7 +203,7 @@ which defaults to `512`.
 
 <a name="maxDelta" href="#maxDelta">#</a> <b>maxDelta</b>([<i>distance</i>])
 
-If specified, sets the maximum spiral delta used while searching for a
+If specified, sets the maximum search delta used while searching for a
 placement. If not specified, returns the current limit. By default, this grows
 with the current word and the extent of the words already placed.
 

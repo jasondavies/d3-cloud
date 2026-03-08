@@ -14,6 +14,7 @@ release was `v1.2.9`.
 - Replaced the old event-driven factory API (`start()`, `stop()`, `on()`,
   `words()`, `timeInterval()`, accessor-based text/font configuration) with the
   class-based `CloudLayout` / `CloudSprite` API.
+- Replaced the old `spiral()` API with `strategy()`.
 - Moved source files under `src/` and renamed the browser bundle to
   `build/d3-cloud.js`.
 - Changed placement configuration so `size([width, height])` defines the
@@ -24,6 +25,9 @@ release was `v1.2.9`.
 
 - Added `CloudLayout.getSprite(...)` for explicit sprite preparation and
   `place()` for caller-controlled placement.
+- Added built-in placement strategies including `noneStrategy` for single-attempt
+  placement.
+- Added `removeSprite()` for removing previously placed `CloudSprite` instances.
 - Added image sprite extraction from alpha masks, including optional image
   resizing with `options.width` and `options.height`.
 - Added sparse packed block placement for effectively unbounded layouts.

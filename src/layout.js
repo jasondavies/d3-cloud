@@ -3,16 +3,17 @@
 
 import CloudSprite, { createSpriteContext } from "./sprite.js";
 
-const SPIRALS = {
-  archimedean: archimedeanSpiral,
-  rectangular: rectangularSpiral
+const STRATEGIES = {
+  archimedean: archimedeanStrategy,
+  rectangular: rectangularStrategy,
+  none: noneStrategy
 };
 
 export default class CloudLayout {
   constructor() {
     this._size = [256, 256];
     this._overflow = true;
-    this._spiral = archimedeanSpiral;
+    this._strategy = archimedeanStrategy;
     this._random = Math.random;
     this._blockSize = 512;
     this._maxDelta = null;
@@ -57,11 +58,11 @@ export default class CloudLayout {
     return this;
   }
 
-  spiral(_) {
+  strategy(_) {
     if (!arguments.length) {
-      return this._spiral;
+      return this._strategy;
     }
-    this._spiral = SPIRALS[_] || _;
+    this._strategy = resolveStrategy(_);
     return this;
   }
 
@@ -104,6 +105,18 @@ export default class CloudLayout {
     return sprite.hasText ? sprite : null;
   }
 
+  removeSprite(sprite) {
+    if (!(sprite instanceof CloudSprite)) {
+      throw new TypeError("removeSprite() expects a CloudSprite");
+    }
+
+    this._blockState.remove(sprite);
+    if (this._blockState.isEmpty()) {
+      this._bounds = null;
+    }
+    return true;
+  }
+
   place(sprite, options = undefined) {
     if (!(sprite instanceof CloudSprite)) {
       throw new TypeError("place() expects a CloudSprite");
@@ -113,6 +126,7 @@ export default class CloudLayout {
     }
 
     const placedSprite = sprite;
+    const strategy = options?.strategy == null ? this._strategy : resolveStrategy(options.strategy);
     placedSprite.x = options?.x == null ? seedCoordinate(this._size[0], this._random) : normalizeCoordinate(options.x);
     placedSprite.y = options?.y == null ? seedCoordinate(this._size[1], this._random) : normalizeCoordinate(options.y);
 
@@ -120,18 +134,11 @@ export default class CloudLayout {
     if (!placedSprite.hasText) {
       return null;
     }
-    if (!placeTag(this._blockState, placedSprite, this._bounds, this._spiral, this._size, this._overflow, this._random, this._maxDelta)) {
+    if (!placeTag(this._blockState, placedSprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
       return null;
     }
 
-    if (this._bounds) {
-      cloudBounds(this._bounds, placedSprite);
-    } else {
-      this._bounds = [
-        { x: placedSprite.x + placedSprite.x0, y: placedSprite.y + placedSprite.y0 },
-        { x: placedSprite.x + placedSprite.x1, y: placedSprite.y + placedSprite.y1 }
-      ];
-    }
+    extendBounds(this, placedSprite);
 
     return outputWord(placedSprite);
   }
@@ -173,26 +180,46 @@ function createCloudSprite(text, options) {
   throw new TypeError("getSprite() expects text or an image-like source");
 }
 
-function placeTag(state, tag, bounds, spiral, size, overflow, random, maxDelta) {
+function placeTag(state, tag, bounds, strategy, size, overflow, random, maxDelta) {
   var startX = tag.x,
       startY = tag.y,
       deltaLimit = resolveMaxDelta(tag, bounds, maxDelta, size, overflow),
-      s = spiral(sizeAspectRatio(size)),
       clipBounds = overflow ? null : sizeBounds(size),
-      dt = random() < .5 ? 1 : -1,
-      t = -dt,
-      dxdy,
+      next,
+      candidate,
       dx,
       dy;
 
-  while (dxdy = s(t += dt)) {
-    dx = ~~dxdy[0];
-    dy = ~~dxdy[1];
+  if ((!clipBounds || withinBounds(tag, clipBounds)) &&
+      (!bounds || collideRects(tag, bounds)) &&
+      !state.collides(tag)) {
+    state.insert(tag);
+    return true;
+  }
+
+  next = strategy(
+    { x: startX, y: startY },
+    {
+      size: size.slice(),
+      aspectRatio: sizeAspectRatio(size),
+      bounds: cloneBounds(bounds),
+      overflow,
+      random,
+      maxDelta: deltaLimit
+    }
+  );
+  if (typeof next !== "function") {
+    throw new TypeError("strategy factories must return a candidate generator");
+  }
+
+  while (candidate = normalizeStrategyCandidate(next?.())) {
+    dx = candidate.x - startX;
+    dy = candidate.y - startY;
 
     if (Math.min(Math.abs(dx), Math.abs(dy)) >= deltaLimit) break;
 
-    tag.x = startX + dx;
-    tag.y = startY + dy;
+    tag.x = candidate.x;
+    tag.y = candidate.y;
 
     if (clipBounds && !withinBounds(tag, clipBounds)) continue;
 
@@ -210,8 +237,12 @@ function createSparseBlocks(cellSize) {
   const blocks = new Map();
   const blockSize = normalizeBlockSize(cellSize);
   const blockWords = blockSize >>> 5;
+  const emptyBlock = new Uint32Array(blockWords * blockSize);
 
   return {
+    isEmpty() {
+      return blocks.size === 0;
+    },
     collides(tag) {
       var left = tag.x + tag.x0,
           top = tag.y + tag.y0,
@@ -288,6 +319,45 @@ function createSparseBlocks(cellSize) {
           );
         }
       }
+    },
+    remove(tag) {
+      var left = tag.x + tag.x0,
+          top = tag.y + tag.y0,
+          right = tag.x + tag.x1,
+          bottom = tag.y + tag.y1,
+          range = getRangeForBounds(left, top, right, bottom, blockSize);
+
+      for (var blockY = range.y0; blockY <= range.y1; blockY++) {
+        var blockTop = blockY * blockSize,
+            overlapTop = Math.max(top, blockTop),
+            overlapBottom = Math.min(bottom, blockTop + blockSize);
+        for (var blockX = range.x0; blockX <= range.x1; blockX++) {
+          var key = blockKey(blockX, blockY),
+              block = blocks.get(key);
+          if (!block) continue;
+          var blockLeft = blockX * blockSize,
+              overlapLeft = Math.max(left, blockLeft),
+              overlapRight = Math.min(right, blockLeft + blockSize);
+          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
+          clearPackedRegion(
+            tag.sprite,
+            spriteWords(tag),
+            left,
+            top,
+            block,
+            blockWords,
+            blockLeft,
+            blockTop,
+            overlapLeft,
+            overlapTop,
+            overlapRight,
+            overlapBottom
+          );
+          if (isZeroBlock(block)) {
+            blocks.delete(key);
+          }
+        }
+      }
     }
   };
 }
@@ -318,6 +388,32 @@ function packedRegionCollides(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, 
   return false;
 }
 
+function packedRegionContainedIn(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, bTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
+  var rows = overlapBottom - overlapTop,
+      words = (overlapRight - overlapLeft + 31) >>> 5,
+      aStartBit = overlapLeft - aLeft,
+      bStartBit = overlapLeft - bLeft,
+      aStartRow = overlapTop - aTop,
+      bStartRow = overlapTop - bTop,
+      trailing = (overlapRight - overlapLeft) & 31,
+      lastMask = trailing ? (~0 << (32 - trailing)) >>> 0 : 0xffffffff;
+
+  for (var row = 0; row < rows; row++) {
+    var aRowOffset = (aStartRow + row) * aWidth,
+        bRowOffset = (bStartRow + row) * bWidth;
+    for (var word = 0; word < words; word++) {
+      var mask = word === words - 1 ? lastMask : 0xffffffff,
+          aWord = readPackedWord(aData, aRowOffset, aWidth, aStartBit + (word << 5)) & mask,
+          bWord = readPackedWord(bData, bRowOffset, bWidth, bStartBit + (word << 5));
+      if ((aWord & ~bWord) !== 0) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 function stampPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targetData, targetWidth, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
   var rows = overlapBottom - overlapTop,
       words = (overlapRight - overlapLeft + 31) >>> 5,
@@ -335,6 +431,27 @@ function stampPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targe
       var mask = word === words - 1 ? lastMask : 0xffffffff,
           sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWidth, sourceStartBit + (word << 5)) & mask;
       orPackedWord(targetData, targetRowOffset, targetWidth, targetStartBit + (word << 5), sourceWord);
+    }
+  }
+}
+
+function clearPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targetData, targetWidth, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
+  var rows = overlapBottom - overlapTop,
+      words = (overlapRight - overlapLeft + 31) >>> 5,
+      sourceStartBit = overlapLeft - sourceLeft,
+      targetStartBit = overlapLeft - targetLeft,
+      sourceStartRow = overlapTop - sourceTop,
+      targetStartRow = overlapTop - targetTop,
+      trailing = (overlapRight - overlapLeft) & 31,
+      lastMask = trailing ? (~0 << (32 - trailing)) >>> 0 : 0xffffffff;
+
+  for (var row = 0; row < rows; row++) {
+    var sourceRowOffset = (sourceStartRow + row) * sourceWidth,
+        targetRowOffset = (targetStartRow + row) * targetWidth;
+    for (var word = 0; word < words; word++) {
+      var mask = word === words - 1 ? lastMask : 0xffffffff,
+          sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWidth, sourceStartBit + (word << 5)) & mask;
+      clearPackedWord(targetData, targetRowOffset, targetWidth, targetStartBit + (word << 5), sourceWord);
     }
   }
 }
@@ -365,6 +482,30 @@ function orPackedWord(target, rowOffset, rowWidth, bitIndex, value) {
   if (wordIndex + 1 < rowWidth) {
     target[rowOffset + wordIndex + 1] |= (value << (32 - bitOffset)) >>> 0;
   }
+}
+
+function clearPackedWord(target, rowOffset, rowWidth, bitIndex, value) {
+  var wordIndex = bitIndex >>> 5,
+      bitOffset = bitIndex & 31;
+
+  if (!bitOffset) {
+    target[rowOffset + wordIndex] &= (~value) >>> 0;
+    return;
+  }
+
+  target[rowOffset + wordIndex] &= (~(value >>> bitOffset)) >>> 0;
+  if (wordIndex + 1 < rowWidth) {
+    target[rowOffset + wordIndex + 1] &= (~((value << (32 - bitOffset)) >>> 0)) >>> 0;
+  }
+}
+
+function isZeroBlock(block) {
+  for (var index = 0; index < block.length; index++) {
+    if (block[index] !== 0) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function getRangeForBounds(left, top, right, bottom, cellSize) {
@@ -429,6 +570,17 @@ function outputWord(d) {
   return word;
 }
 
+function extendBounds(layout, sprite) {
+  if (layout._bounds) {
+    cloudBounds(layout._bounds, sprite);
+  } else {
+    layout._bounds = [
+      { x: sprite.x + sprite.x0, y: sprite.y + sprite.y0 },
+      { x: sprite.x + sprite.x1, y: sprite.y + sprite.y1 }
+    ];
+  }
+}
+
 function cloneBounds(bounds) {
   if (!bounds) {
     return bounds;
@@ -456,7 +608,41 @@ function withinBounds(a, b) {
   return a.x + a.x0 >= b[0].x && a.x + a.x1 <= b[1].x && a.y + a.y0 >= b[0].y && a.y + a.y1 <= b[1].y;
 }
 
-function archimedeanSpiral(aspectRatio) {
+export function archimedeanStrategy(initial, context) {
+  var spiral = archimedeanOffsets(context.aspectRatio),
+      dt = context.random() < .5 ? 1 : -1,
+      t = 0;
+
+  return function() {
+    var dxdy = spiral(t += dt);
+    return {
+      x: initial.x + ~~dxdy[0],
+      y: initial.y + ~~dxdy[1]
+    };
+  };
+}
+
+export function rectangularStrategy(initial, context) {
+  var spiral = rectangularOffsets(context.aspectRatio),
+      dt = context.random() < .5 ? 1 : -1,
+      t = 0;
+
+  return function() {
+    var dxdy = spiral(t += dt);
+    return {
+      x: initial.x + ~~dxdy[0],
+      y: initial.y + ~~dxdy[1]
+    };
+  };
+}
+
+export function noneStrategy() {
+  return function() {
+    return null;
+  };
+}
+
+function archimedeanOffsets(aspectRatio) {
   var e = normalizeAspectRatio(aspectRatio);
   return function(t) {
     t *= .1;
@@ -464,7 +650,7 @@ function archimedeanSpiral(aspectRatio) {
   };
 }
 
-function rectangularSpiral(aspectRatio) {
+function rectangularOffsets(aspectRatio) {
   var dy = 4,
       dx = dy * normalizeAspectRatio(aspectRatio),
       x = 0,
@@ -551,6 +737,27 @@ function seedCoordinate(size, random) {
     return 0;
   }
   return Math.floor((random() - 0.5) * size);
+}
+
+function resolveStrategy(value) {
+  const strategy = STRATEGIES[value] || value;
+  if (typeof strategy !== "function") {
+    throw new TypeError("strategy() expects a built-in strategy name or strategy factory");
+  }
+  return strategy;
+}
+
+function normalizeStrategyCandidate(value) {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === "object") {
+    return {
+      x: normalizeCoordinate(value.x),
+      y: normalizeCoordinate(value.y)
+    };
+  }
+  throw new TypeError("strategy candidates must be {x, y} or null");
 }
 
 function functor(d) {

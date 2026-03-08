@@ -32,12 +32,27 @@ export type CanvasFactory = () => CanvasLike;
 export interface PlaceOptions {
   x?: number;
   y?: number;
+  strategy?: StrategyName | StrategyFactory;
 }
 
-export type SpiralStep = [number, number] | null | undefined;
-export type SpiralGenerator = (t: number) => SpiralStep;
-export type SpiralFactory = (aspectRatio: number) => SpiralGenerator;
-export type SpiralName = "archimedean" | "rectangular";
+export interface StrategySeed {
+  x: number;
+  y: number;
+}
+
+export interface StrategyContext {
+  size: [number, number];
+  aspectRatio: number;
+  bounds: Bounds | null;
+  overflow: boolean;
+  random: RandomSource;
+  maxDelta: number;
+}
+
+export type StrategyCandidate = { x: number; y: number } | null | undefined;
+export type StrategyGenerator = () => StrategyCandidate;
+export type StrategyFactory = (initial: StrategySeed, context: StrategyContext) => StrategyGenerator;
+export type StrategyName = "archimedean" | "rectangular" | "none";
 
 export interface BaseSpriteOptions {
   font?: string;
@@ -144,6 +159,7 @@ declare class CloudLayout {
 
   clear(): this;
   bounds(): Bounds | null;
+  removeSprite<T extends SpriteMetadata = SpriteMetadata>(sprite: CloudSprite<T>): boolean;
 
   size(): [number, number];
   size(value: [number, number] | number): this;
@@ -151,8 +167,8 @@ declare class CloudLayout {
   overflow(): boolean;
   overflow(value: boolean): this;
 
-  spiral(): SpiralFactory;
-  spiral(value: SpiralName | SpiralFactory): this;
+  strategy(): StrategyFactory;
+  strategy(value: StrategyName | StrategyFactory): this;
 
   random(): RandomSource;
   random(value: RandomSource): this;
@@ -170,4 +186,7 @@ declare class CloudLayout {
 }
 
 export default CloudLayout;
+export function archimedeanStrategy(initial: StrategySeed, context: StrategyContext): StrategyGenerator;
+export function rectangularStrategy(initial: StrategySeed, context: StrategyContext): StrategyGenerator;
+export function noneStrategy(initial: StrategySeed, context: StrategyContext): StrategyGenerator;
 export { CloudLayout, CloudSprite };

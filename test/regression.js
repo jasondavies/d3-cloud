@@ -2,16 +2,30 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import test from "node:test";
 
-import CloudLayout, { CloudSprite } from "../src/index.js";
+import CloudLayout, {
+  CloudSprite,
+  archimedeanStrategy,
+  rectangularStrategy,
+  noneStrategy
+} from "../src/index.js";
 
 const require = createRequire(import.meta.url);
 
 test("package exports resolve to the layout class in ESM", async () => {
-  const { default: ImportedCloudLayout, CloudSprite: ImportedCloudSprite } = await import("d3-cloud");
+  const {
+    default: ImportedCloudLayout,
+    CloudSprite: ImportedCloudSprite,
+    archimedeanStrategy: ImportedArchimedeanStrategy,
+    rectangularStrategy: ImportedRectangularStrategy,
+    noneStrategy: ImportedNoneStrategy
+  } = await import("d3-cloud");
 
   assert.equal(typeof ImportedCloudLayout, "function");
   assert.equal(typeof new ImportedCloudLayout().place, "function");
   assert.equal(typeof ImportedCloudSprite, "function");
+  assert.equal(typeof ImportedArchimedeanStrategy, "function");
+  assert.equal(typeof ImportedRectangularStrategy, "function");
+  assert.equal(typeof ImportedNoneStrategy, "function");
 });
 
 test("package exports reject CommonJS require", () => {
@@ -19,11 +33,20 @@ test("package exports reject CommonJS require", () => {
 });
 
 test("browser bundle exports the layout class as ESM", async () => {
-  const { default: BundledCloudLayout, CloudSprite: BundledCloudSprite } = await import(new URL("../build/d3-cloud.js", import.meta.url));
+  const {
+    default: BundledCloudLayout,
+    CloudSprite: BundledCloudSprite,
+    archimedeanStrategy: BundledArchimedeanStrategy,
+    rectangularStrategy: BundledRectangularStrategy,
+    noneStrategy: BundledNoneStrategy
+  } = await import(new URL("../build/d3-cloud.js", import.meta.url));
 
   assert.equal(typeof BundledCloudLayout, "function");
   assert.equal(typeof new BundledCloudLayout().place, "function");
   assert.equal(typeof BundledCloudSprite, "function");
+  assert.equal(typeof BundledArchimedeanStrategy, "function");
+  assert.equal(typeof BundledRectangularStrategy, "function");
+  assert.equal(typeof BundledNoneStrategy, "function");
 });
 
 test("layout exposes a size accessor", () => {
@@ -41,7 +64,7 @@ test("layout uses size for seeded placement", () => {
       .size([80, 40])
       .overflow(true)
       .random(createSequenceRandom([0.75, 0.25, 0.6]))
-      .spiral(() => t => t === 0 ? [0, 0] : null),
+      .strategy(noStrategy),
     [{ text: "seeded", size: 12, padding: 0, rotate: 0, font: "serif" }]
   );
 
@@ -57,6 +80,18 @@ test("layout exposes an overflow accessor", () => {
   assert.equal(layout.overflow(), true);
   assert.equal(layout.overflow(false), layout);
   assert.equal(layout.overflow(), false);
+});
+
+test("layout exposes a strategy accessor", () => {
+  const layout = new CloudLayout();
+
+  assert.equal(layout.strategy(), archimedeanStrategy);
+  assert.equal(layout.strategy("rectangular"), layout);
+  assert.equal(layout.strategy(), rectangularStrategy);
+  assert.equal(layout.strategy("none"), layout);
+  assert.equal(layout.strategy(), noneStrategy);
+  assert.equal(layout.strategy(archimedeanStrategy), layout);
+  assert.equal(layout.strategy(), archimedeanStrategy);
 });
 
 test("layout exposes a blockSize accessor", () => {
@@ -189,7 +224,7 @@ test("overflow false constrains image sprites to the layout size", () => {
     .size([4, 4])
     .overflow(false)
     .random(() => 0.5)
-    .spiral(() => t => t === 0 ? [0, 0] : null);
+    .strategy(noStrategy);
   const image = createFakeImage(
     4,
     4,
@@ -203,27 +238,45 @@ test("overflow false constrains image sprites to the layout size", () => {
   assert.equal(layout.place(sprite, { x: 1, y: 0 }), null);
 });
 
-test("custom spirals receive the layout aspect ratio", () => {
-  let receivedAspectRatio;
+test("custom strategies receive the initial seed and layout context", () => {
+  let receivedInitial;
+  let receivedContext;
   const layout = new CloudLayout()
-    .canvas(() => createFakeCanvas())
+    .canvas(() => createRightEdgeCanvas())
     .size([60, 20])
     .overflow(true)
-    .random(() => 0.5)
-    .spiral(aspectRatio => {
-      receivedAspectRatio = aspectRatio;
-      return t => t === 0 ? [0, 0] : null;
-    });
+    .random(() => 0.5);
 
-  const placedWord = layout.place(layout.getSprite("hello", {
+  layout.place(layout.getSprite("first", {
     font: "serif",
-    size: 12,
+    size: 16,
     rotate: 0,
     padding: 0
   }));
 
-  assert.equal(receivedAspectRatio, 3);
+  layout.strategy((initial, context) => {
+    receivedInitial = initial;
+    receivedContext = context;
+    return singleCandidateStrategy(31, 0)();
+  });
+
+  const placedWord = layout.place(layout.getSprite("hello", {
+    font: "serif",
+    size: 16,
+    rotate: 0,
+    padding: 0
+  }));
+
+  assert.deepEqual(receivedInitial, { x: 0, y: 0 });
+  assert.equal(receivedContext.aspectRatio, 3);
+  assert.deepEqual(receivedContext.size, [60, 20]);
+  assert.equal(receivedContext.overflow, true);
+  assert.equal(typeof receivedContext.random, "function");
+  assert.equal(typeof receivedContext.maxDelta, "number");
+  assert.ok(receivedContext.bounds);
   assert.ok(placedWord);
+  assert.equal(placedWord.x, 31);
+  assert.equal(placedWord.y, 0);
 });
 
 test("place accepts a prepared CloudSprite", () => {
@@ -278,7 +331,7 @@ test("place accepts explicit initial coordinates", () => {
     .size([40, 20])
     .overflow(true)
     .random(() => 0.25)
-    .spiral(() => t => t === 0 ? [0, 0] : null);
+    .strategy(noStrategy);
 
   const sprite = layout.getSprite("hello", {
     font: "serif",
@@ -298,7 +351,7 @@ test("place mixes explicit coordinates with seeded defaults", () => {
     .size([40, 20])
     .overflow(true)
     .random(createSequenceRandom([0.25, 0.6]))
-    .spiral(() => t => t === 0 ? [0, 0] : null);
+    .strategy(noStrategy);
 
   const sprite = layout.getSprite("hello", {
     font: "serif",
@@ -316,6 +369,60 @@ test("place rejects raw word objects", () => {
   const layout = new CloudLayout();
 
   assert.throws(() => layout.place({ text: "hello" }), /CloudSprite/);
+});
+
+test("place accepts a per-call strategy override", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createRightEdgeCanvas())
+    .size([0, 0])
+    .overflow(true)
+    .random(() => 0.5)
+    .strategy(noStrategy);
+
+  const first = layout.place(extractSprite(layout, { text: "first", size: 16, padding: 0, rotate: 0, font: "serif" }));
+  const second = layout.place(
+    extractSprite(layout, { text: "second", size: 16, padding: 0, rotate: 0, font: "serif" }),
+    { strategy: singleCandidateStrategy(31, 0) }
+  );
+
+  assert.ok(first);
+  assert.ok(second);
+  assert.equal(second.x, 31);
+  assert.equal(second.y, 0);
+});
+
+test("removeSprite removes a placed sprite and frees its occupied space", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createRightEdgeCanvas())
+    .size([0, 0])
+    .overflow(true)
+    .strategy(noneStrategy);
+  const firstSprite = extractSprite(layout, { text: "first", size: 16, padding: 0, rotate: 0, font: "serif" });
+  const secondSprite = extractSprite(layout, { text: "second", size: 16, padding: 0, rotate: 0, font: "serif" });
+
+  assert.ok(layout.place(firstSprite, { x: 0, y: 0 }));
+  assert.equal(layout.place(secondSprite, { x: 0, y: 0 }), null);
+  assert.equal(layout.removeSprite(firstSprite), true);
+  assert.equal(layout.bounds(), null);
+
+  const secondPlacement = layout.place(secondSprite, { x: 0, y: 0 });
+
+  assert.ok(secondPlacement);
+  assert.equal(secondPlacement.x, 0);
+  assert.equal(secondPlacement.y, 0);
+});
+
+test("removeSprite returns false for sprites that are not placed", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas());
+  const sprite = layout.getSprite("ghost", {
+    font: "serif",
+    size: 16,
+    rotate: 0,
+    padding: 0
+  });
+
+  assert.equal(layout.removeSprite(sprite), false);
 });
 
 test("clear resets bounds and unlocks blockSize changes", () => {
@@ -444,7 +551,7 @@ test("layout collision detection survives partial sprite readback", () => {
       .size([0, 0])
       .overflow(true)
       .random(createSequenceRandom([0.5, 0.5, 0.6, 0.5, 0.578125, 0.6]))
-      .spiral(() => t => t === 0 ? [0, 0] : null),
+      .strategy(noStrategy),
     words
   );
 
@@ -474,23 +581,29 @@ test("layout can rerun the same input words after sprite options change", () => 
 });
 
 test("layout detects collisions near the right edge for non-word-aligned widths", () => {
-  const words = [
-    { text: "right-edge-a", size: 16, padding: 0, rotate: 0 },
-    { text: "right-edge-b", size: 16, padding: 0, rotate: 0 }
-  ];
-  const { placedWords } = runLayout(
-    new CloudLayout()
-      .canvas(() => createRightEdgeCanvas())
-      .size([0, 0])
-      .overflow(true)
-      .random(() => 0.5)
-      .spiral(() => t => t === 0 ? [234, 0] : null),
-    words
-  );
+  const layout = new CloudLayout()
+    .canvas(() => createRightEdgeCanvas())
+    .size([0, 0])
+    .overflow(true)
+    .random(() => 0.5)
+    .strategy(noStrategy);
+  const first = layout.place(extractSprite(layout, {
+    text: "right-edge-a",
+    size: 16,
+    padding: 0,
+    rotate: 0
+  }), { x: 234, y: 0 });
+  const second = layout.place(extractSprite(layout, {
+    text: "right-edge-b",
+    size: 16,
+    padding: 0,
+    rotate: 0
+  }), { x: 234, y: 0 });
 
-  assert.equal(placedWords.length, 1);
-  assert.equal(placedWords[0].x, 234);
-  assert.equal(placedWords[0].y, 0);
+  assert.ok(first);
+  assert.equal(first.x, 234);
+  assert.equal(first.y, 0);
+  assert.equal(second, null);
 });
 
 test("layout can place words beyond the initial seeded position", () => {
@@ -504,11 +617,7 @@ test("layout can place words beyond the initial seeded position", () => {
       .size([0, 0])
       .overflow(true)
       .random(() => 0.4)
-      .spiral(() => t => {
-        if (t === 0) return [0, 0];
-        if (t === 1) return [31, 0];
-        return null;
-      }),
+      .strategy(sequenceStrategy([{ x: 31, y: 0 }])),
     words
   );
 
@@ -522,7 +631,7 @@ test("overflow false constrains placement to the layout size", () => {
     .size([32, 32])
     .overflow(false)
     .random(() => 0.5)
-    .spiral(() => t => t === 0 ? [0, 0] : null);
+    .strategy(noStrategy);
 
   const sprite = layout.getSprite("hello", {
     font: "serif",
@@ -927,4 +1036,25 @@ function extractSprite(layout, word, index = 0) {
     rotate: word.rotate ?? 0,
     padding: word.padding ?? 1
   });
+}
+
+function noStrategy() {
+  return function() {
+    return null;
+  };
+}
+
+function singleCandidateStrategy(x, y) {
+  return sequenceStrategy([{ x, y }]);
+}
+
+function sequenceStrategy(candidates) {
+  return function() {
+    let index = 0;
+    return function() {
+      const candidate = candidates[index];
+      index += 1;
+      return candidate ?? null;
+    };
+  };
 }
