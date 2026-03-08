@@ -113,10 +113,10 @@ exactly at the origin without any bounding box.
 
 <a name="overflow" href="#overflow">#</a> <b>overflow</b>([<i>overflow</i>])
 
-If specified, enables or disables bounded placement. When `true`, words must
-may expand beyond `size()` and the box is only used for seeding and spiral
-shaping. When `false`, words must fit within the centered `size()` box or
-`place()` returns `null`.
+If specified, enables or disables overflow beyond `size()`. When `true`, the
+layout may expand beyond the centered `size()` box, which is then used only for
+seeding and spiral shaping. When `false`, placement is bounded to that centered
+box and `place()` returns `null` if no in-bounds position is found.
 
 If not specified, returns the current overflow mode, which defaults to `true`.
 
