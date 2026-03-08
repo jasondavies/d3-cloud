@@ -124,7 +124,7 @@ test("layout can build a reusable CloudSprite", () => {
 
   assert.ok(sprite instanceof CloudSprite);
   assert.equal(sprite.text, "hello");
-  assert.equal(sprite.hasText, true);
+  assert.equal(sprite.hasPixels, true);
   assert.ok(sprite.sprite instanceof Uint32Array);
   assert.ok(sprite.width > 0);
   assert.ok(sprite.height > 0);
@@ -267,7 +267,7 @@ test("custom strategies receive the initial seed and layout context", () => {
     return singleCandidateStrategy(31, 0)();
   });
 
-  const placedWord = layout.place(layout.getSprite("hello", {
+  const placed = layout.place(layout.getSprite("hello", {
     font: "serif",
     size: 16,
     rotate: 0,
@@ -281,9 +281,9 @@ test("custom strategies receive the initial seed and layout context", () => {
   assert.equal(typeof receivedContext.random, "function");
   assert.equal(typeof receivedContext.maxDelta, "number");
   assert.ok(receivedContext.bounds);
-  assert.ok(placedWord);
-  assert.equal(placedWord.x, 31);
-  assert.equal(placedWord.y, 0);
+  assert.ok(placed);
+  assert.equal(placed.x, 31);
+  assert.equal(placed.y, 0);
 });
 
 test("place accepts a prepared CloudSprite", () => {
@@ -299,12 +299,12 @@ test("place accepts a prepared CloudSprite", () => {
     rotate: 0,
     padding: 0
   });
-  const placedWord = layout.place(sprite);
+  const placed = layout.place(sprite);
 
   assert.ok(sprite instanceof CloudSprite);
-  assert.equal(placedWord.text, "hello");
-  assert.equal(placedWord.x, 0);
-  assert.equal(placedWord.y, 0);
+  assert.equal(placed.text, "hello");
+  assert.equal(placed.x, 0);
+  assert.equal(placed.y, 0);
 });
 
 test("placed words omit internal raster state and preserve custom fields", () => {
@@ -321,15 +321,15 @@ test("placed words omit internal raster state and preserve custom fields", () =>
     padding: 0,
     id: "greeting"
   });
-  const placedWord = layout.place(sprite);
+  const placed = layout.place(sprite);
 
-  assert.equal(placedWord.id, "greeting");
-  assert.equal("sprite" in placedWord, false);
-  assert.equal("spriteWidth" in placedWord, false);
-  assert.equal("hasText" in placedWord, false);
-  assert.equal(typeof placedWord.text, "string");
-  assert.equal(typeof placedWord.x, "number");
-  assert.equal(typeof placedWord.trimHeight, "number");
+  assert.equal(placed.id, "greeting");
+  assert.equal("sprite" in placed, false);
+  assert.equal("spriteWidth" in placed, false);
+  assert.equal("hasPixels" in placed, false);
+  assert.equal(typeof placed.text, "string");
+  assert.equal(typeof placed.x, "number");
+  assert.equal(typeof placed.trimHeight, "number");
 });
 
 test("place accepts explicit initial coordinates", () => {
@@ -346,10 +346,10 @@ test("place accepts explicit initial coordinates", () => {
     rotate: 0,
     padding: 0
   });
-  const placedWord = layout.place(sprite, { x: 12, y: -8 });
+  const placed = layout.place(sprite, { x: 12, y: -8 });
 
-  assert.equal(placedWord.x, 12);
-  assert.equal(placedWord.y, -8);
+  assert.equal(placed.x, 12);
+  assert.equal(placed.y, -8);
 });
 
 test("place mixes explicit coordinates with seeded defaults", () => {
@@ -366,10 +366,10 @@ test("place mixes explicit coordinates with seeded defaults", () => {
     rotate: 0,
     padding: 0
   });
-  const placedWord = layout.place(sprite, { x: 12 });
+  const placed = layout.place(sprite, { x: 12 });
 
-  assert.equal(placedWord.x, 12);
-  assert.equal(placedWord.y, -5);
+  assert.equal(placed.x, 12);
+  assert.equal(placed.y, -5);
 });
 
 test("place rejects raw word objects", () => {
@@ -443,11 +443,11 @@ test("place handles one word at a time", () => {
     .overflow(true)
     .random(() => 0.5);
 
-  const placedWord = layout.place(extractSprite(layout, { text: "hello", size: 20, padding: 0, rotate: 0, font: "serif" }));
+  const placed = layout.place(extractSprite(layout, { text: "hello", size: 20, padding: 0, rotate: 0, font: "serif" }));
 
-  assert.equal(placedWord.text, "hello");
-  assert.equal(placedWord.x, 0);
-  assert.equal(placedWord.y, 0);
+  assert.equal(placed.text, "hello");
+  assert.equal(placed.x, 0);
+  assert.equal(placed.y, 0);
   assert.ok(layout.bounds());
 });
 

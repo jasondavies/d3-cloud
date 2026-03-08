@@ -101,7 +101,7 @@ Attempts to place a single prepared `CloudSprite` immediately and returns the
 placed derived word object, or `null` if it could not be placed.
 
 The returned object is a plain placed-word snapshot. Internal raster fields
-such as `sprite`, `spriteWidth`, and `hasText` are omitted, while custom
+such as `sprite`, `spriteWidth`, and `hasPixels` are omitted, while custom
 metadata from `getSprite(..., options)` is preserved.
 
 If specified, the optional *options* object may include `x` and `y` to control

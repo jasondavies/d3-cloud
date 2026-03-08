@@ -32,8 +32,9 @@ var __objRest = (source, exclude) => {
 
 // src/sprite.js
 var RADIANS = Math.PI / 180;
-var cw = 1 << 11 >>> 5;
-var ch = 1 << 11;
+var SCRATCH_WIDTH = 1 << 11;
+var SCRATCH_HEIGHT = 1 << 11;
+var SCRATCH_WORDS = SCRATCH_WIDTH >>> 5;
 var CloudSprite = class {
   constructor(_a = {}) {
     var _b = _a, {
@@ -76,7 +77,7 @@ var CloudSprite = class {
     this.padding = normalizeNumber(padding);
     this.x = normalizeNumber(x);
     this.y = normalizeNumber(y);
-    this.hasText = false;
+    this.hasPixels = false;
     this.width = 0;
     this.height = 0;
     this.spriteWidth = 0;
@@ -100,19 +101,18 @@ var CloudSprite = class {
 };
 function createSpriteContext(canvas) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
-  const pixelWidth = cw << 5;
   canvas.width = canvas.height = 1;
   const ratio = Math.sqrt(context.getImageData(0, 0, 1, 1).data.length >> 2);
-  canvas.width = pixelWidth / ratio;
-  canvas.height = ch / ratio;
+  canvas.width = SCRATCH_WIDTH / ratio;
+  canvas.height = SCRATCH_HEIGHT / ratio;
   context.fillStyle = context.strokeStyle = "red";
   return {
     context,
     ratio,
-    pixelWidth,
+    pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
     clearHeight: 0,
-    sprite: new Uint32Array(cw * ch)
+    sprite: new Uint32Array(SCRATCH_WORDS * SCRATCH_HEIGHT)
   };
 }
 function normalizeInteger(value) {
@@ -131,7 +131,7 @@ function normalizeNumber(value) {
   return Number.isFinite(value) ? value : 0;
 }
 function resetSprite(sprite) {
-  sprite.hasText = false;
+  sprite.hasPixels = false;
   sprite.width = 0;
   sprite.height = 0;
   sprite.spriteWidth = 0;
@@ -176,7 +176,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   } else {
     width = width + 31 >>> 5 << 5;
   }
-  if (width > pixelWidth || height > ch) {
+  if (width > pixelWidth || height > SCRATCH_HEIGHT) {
     context.restore();
     contextAndRatio.clearWidth = 0;
     contextAndRatio.clearHeight = 0;
@@ -202,7 +202,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   sprite.x0 = -sprite.x1;
   sprite.y0 = -sprite.y1;
   sprite.trimWidth = width;
-  sprite.hasText = true;
+  sprite.hasPixels = true;
   const pixels = context.getImageData(0, 0, width / ratio, height / ratio).data;
   const scratch = contextAndRatio.sprite;
   const wordsPerRow = width >>> 5;
@@ -228,7 +228,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     }
   }
   if (seenRow < 0) {
-    sprite.hasText = false;
+    sprite.hasPixels = false;
     return sprite;
   }
   sprite.trimY = sprite.y0 + (height >> 1);
@@ -253,7 +253,7 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   const bounds = rotatedBounds(drawWidth, drawHeight, sprite.rotate);
   const rasterWidth = bounds.width;
   const rasterHeight = bounds.height;
-  if (rasterWidth > pixelWidth || rasterHeight > ch) {
+  if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
     contextAndRatio.clearWidth = 0;
     contextAndRatio.clearHeight = 0;
     return sprite;
@@ -295,7 +295,7 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   sprite.y0 = originY + alphaBounds.y0;
   sprite.x1 = sprite.x0 + sprite.width;
   sprite.y1 = sprite.y0 + sprite.height;
-  sprite.hasText = true;
+  sprite.hasPixels = true;
   sprite.sprite = new Uint32Array(wordsPerRow * sprite.height);
   for (let row = 0; row < sprite.height; row += 1) {
     const sourceRow = alphaBounds.y0 + row;
@@ -398,7 +398,7 @@ var CloudLayout = class {
     this._canvasFactory = defaultCanvasFactory;
     this._spriteContext = null;
     this._bounds = null;
-    this._blockState = createSparseBlocks(this._blockSize);
+    this._blocks = createSparseBlocks(this._blockSize);
   }
   canvas(_) {
     if (!arguments.length) {
@@ -413,7 +413,7 @@ var CloudLayout = class {
   }
   clear() {
     this._bounds = null;
-    this._blockState = createSparseBlocks(this._blockSize);
+    this._blocks = createSparseBlocks(this._blockSize);
     return this;
   }
   bounds() {
@@ -456,7 +456,7 @@ var CloudLayout = class {
       throw new Error("Cannot change blockSize after placement; call clear() first");
     }
     this._blockSize = nextBlockSize;
-    this._blockState = createSparseBlocks(this._blockSize);
+    this._blocks = createSparseBlocks(this._blockSize);
     return this;
   }
   maxDelta(_) {
@@ -472,14 +472,14 @@ var CloudLayout = class {
     }
     const sprite = createCloudSprite(source, options);
     sprite.rasterize(this._getContext());
-    return sprite.hasText ? sprite : null;
+    return sprite.hasPixels ? sprite : null;
   }
   removeSprite(sprite) {
     if (!(sprite instanceof CloudSprite)) {
       throw new TypeError("removeSprite() expects a CloudSprite");
     }
-    this._blockState.remove(sprite);
-    if (this._blockState.isEmpty()) {
+    this._blocks.remove(sprite);
+    if (this._blocks.isEmpty()) {
       this._bounds = null;
     }
     return true;
@@ -495,10 +495,10 @@ var CloudLayout = class {
     sprite.x = (options == null ? void 0 : options.x) == null ? seedCoordinate(this._size[0], this._random) : normalizeCoordinate(options.x);
     sprite.y = (options == null ? void 0 : options.y) == null ? seedCoordinate(this._size[1], this._random) : normalizeCoordinate(options.y);
     sprite.rasterize(this._getContext());
-    if (!sprite.hasText) {
+    if (!sprite.hasPixels) {
       return null;
     }
-    if (!placeTag(this._blockState, sprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
+    if (!placeSprite(this._blocks, sprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
       return null;
     }
     extendBounds(this, sprite);
@@ -511,28 +511,28 @@ var CloudLayout = class {
     return this._spriteContext;
   }
 };
-function createCloudSprite(text, options) {
+function createCloudSprite(source, options) {
   var _a, _b;
-  const spriteOptions = normalizeSpriteOptions(options, isImageSource(text) ? 0 : 1);
-  if (isTextSource(text)) {
+  const spriteOptions = normalizeSpriteOptions(options, isImageSource(source) ? 0 : 1);
+  if (isTextSource(source)) {
     return new CloudSprite(__spreadProps(__spreadValues({}, spriteOptions), {
-      text
+      text: source
     }));
   }
-  if (isImageSource(text)) {
+  if (isImageSource(source)) {
     return new CloudSprite(__spreadProps(__spreadValues({}, spriteOptions), {
-      text: (_b = (_a = spriteOptions.text) != null ? _a : text.alt) != null ? _b : "",
-      image: text,
+      text: (_b = (_a = spriteOptions.text) != null ? _a : source.alt) != null ? _b : "",
+      image: source,
       imageWidth: options.width,
       imageHeight: options.height
     }));
   }
   throw new TypeError("getSprite() expects text or an image-like source");
 }
-function placeTag(state, tag, bounds, strategy, size, overflow, random, maxDelta) {
-  var startX = tag.x, startY = tag.y, deltaLimit = resolveMaxDelta(tag, bounds, maxDelta, size, overflow), clipBounds = overflow ? null : sizeBounds(size), next, candidate, dx, dy;
-  if ((!clipBounds || withinBounds(tag, clipBounds)) && (!bounds || collideRects(tag, bounds)) && !state.collides(tag)) {
-    state.insert(tag);
+function placeSprite(blocks, sprite, bounds, strategy, size, overflow, random, maxDelta) {
+  var startX = sprite.x, startY = sprite.y, deltaLimit = resolveMaxDelta(sprite, bounds, maxDelta, size, overflow), clipBounds = overflow ? null : sizeBounds(size), next, candidate, dx, dy;
+  if ((!clipBounds || withinBounds(sprite, clipBounds)) && (!bounds || collideRects(sprite, bounds)) && !blocks.collides(sprite)) {
+    blocks.insert(sprite);
     return true;
   }
   next = strategy(
@@ -553,12 +553,12 @@ function placeTag(state, tag, bounds, strategy, size, overflow, random, maxDelta
     dx = candidate.x - startX;
     dy = candidate.y - startY;
     if (Math.min(Math.abs(dx), Math.abs(dy)) >= deltaLimit) break;
-    tag.x = candidate.x;
-    tag.y = candidate.y;
-    if (clipBounds && !withinBounds(tag, clipBounds)) continue;
-    if (!bounds || collideRects(tag, bounds)) {
-      if (!state.collides(tag)) {
-        state.insert(tag);
+    sprite.x = candidate.x;
+    sprite.y = candidate.y;
+    if (clipBounds && !withinBounds(sprite, clipBounds)) continue;
+    if (!bounds || collideRects(sprite, bounds)) {
+      if (!blocks.collides(sprite)) {
+        blocks.insert(sprite);
         return true;
       }
     }
@@ -573,8 +573,8 @@ function createSparseBlocks(cellSize) {
     isEmpty() {
       return blocks.size === 0;
     },
-    collides(tag) {
-      var left = tag.x + tag.x0, top = tag.y + tag.y0, right = tag.x + tag.x1, bottom = tag.y + tag.y1, range = getRangeForBounds(left, top, right, bottom, blockSize);
+    collides(sprite) {
+      var left = sprite.x + sprite.x0, top = sprite.y + sprite.y0, right = sprite.x + sprite.x1, bottom = sprite.y + sprite.y1, range = getRangeForBounds(left, top, right, bottom, blockSize);
       for (var blockY = range.y0; blockY <= range.y1; blockY++) {
         var blockTop = blockY * blockSize, overlapTop = Math.max(top, blockTop), overlapBottom = Math.min(bottom, blockTop + blockSize);
         for (var blockX = range.x0; blockX <= range.x1; blockX++) {
@@ -583,8 +583,8 @@ function createSparseBlocks(cellSize) {
           var blockLeft = blockX * blockSize, overlapLeft = Math.max(left, blockLeft), overlapRight = Math.min(right, blockLeft + blockSize);
           if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
           if (packedRegionCollides(
-            tag.sprite,
-            spriteWords(tag),
+            sprite.sprite,
+            spriteWords(sprite),
             left,
             top,
             block,
@@ -602,8 +602,8 @@ function createSparseBlocks(cellSize) {
       }
       return false;
     },
-    insert(tag) {
-      var left = tag.x + tag.x0, top = tag.y + tag.y0, right = tag.x + tag.x1, bottom = tag.y + tag.y1, range = getRangeForBounds(left, top, right, bottom, blockSize);
+    insert(sprite) {
+      var left = sprite.x + sprite.x0, top = sprite.y + sprite.y0, right = sprite.x + sprite.x1, bottom = sprite.y + sprite.y1, range = getRangeForBounds(left, top, right, bottom, blockSize);
       for (var blockY = range.y0; blockY <= range.y1; blockY++) {
         var blockTop = blockY * blockSize, overlapTop = Math.max(top, blockTop), overlapBottom = Math.min(bottom, blockTop + blockSize);
         for (var blockX = range.x0; blockX <= range.x1; blockX++) {
@@ -615,8 +615,8 @@ function createSparseBlocks(cellSize) {
             blocks.set(key, block);
           }
           stampPackedRegion(
-            tag.sprite,
-            spriteWords(tag),
+            sprite.sprite,
+            spriteWords(sprite),
             left,
             top,
             block,
@@ -631,8 +631,8 @@ function createSparseBlocks(cellSize) {
         }
       }
     },
-    remove(tag) {
-      var left = tag.x + tag.x0, top = tag.y + tag.y0, right = tag.x + tag.x1, bottom = tag.y + tag.y1, range = getRangeForBounds(left, top, right, bottom, blockSize);
+    remove(sprite) {
+      var left = sprite.x + sprite.x0, top = sprite.y + sprite.y0, right = sprite.x + sprite.x1, bottom = sprite.y + sprite.y1, range = getRangeForBounds(left, top, right, bottom, blockSize);
       for (var blockY = range.y0; blockY <= range.y1; blockY++) {
         var blockTop = blockY * blockSize, overlapTop = Math.max(top, blockTop), overlapBottom = Math.min(bottom, blockTop + blockSize);
         for (var blockX = range.x0; blockX <= range.x1; blockX++) {
@@ -641,8 +641,8 @@ function createSparseBlocks(cellSize) {
           var blockLeft = blockX * blockSize, overlapLeft = Math.max(left, blockLeft), overlapRight = Math.min(right, blockLeft + blockSize);
           if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
           clearPackedRegion(
-            tag.sprite,
-            spriteWords(tag),
+            sprite.sprite,
+            spriteWords(sprite),
             left,
             top,
             block,
@@ -746,15 +746,15 @@ function getRangeForBounds(left, top, right, bottom, cellSize) {
 function blockKey(x, y) {
   return x + "," + y;
 }
-function resolveMaxDelta(tag, bounds, maxDelta, size, overflow) {
+function resolveMaxDelta(sprite, bounds, maxDelta, size, overflow) {
   if (maxDelta != null) {
     return maxDelta;
   }
-  var wordExtent = Math.max(tag.width || 0, tag.height || 0), sizeExtent = overflow ? 0 : Math.max(size[0], size[1]), boundsExtent = bounds ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y) : 0;
+  var wordExtent = Math.max(sprite.width || 0, sprite.height || 0), sizeExtent = overflow ? 0 : Math.max(size[0], size[1]), boundsExtent = bounds ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y) : 0;
   return Math.max(256, wordExtent * 4, boundsExtent * 2, sizeExtent);
 }
 function outputWord(d) {
-  const _a = d, { hasText, sprite, spriteWidth } = _a, word = __objRest(_a, ["hasText", "sprite", "spriteWidth"]);
+  const _a = d, { hasPixels, sprite, spriteWidth } = _a, word = __objRest(_a, ["hasPixels", "sprite", "spriteWidth"]);
   return word;
 }
 function extendBounds(layout, sprite) {

@@ -1,6 +1,7 @@
 const RADIANS = Math.PI / 180;
-const cw = (1 << 11) >>> 5;
-const ch = 1 << 11;
+const SCRATCH_WIDTH = 1 << 11;
+const SCRATCH_HEIGHT = 1 << 11;
+const SCRATCH_WORDS = SCRATCH_WIDTH >>> 5;
 
 export default class CloudSprite {
   constructor({
@@ -31,7 +32,7 @@ export default class CloudSprite {
     this.padding = normalizeNumber(padding);
     this.x = normalizeNumber(x);
     this.y = normalizeNumber(y);
-    this.hasText = false;
+    this.hasPixels = false;
     this.width = 0;
     this.height = 0;
     this.spriteWidth = 0;
@@ -60,22 +61,21 @@ export default class CloudSprite {
 
 export function createSpriteContext(canvas) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
-  const pixelWidth = cw << 5;
 
   canvas.width = canvas.height = 1;
   const ratio = Math.sqrt(context.getImageData(0, 0, 1, 1).data.length >> 2);
-  canvas.width = pixelWidth / ratio;
-  canvas.height = ch / ratio;
+  canvas.width = SCRATCH_WIDTH / ratio;
+  canvas.height = SCRATCH_HEIGHT / ratio;
 
   context.fillStyle = context.strokeStyle = "red";
 
   return {
     context,
     ratio,
-    pixelWidth,
+    pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
     clearHeight: 0,
-    sprite: new Uint32Array(cw * ch)
+    sprite: new Uint32Array(SCRATCH_WORDS * SCRATCH_HEIGHT)
   };
 }
 
@@ -98,7 +98,7 @@ function normalizeNumber(value) {
 }
 
 function resetSprite(sprite) {
-  sprite.hasText = false;
+  sprite.hasPixels = false;
   sprite.width = 0;
   sprite.height = 0;
   sprite.spriteWidth = 0;
@@ -151,7 +151,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     width = (width + 0x1f) >>> 5 << 5;
   }
 
-  if (width > pixelWidth || height > ch) {
+  if (width > pixelWidth || height > SCRATCH_HEIGHT) {
     context.restore();
     contextAndRatio.clearWidth = 0;
     contextAndRatio.clearHeight = 0;
@@ -179,7 +179,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   sprite.x0 = -sprite.x1;
   sprite.y0 = -sprite.y1;
   sprite.trimWidth = width;
-  sprite.hasText = true;
+  sprite.hasPixels = true;
 
   const pixels = context.getImageData(0, 0, width / ratio, height / ratio).data;
   const scratch = contextAndRatio.sprite;
@@ -209,7 +209,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   }
 
   if (seenRow < 0) {
-    sprite.hasText = false;
+    sprite.hasPixels = false;
     return sprite;
   }
 
@@ -239,7 +239,7 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   const rasterWidth = bounds.width;
   const rasterHeight = bounds.height;
 
-  if (rasterWidth > pixelWidth || rasterHeight > ch) {
+  if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
     contextAndRatio.clearWidth = 0;
     contextAndRatio.clearHeight = 0;
     return sprite;
@@ -287,7 +287,7 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   sprite.y0 = originY + alphaBounds.y0;
   sprite.x1 = sprite.x0 + sprite.width;
   sprite.y1 = sprite.y0 + sprite.height;
-  sprite.hasText = true;
+  sprite.hasPixels = true;
   sprite.sprite = new Uint32Array(wordsPerRow * sprite.height);
 
   for (let row = 0; row < sprite.height; row += 1) {

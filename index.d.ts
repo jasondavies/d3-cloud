@@ -134,7 +134,7 @@ declare class CloudSprite<T extends SpriteMetadata = SpriteMetadata> {
   padding: number;
   x: number;
   y: number;
-  hasText: boolean;
+  hasPixels: boolean;
   width: number;
   height: number;
   spriteWidth: number;
