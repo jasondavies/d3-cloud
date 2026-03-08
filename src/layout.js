@@ -671,7 +671,7 @@ function seedCoordinate(size, random) {
   if (!(size > 0)) {
     return 0;
   }
-  return Math.floor((random() - 0.5) * size);
+  return Math.floor((random() - 0.5) * (size / 2));
 }
 
 function resolveStrategy(value) {

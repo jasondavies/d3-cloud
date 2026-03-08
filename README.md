@@ -60,11 +60,21 @@ Run `npm run build` to generate the browser bundle at `build/d3-cloud.js`,
 which exports the layout as an ESM module for browser use.
 
 Placement uses sparse packed occupancy blocks for collision checks, so the
-final cloud uses `size()` both as the initial seed box and as the aspect ratio
-hints for the built-in strategies. By default, `overflow(true)` allows placement
-to extend beyond that centered size box; switch to `overflow(false)` for a
-bounded layout. Word order is controlled by the caller; in most cases you
-will want to place larger words first.
+final cloud uses `size()` both as the aspect ratio hints for the built-in
+strategies and to define a centered half-size seed box for initial placement.
+By default, `overflow(true)` allows placement to extend beyond the centered
+`size()` box; switch to `overflow(false)` for a bounded layout. Word order is
+controlled by the caller; in most cases you will want to place larger words
+first.
+
+## Using With React
+
+See `examples/react/README.md` for a minimal Vite + React sample that runs the
+layout on the client and renders each placed word as a clickable SVG link.
+
+In frameworks that render on the server, create the layout only on the client,
+for example inside `useEffect()` or inside a client-only component. The
+default canvas factory uses `document.createElement("canvas")`.
 
 ## Migrating From 1.x
 
@@ -121,7 +131,8 @@ metadata from `getSprite(..., options)` is preserved.
 
 If specified, the optional *options* object may include `x` and `y` to control
 the initial placement attempt before the strategy search begins. Any omitted axis
-still uses the normal seeded position from `size()`.
+still uses the normal seeded position from the centered half-size seed box
+derived from `size()`.
 
 If specified, `options.strategy` overrides the layout-level default strategy
 for this placement only.
@@ -155,8 +166,9 @@ call `place()` in your own loop.
 <a name="size" href="#size">#</a> <b>size</b>([<i>size</i>])
 
 If specified, sets the centered layout size as `[width, height]`. This size is
-used both for the initial random seed box and for the aspect ratio of the
-built-in `"archimedean"` and `"rectangular"` strategies.
+used both for the aspect ratio of the built-in `"archimedean"` and
+`"rectangular"` strategies and for a centered initial seed box at half that
+width and height.
 
 If not specified, returns the current layout size, which defaults to
 `[256, 256]`. Use `[0, 0]` together with `overflow(true)` to start every word

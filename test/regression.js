@@ -57,7 +57,7 @@ test("layout exposes a size accessor", () => {
   assert.deepEqual(layout.size(), [40, 20]);
 });
 
-test("layout uses size for seeded placement", () => {
+test("layout uses half-size seeded placement", () => {
   const { placedWords } = runLayout(
     new CloudLayout()
       .canvas(() => createFakeCanvas())
@@ -70,8 +70,8 @@ test("layout uses size for seeded placement", () => {
 
   assert.deepEqual(new CloudLayout().size(), [256, 256]);
   assert.equal(placedWords.length, 1);
-  assert.equal(placedWords[0].x, 20);
-  assert.equal(placedWords[0].y, -10);
+  assert.equal(placedWords[0].x, 10);
+  assert.equal(placedWords[0].y, -5);
 });
 
 test("layout exposes an overflow accessor", () => {
@@ -368,7 +368,7 @@ test("place mixes explicit coordinates with seeded defaults", () => {
   const placed = layout.place(sprite, { x: 12 });
 
   assert.equal(placed.x, 12);
-  assert.equal(placed.y, -5);
+  assert.equal(placed.y, -3);
 });
 
 test("place rejects raw word objects", () => {
