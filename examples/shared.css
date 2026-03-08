@@ -76,7 +76,7 @@ p {
   flex-wrap: wrap;
 }
 
-a,
+.actions a,
 button {
   border: 0;
   border-radius: 999px;
@@ -96,10 +96,14 @@ button:hover {
   transform: translateY(-1px);
 }
 
-a {
+.actions a {
   color: var(--accent);
   background: var(--link-background);
   box-shadow: var(--link-shadow);
+}
+
+a {
+  color: var(--accent);
 }
 
 .status {
