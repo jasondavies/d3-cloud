@@ -403,8 +403,8 @@ var SPIRALS = {
 };
 var CloudLayout = class {
   constructor() {
-    this._aspectRatio = 1;
-    this._startBox = [256, 256];
+    this._size = [256, 256];
+    this._overflow = true;
     this._spiral = archimedeanSpiral;
     this._random = Math.random;
     this._blockSize = 512;
@@ -430,18 +430,18 @@ var CloudLayout = class {
   bounds() {
     return cloneBounds(this._bounds);
   }
-  aspectRatio(_) {
+  size(_) {
     if (!arguments.length) {
-      return this._aspectRatio;
+      return this._size.slice();
     }
-    this._aspectRatio = normalizeAspectRatio(_);
+    this._size = normalizeSize(_);
     return this;
   }
-  startBox(_) {
+  overflow(_) {
     if (!arguments.length) {
-      return this._startBox.slice();
+      return this._overflow;
     }
-    this._startBox = normalizeStartBox(_);
+    this._overflow = !!_;
     return this;
   }
   spiral(_) {
@@ -485,18 +485,21 @@ var CloudLayout = class {
     sprite.rasterize(this._getContext());
     return sprite.hasText ? sprite : null;
   }
-  place(sprite) {
+  place(sprite, options = void 0) {
     if (!(sprite instanceof CloudSprite)) {
       throw new TypeError("place() expects a CloudSprite");
     }
+    if (options != null && (!options || typeof options !== "object" || Array.isArray(options))) {
+      throw new TypeError("place() expects an options object");
+    }
     const placedSprite = sprite;
-    placedSprite.x = seedCoordinate(this._startBox[0], this._random);
-    placedSprite.y = seedCoordinate(this._startBox[1], this._random);
+    placedSprite.x = (options == null ? void 0 : options.x) == null ? seedCoordinate(this._size[0], this._random) : normalizeCoordinate(options.x);
+    placedSprite.y = (options == null ? void 0 : options.y) == null ? seedCoordinate(this._size[1], this._random) : normalizeCoordinate(options.y);
     placedSprite.rasterize(this._getContext());
     if (!placedSprite.hasText) {
       return null;
     }
-    if (!placeTag(this._blockState, placedSprite, this._bounds, this._spiral, this._aspectRatio, this._random, this._maxDelta)) {
+    if (!placeTag(this._blockState, placedSprite, this._bounds, this._spiral, this._size, this._overflow, this._random, this._maxDelta)) {
       return null;
     }
     if (this._bounds) {
@@ -552,14 +555,15 @@ function createCloudSprite(text, options) {
   }
   throw new TypeError("getSprite() expects text or an image-like source");
 }
-function placeTag(state, tag, bounds, spiral, aspectRatio, random, maxDelta) {
-  var startX = tag.x, startY = tag.y, deltaLimit = resolveMaxDelta(tag, bounds, maxDelta), s = spiral(aspectRatio), dt = random() < 0.5 ? 1 : -1, t = -dt, dxdy, dx, dy;
+function placeTag(state, tag, bounds, spiral, size, overflow, random, maxDelta) {
+  var startX = tag.x, startY = tag.y, deltaLimit = resolveMaxDelta(tag, bounds, maxDelta, size, overflow), s = spiral(sizeAspectRatio(size)), clipBounds = overflow ? null : sizeBounds(size), dt = random() < 0.5 ? 1 : -1, t = -dt, dxdy, dx, dy;
   while (dxdy = s(t += dt)) {
     dx = ~~dxdy[0];
     dy = ~~dxdy[1];
     if (Math.min(Math.abs(dx), Math.abs(dy)) >= deltaLimit) break;
     tag.x = startX + dx;
     tag.y = startY + dy;
+    if (clipBounds && !withinBounds(tag, clipBounds)) continue;
     if (!bounds || collideRects(tag, bounds)) {
       if (!state.collides(tag)) {
         state.insert(tag);
@@ -689,12 +693,12 @@ function getRangeForBounds(left, top, right, bottom, cellSize) {
 function blockKey(x, y) {
   return x + "," + y;
 }
-function resolveMaxDelta(tag, bounds, maxDelta) {
+function resolveMaxDelta(tag, bounds, maxDelta, size, overflow) {
   if (maxDelta != null) {
     return maxDelta;
   }
-  var wordExtent = Math.max(tag.width || 0, tag.height || 0), boundsExtent = bounds ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y) : 0;
-  return Math.max(256, wordExtent * 4, boundsExtent * 2);
+  var wordExtent = Math.max(tag.width || 0, tag.height || 0), sizeExtent = overflow ? 0 : Math.max(size[0], size[1]), boundsExtent = bounds ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y) : 0;
+  return Math.max(256, wordExtent * 4, boundsExtent * 2, sizeExtent);
 }
 function outputWord(d) {
   return __spreadProps(__spreadValues({}, d), {
@@ -719,6 +723,9 @@ function cloudBounds(bounds, d) {
 }
 function collideRects(a, b) {
   return a.x + a.x1 > b[0].x && a.x + a.x0 < b[1].x && a.y + a.y1 > b[0].y && a.y + a.y0 < b[1].y;
+}
+function withinBounds(a, b) {
+  return a.x + a.x0 >= b[0].x && a.x + a.x1 <= b[1].x && a.y + a.y0 >= b[0].y && a.y + a.y1 <= b[1].y;
 }
 function archimedeanSpiral(aspectRatio) {
   var e = normalizeAspectRatio(aspectRatio);
@@ -760,6 +767,10 @@ function normalizeBlockSize(value) {
   value = value > 0 && Number.isFinite(value) ? Math.max(1, value | 0) : 512;
   return value + 31 >>> 5 << 5;
 }
+function normalizeCoordinate(value) {
+  value = +value;
+  return Number.isFinite(value) ? value : 0;
+}
 function normalizeSpriteBatch(sprites) {
   if (sprites == null) {
     return [];
@@ -785,18 +796,27 @@ function isTextSource(source) {
 function isImageSource(source) {
   return !!source && typeof source === "object" && !Array.isArray(source) && (typeof source.width === "number" || typeof source.naturalWidth === "number" || typeof source.videoWidth === "number");
 }
-function normalizeStartBox(value) {
+function normalizeSize(value) {
   if (!Array.isArray(value)) {
     value = [value, value];
   }
   return [
-    normalizeStartBoxSize(value[0]),
-    normalizeStartBoxSize(value[1])
+    normalizeSizeDimension(value[0]),
+    normalizeSizeDimension(value[1])
   ];
 }
-function normalizeStartBoxSize(value) {
+function normalizeSizeDimension(value) {
   value = +value;
   return value > 0 && Number.isFinite(value) ? value : 0;
+}
+function sizeAspectRatio(size) {
+  return normalizeAspectRatio(size[0] / size[1]);
+}
+function sizeBounds(size) {
+  return [
+    { x: -size[0] / 2, y: -size[1] / 2 },
+    { x: size[0] / 2, y: size[1] / 2 }
+  ];
 }
 function seedCoordinate(size, random) {
   if (!(size > 0)) {

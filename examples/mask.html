@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>d3-cloud Browser Example</title>
+    <title>d3-cloud Mask Example</title>
     <style>
       :root {
         --ink: #111111;
@@ -141,10 +141,10 @@
       <section class="frame">
         <div class="masthead">
           <div>
-            <h1>Browser Example</h1>
+            <h1>Mask Example</h1>
             <p>
-              This page loads the built ESM bundle directly from <code>build/d3-cloud.js</code>
-              and renders an SVG word cloud with no bundler and no extra browser dependencies.
+              This page generates an SVG heart mask, rasterizes it into the initial sprite at
+              <code>[0, 0]</code>, and then places the word cloud around that occupied shape.
             </p>
           </div>
           <div class="controls">
@@ -153,15 +153,13 @@
           </div>
         </div>
         <div class="canvas">
-          <svg data-cloud viewBox="-360 -240 720 480" aria-label="Example word cloud"></svg>
+          <svg data-cloud viewBox="-360 -240 720 480" aria-label="Masked word cloud example"></svg>
         </div>
         <div class="note">
-          Serve the repo root with any static file server, then open <code>/examples/</code>.
-          For image-based sprites, see <a href="./image-sprites.html">the image sprite example</a>.
-          For a masked cloud, see <a href="./mask.html">the mask example</a>.
+          Serve the repo root with any static file server, then open <code>/examples/mask.html</code>.
         </div>
       </section>
     </main>
-    <script type="module" src="./browser.js"></script>
+    <script type="module" src="./mask.js"></script>
   </body>
 </html>

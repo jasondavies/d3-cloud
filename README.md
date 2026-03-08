@@ -41,11 +41,11 @@ Run `npm run build` to generate the browser bundle at `build/d3-cloud.js`,
 which exports the layout as an ESM module for browser use.
 
 Placement uses sparse packed occupancy blocks for collision checks, so the
-final cloud may extend arbitrarily far if the search limit allows it. Use
-`startBox()` to jitter initial placements around the origin and
-`aspectRatio()` to bias the built-in spirals toward wider or taller clouds.
-Word order is controlled by the caller; in most cases you will want to place
-larger words first.
+final cloud uses `size()` both as the initial seed box and as the aspect ratio
+hints for the built-in spirals. By default, `overflow(true)` allows placement
+to extend beyond that centered size box; switch to `overflow(false)` for a
+bounded layout. Word order is controlled by the caller; in most cases you
+will want to place larger words first.
 
 ## API Reference
 
@@ -63,10 +63,14 @@ a fresh layout.
 Returns the current placement extent as `[{x, y}, {x, y}]`, or `null` if no
 words have been placed yet.
 
-<a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>)
+<a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>[, <i>options</i>])
 
 Attempts to place a single prepared `CloudSprite` immediately and returns the
 placed derived word object, or `null` if it could not be placed.
+
+If specified, the optional *options* object may include `x` and `y` to control
+the initial placement attempt before the spiral search begins. Any omitted axis
+still uses the normal seeded position from `size()`.
 
 <a name="getsprite" href="#getsprite">#</a> <b>getSprite</b>(<i>source</i>[, <i>options</i>])
 
@@ -80,7 +84,9 @@ fields to carry through to the resulting sprite. The defaults are `font:
 `padding: 1`.
 
 Image sprites are extracted from the source alpha channel, so transparent
-pixels are ignored automatically.
+pixels are ignored automatically. For image sources, `options.width` and
+`options.height` may be used to resize the image before extraction; if only one
+dimension is provided, the other is derived from the source aspect ratio.
 
 <a name="placeall" href="#placeall">#</a> <b>placeAll</b>(<i>sprites</i>)
 
@@ -95,18 +101,24 @@ Words that cannot be placed are simply omitted from the returned array. To
 spread work across frames, call `getSprite()`, `place()`, or `placeAll()`
 yourself with smaller batches.
 
-<a name="aspectRatio" href="#aspectRatio">#</a> <b>aspectRatio</b>([<i>ratio</i>])
+<a name="size" href="#size">#</a> <b>size</b>([<i>size</i>])
 
-If specified, sets the aspect ratio used by the built-in `"archimedean"` and
-`"rectangular"` spirals. If not specified, returns the current aspect ratio,
-which defaults to `1`.
+If specified, sets the centered layout size as `[width, height]`. This size is
+used both for the initial random seed box and for the aspect ratio of the
+built-in `"archimedean"` and `"rectangular"` spirals.
 
-<a name="startBox" href="#startBox">#</a> <b>startBox</b>([<i>box</i>])
+If not specified, returns the current layout size, which defaults to
+`[256, 256]`. Use `[0, 0]` together with `overflow(true)` to start every word
+exactly at the origin without any bounding box.
 
-If specified, sets the centered seed box used for initial word positions before
-spiral placement. The value should be `[width, height]`. If not specified,
-returns the current seed box, which defaults to `[256, 256]`. Use `[0, 0]` to
-start every word exactly at the origin.
+<a name="overflow" href="#overflow">#</a> <b>overflow</b>([<i>overflow</i>])
+
+If specified, enables or disables bounded placement. When `true`, words must
+may expand beyond `size()` and the box is only used for seeding and spiral
+shaping. When `false`, words must fit within the centered `size()` box or
+`place()` returns `null`.
+
+If not specified, returns the current overflow mode, which defaults to `true`.
 
 <a name="spiral" href="#spiral">#</a> <b>spiral</b>([<i>spiral</i>])
 
@@ -128,7 +140,7 @@ built-in "archimedean" spiral.
 <a name="random" href="#random">#</a> <b>random</b>([<i>random</i>])
 
 If specified, sets the internal random number generator, used for selecting the
-initial position of each sprite inside `startBox()`, and the
+initial position of each sprite inside `size()`, and the
 clockwise/counterclockwise direction of the spiral during placement. This
 should return a number in the range `[0, 1)`.
 

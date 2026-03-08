@@ -27,28 +27,37 @@ test("browser bundle exports the layout class as ESM", async () => {
   assert.equal(typeof BundledCloudSprite, "function");
 });
 
-test("layout exposes an aspectRatio accessor", () => {
+test("layout exposes a size accessor", () => {
   const layout = new CloudLayout();
 
-  assert.equal(layout.aspectRatio(), 1);
-  assert.equal(layout.aspectRatio(1.5), layout);
-  assert.equal(layout.aspectRatio(), 1.5);
+  assert.deepEqual(layout.size(), [256, 256]);
+  assert.equal(layout.size([40, 20]), layout);
+  assert.deepEqual(layout.size(), [40, 20]);
 });
 
-test("layout exposes a startBox accessor", () => {
+test("layout uses size for seeded placement", () => {
   const { placedWords } = runLayout(
     new CloudLayout()
       .canvas(() => createFakeCanvas())
-      .startBox([40, 20])
+      .size([80, 40])
+      .overflow(true)
       .random(createSequenceRandom([0.75, 0.25, 0.6]))
       .spiral(() => t => t === 0 ? [0, 0] : null),
-    [{ text: "seeded", size: 20, padding: 0, rotate: 0, font: "serif" }]
+    [{ text: "seeded", size: 12, padding: 0, rotate: 0, font: "serif" }]
   );
 
-  assert.deepEqual(new CloudLayout().startBox(), [256, 256]);
+  assert.deepEqual(new CloudLayout().size(), [256, 256]);
   assert.equal(placedWords.length, 1);
-  assert.equal(placedWords[0].x, 10);
-  assert.equal(placedWords[0].y, -5);
+  assert.equal(placedWords[0].x, 20);
+  assert.equal(placedWords[0].y, -10);
+});
+
+test("layout exposes an overflow accessor", () => {
+  const layout = new CloudLayout();
+
+  assert.equal(layout.overflow(), true);
+  assert.equal(layout.overflow(false), layout);
+  assert.equal(layout.overflow(), false);
 });
 
 test("layout exposes a blockSize accessor", () => {
@@ -114,10 +123,58 @@ test("layout can build a CloudSprite from image alpha", () => {
   assert.ok(sprite.sprite instanceof Uint32Array);
 });
 
+test("layout can resize image sprites with explicit width and height", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas());
+  const image = createFakeImage(
+    4,
+    4,
+    Array.from({ length: 16 }, (_, index) => [index % 4, Math.floor(index / 4)])
+  );
+
+  const sprite = layout.getSprite(image, {
+    text: "icon",
+    width: 8,
+    height: 6
+  });
+
+  assert.ok(sprite instanceof CloudSprite);
+  assert.equal(sprite.imageWidth, 8);
+  assert.equal(sprite.imageHeight, 6);
+  assert.equal(sprite.width, 8);
+  assert.equal(sprite.height, 6);
+  assert.equal(sprite.x0, -4);
+  assert.equal(sprite.y0, -3);
+  assert.equal(sprite.x1, 4);
+  assert.equal(sprite.y1, 3);
+});
+
+test("layout preserves image aspect ratio when only one resize dimension is provided", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas());
+  const image = createFakeImage(
+    4,
+    8,
+    Array.from({ length: 32 }, (_, index) => [index % 4, Math.floor(index / 4)])
+  );
+
+  const sprite = layout.getSprite(image, {
+    text: "icon",
+    width: 10
+  });
+
+  assert.ok(sprite instanceof CloudSprite);
+  assert.equal(sprite.imageWidth, 10);
+  assert.equal(sprite.imageHeight, 20);
+  assert.equal(sprite.width, 10);
+  assert.equal(sprite.height, 20);
+});
+
 test("place accepts a prepared CloudSprite", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
-    .startBox([0, 0])
+    .size([0, 0])
+    .overflow(true)
     .random(() => 0.5);
 
   const sprite = layout.getSprite("hello", {
@@ -134,6 +191,46 @@ test("place accepts a prepared CloudSprite", () => {
   assert.equal(placedWord.y, 0);
 });
 
+test("place accepts explicit initial coordinates", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas())
+    .size([40, 20])
+    .overflow(true)
+    .random(() => 0.25)
+    .spiral(() => t => t === 0 ? [0, 0] : null);
+
+  const sprite = layout.getSprite("hello", {
+    font: "serif",
+    size: 20,
+    rotate: 0,
+    padding: 0
+  });
+  const placedWord = layout.place(sprite, { x: 12, y: -8 });
+
+  assert.equal(placedWord.x, 12);
+  assert.equal(placedWord.y, -8);
+});
+
+test("place mixes explicit coordinates with seeded defaults", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas())
+    .size([40, 20])
+    .overflow(true)
+    .random(createSequenceRandom([0.25, 0.6]))
+    .spiral(() => t => t === 0 ? [0, 0] : null);
+
+  const sprite = layout.getSprite("hello", {
+    font: "serif",
+    size: 20,
+    rotate: 0,
+    padding: 0
+  });
+  const placedWord = layout.place(sprite, { x: 12 });
+
+  assert.equal(placedWord.x, 12);
+  assert.equal(placedWord.y, -5);
+});
+
 test("place rejects raw word objects", () => {
   const layout = new CloudLayout();
 
@@ -143,7 +240,8 @@ test("place rejects raw word objects", () => {
 test("clear resets bounds and unlocks blockSize changes", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
-    .startBox([0, 0])
+    .size([0, 0])
+    .overflow(true)
     .random(() => 0.5);
 
   layout.place(extractSprite(layout, { text: "hello", size: 20, padding: 0, rotate: 0, font: "serif" }));
@@ -159,7 +257,8 @@ test("clear resets bounds and unlocks blockSize changes", () => {
 test("place handles one word at a time", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
-    .startBox([0, 0])
+    .size([0, 0])
+    .overflow(true)
     .random(() => 0.5);
 
   const placedWord = layout.place(extractSprite(layout, { text: "hello", size: 20, padding: 0, rotate: 0, font: "serif" }));
@@ -198,7 +297,8 @@ test("block size changes do not affect deterministic placement", () => {
   ];
   const baseConfig = layout => layout
     .canvas(() => createFakeCanvas())
-    .startBox([0, 0])
+    .size([0, 0])
+    .overflow(true)
     .random(createSeededRandom(9));
 
   const { placedWords: smallBlockWords } = runLayout(baseConfig(new CloudLayout().blockSize(64)), words);
@@ -211,7 +311,8 @@ test("layout places a simple word and reports bounds", () => {
   const words = [{ text: "hello", size: 20, padding: 0, rotate: 0, font: "serif" }];
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
-    .startBox([0, 0])
+    .size([0, 0])
+    .overflow(true)
       .random(() => 0.5);
 
   const { placedWords, bounds } = runLayout(layout, words);
@@ -238,7 +339,8 @@ test("layout handles multiple sprite batches and cleans up sprite data", () => {
   }));
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
-    .startBox([0, 0])
+    .size([0, 0])
+    .overflow(true)
       .maxDelta(4096)
       .random(createSeededRandom(1));
 
@@ -258,7 +360,8 @@ test("layout collision detection survives partial sprite readback", () => {
   const { placedWords } = runLayout(
     new CloudLayout()
       .canvas(() => createFakeCanvas())
-      .startBox([0, 0])
+      .size([0, 0])
+      .overflow(true)
       .random(createSequenceRandom([0.5, 0.5, 0.6, 0.5, 0.578125, 0.6]))
       .spiral(() => t => t === 0 ? [0, 0] : null),
     words
@@ -271,7 +374,8 @@ test("layout can rerun the same input words after sprite options change", () => 
   const words = [{ text: "huge-word", size: 1, padding: 0, rotate: 0 }];
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
-    .startBox([0, 0])
+    .size([0, 0])
+    .overflow(true)
       .maxDelta(4096)
       .random(() => 0.5);
 
@@ -296,7 +400,8 @@ test("layout detects collisions near the right edge for non-word-aligned widths"
   const { placedWords } = runLayout(
     new CloudLayout()
       .canvas(() => createRightEdgeCanvas())
-      .startBox([0, 0])
+      .size([0, 0])
+      .overflow(true)
       .random(() => 0.5)
       .spiral(() => t => t === 0 ? [234, 0] : null),
     words
@@ -315,7 +420,8 @@ test("layout can place words beyond the initial seeded position", () => {
   const { placedWords } = runLayout(
     new CloudLayout()
       .canvas(() => createRightEdgeCanvas())
-      .startBox([0, 0])
+      .size([0, 0])
+      .overflow(true)
       .random(() => 0.4)
       .spiral(() => t => {
         if (t === 0) return [0, 0];
@@ -327,6 +433,24 @@ test("layout can place words beyond the initial seeded position", () => {
 
   assert.equal(placedWords.length, 2);
   assert.ok(placedWords[1].x + placedWords[1].x1 > 32);
+});
+
+test("overflow false constrains placement to the layout size", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas())
+    .size([32, 32])
+    .overflow(false)
+    .random(() => 0.5)
+    .spiral(() => t => t === 0 ? [0, 0] : null);
+
+  const sprite = layout.getSprite("hello", {
+    font: "serif",
+    size: 20,
+    rotate: 0,
+    padding: 0
+  });
+
+  assert.equal(layout.place(sprite), null);
 });
 
 function createFakeCanvas() {

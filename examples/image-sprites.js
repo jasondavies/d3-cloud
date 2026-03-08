@@ -35,8 +35,7 @@ async function render() {
   displaySvg.replaceChildren();
 
   const layout = new CloudLayout()
-    .aspectRatio(width / height)
-    .startBox([width, height])
+    .size([width, height])
     .random(layoutRandom);
   const descriptors = createIconDescriptors(sizeRandom);
   const sprites = await createSprites(layout, descriptors);

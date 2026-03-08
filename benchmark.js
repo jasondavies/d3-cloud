@@ -9,20 +9,20 @@ const DEFAULT_BLOCK_SIZE = 512;
 const scenarios = {
   fit: {
     name: "fit",
-    description: "Moderate search radius with a wide start box around the origin.",
+    description: "Moderate search radius with a wide seeded size around the origin.",
     count: 220,
     seed: 11,
-    aspectRatio: 1024 / 768,
-    startBox: [512, 384],
+    size: [512, 384],
+    overflow: true,
     maxDelta: 1280
   },
   overflow: {
     name: "overflow",
-    description: "Larger search radius where the layout expands well beyond the seeded area.",
+    description: "Larger search radius where the layout expands well beyond the seeded size.",
     count: 320,
     seed: 29,
-    aspectRatio: 1,
-    startBox: [512, 512],
+    size: [512, 512],
+    overflow: true,
     maxDelta: 4096
   }
 };
@@ -40,8 +40,8 @@ function benchmarkScenario(scenario, runs) {
   console.log(`\nScenario: ${scenario.name}`);
   console.log(`${scenario.description}`);
   console.log(
-    `aspectRatio=${scenario.aspectRatio ?? 1} ` +
-    `startBox=${formatPair(scenario.startBox ?? [256, 256])} ` +
+    `size=${formatPair(scenario.size ?? [256, 256])} ` +
+    `overflow=${scenario.overflow ?? true} ` +
     `maxDelta=${scenario.maxDelta ?? "default"} ` +
     `blockSize=${args.blockSize ?? DEFAULT_BLOCK_SIZE} ` +
     `words=${scenario.count} runs=${runs}`
@@ -76,8 +76,8 @@ function runLayout(scenario, words, seed) {
   const sortedWords = [...words].sort((a, b) => b.size - a.size);
   const layout = new CloudLayout()
     .canvas(() => createCanvas(1, 1))
-    .aspectRatio(scenario.aspectRatio ?? 1)
-    .startBox(scenario.startBox ?? [256, 256])
+    .size(scenario.size ?? [256, 256])
+    .overflow(scenario.overflow ?? true)
     .blockSize(args.blockSize ?? DEFAULT_BLOCK_SIZE)
     .random(createRandom(seed));
 

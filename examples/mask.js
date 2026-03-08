@@ -1,8 +1,10 @@
 import CloudLayout from "../build/d3-cloud.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const width = 720;
-const height = 480;
+const width = 1024;
+const height = 1024;
+const HEART_PATH = "M512 903C475 873 350 759 232 640C140 548 90 470 90 384C90 256 184 162 313 162C394 162 466 204 512 276C558 204 630 162 711 162C840 162 934 256 934 384C934 470 884 548 792 640C674 759 549 873 512 903Z";
+const INVERTED_HEART_PATH = `M0 0H${width}V${height}H0Z ${HEART_PATH}`;
 const displaySvg = document.querySelector("[data-cloud]");
 const status = document.querySelector("[data-status]");
 const rerender = document.querySelector("[data-rerender]");
@@ -18,37 +20,64 @@ const wordSubjects = [
 const wordBank = wordQualifiers.flatMap(qualifier =>
   wordSubjects.map(subject => `${qualifier} ${subject}`)
 );
-let renderSeed = 0x243f6a88;
+let renderSeed = 0x51a6d97b;
 
 displaySvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
 displaySvg.setAttribute("viewBox", `${-width / 2} ${-height / 2} ${width} ${height}`);
 
-rerender.addEventListener("click", render);
-render();
+rerender.addEventListener("click", () => {
+  void render();
+});
 
-function render() {
+void render();
+
+async function render() {
   renderSeed = (renderSeed * 1664525 + 1013904223) >>> 0;
   const sizeRandom = createRandom(renderSeed ^ 0x9e3779b9);
   const rotateRandom = createRandom(renderSeed ^ 0x85ebca6b);
   const layoutRandom = createRandom(renderSeed);
 
-  status.textContent = "Placing words...";
+  status.textContent = "Loading mask...";
   displaySvg.replaceChildren();
 
-  const layout = new CloudLayout()
-    .size([width, height])
-    .random(layoutRandom);
+  try {
+    const maskImage = await loadMaskImage();
+    const layout = new CloudLayout()
+      .size([width, height])
+      .overflow(false)
+      .random(layoutRandom);
 
-  const sprites = createSprites(layout, createWords(sizeRandom), rotateRandom);
-  const placedWords = layout.placeAll(sprites);
-  draw(placedWords, layout.bounds() || measureBounds(placedWords));
+    const maskPlacement = placeMask(layout, maskImage);
+    const sprites = createSprites(layout, createWords(sizeRandom), rotateRandom);
+    const placedWords = layout.placeAll(sprites);
+    draw(placedWords, measureBounds(maskPlacement, placedWords));
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function placeMask(layout, maskImage) {
+  const maskSprite = layout.getSprite(maskImage, {
+    width,
+    height
+  });
+
+  if (!maskSprite) {
+    throw new Error("Mask image could not be rasterized.");
+  }
+
+  const maskPlacement = layout.place(maskSprite, { x: 0, y: 0 });
+  if (!maskPlacement) {
+    throw new Error("Mask image could not be placed.");
+  }
+  return maskPlacement;
 }
 
 function createWords(random) {
   return wordBank
     .map(text => ({
       text,
-      size: 18 + Math.floor(random() * 72)
+      size: 1 + Math.floor(random() * 72)
     }))
     .sort((a, b) => b.size - a.size);
 }
@@ -59,14 +88,14 @@ function createSprites(layout, words, rotateRandom) {
       ...word,
       index,
       font: "Impact",
-      padding: 0,
+      padding: 1,
       rotate: rotateRandom() < 0.18 ? 90 : 0
     }))
     .filter(Boolean);
 }
 
 function draw(words, bounds) {
-  const extent = bounds || measureBounds(words);
+  const extent = bounds;
   const padding = 28;
   const extentWidth = Math.max(1, extent[1].x - extent[0].x);
   const extentHeight = Math.max(1, extent[1].y - extent[0].y);
@@ -91,7 +120,24 @@ function draw(words, bounds) {
 
   displaySvg.setAttribute("viewBox", `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
   displaySvg.replaceChildren(fragment);
-  status.textContent = `Placed ${words.length} words · extent ${Math.round(extentWidth)} × ${Math.round(extentHeight)}`;
+  status.textContent = `Placed ${words.length} words around the mask · extent ${Math.round(extentWidth)} × ${Math.round(extentHeight)}`;
+}
+
+function loadMaskImage() {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Failed to load SVG mask."));
+    image.src = createMaskDataUrl();
+  });
+}
+
+function createMaskDataUrl() {
+  const markup = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <path d="${INVERTED_HEART_PATH}" fill="#000000" fill-rule="evenodd" />
+</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
 }
 
 function pickColor(word) {
@@ -110,8 +156,10 @@ function createRandom(seed) {
   };
 }
 
-function measureBounds(words) {
-  if (!words.length) {
+function measureBounds(maskPlacement, words) {
+  const placed = maskPlacement ? [maskPlacement, ...words] : words;
+
+  if (!placed.length) {
     return [{ x: 0, y: 0 }, { x: 1, y: 1 }];
   }
 
@@ -120,7 +168,20 @@ function measureBounds(words) {
   let x1 = -Infinity;
   let y1 = -Infinity;
 
-  for (const word of words) {
+  for (const word of placed) {
+    if (word.imageWidth || word.imageHeight) {
+      const drawWidth = word.imageWidth || word.width;
+      const drawHeight = word.imageHeight || word.height;
+      const left = word.x - drawWidth / 2;
+      const top = word.y - drawHeight / 2;
+      const right = left + drawWidth;
+      const bottom = top + drawHeight;
+      if (left < x0) x0 = left;
+      if (top < y0) y0 = top;
+      if (right > x1) x1 = right;
+      if (bottom > y1) y1 = bottom;
+      continue;
+    }
     if (word.x + word.x0 < x0) x0 = word.x + word.x0;
     if (word.y + word.y0 < y0) y0 = word.y + word.y0;
     if (word.x + word.x1 > x1) x1 = word.x + word.x1;

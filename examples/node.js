@@ -8,8 +8,7 @@ const words = ["Hello", "world", "normally", "you", "want", "more", "words", "th
     .sort((a, b) => b.size - a.size);
 
 const layout = new CloudLayout().canvas(() => createCanvas(1, 1))
-    .aspectRatio(960 / 500)
-    .startBox([960, 500]);
+    .size([960, 500]);
 
 const sprites = words
   .map((word, index) => layout.getSprite(word.text, {
