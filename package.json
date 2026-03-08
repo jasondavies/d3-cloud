@@ -41,7 +41,7 @@
   },
   "scripts": {
     "build": "esbuild src/index.js --bundle --format=esm --platform=browser --target=es2015 --outfile=build/d3-cloud.js",
-    "check:examples": "node --check examples/index.js && node --check examples/frequencies.js && node --check examples/image-sprites.js && node --check examples/mask.js && node --check examples/node.js && node --check examples/font-loading.js && node --check examples/worker.js && node --check examples/worker-layout.js && node --check benchmark.js",
+    "check:examples": "node --check examples/index.js && node --check examples/frequencies.js && node --check examples/live-update.js && node --check examples/image-sprites.js && node --check examples/mask.js && node --check examples/node.js && node --check examples/font-loading.js && node --check examples/worker.js && node --check examples/worker-layout.js && node --check benchmark.js",
     "check:package": "npm test && npm run check:examples && npm pack --dry-run --cache .npm-cache",
     "pretest": "npm run build",
     "test": "node --test"
