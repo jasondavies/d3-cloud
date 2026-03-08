@@ -92,7 +92,7 @@ conservative.
 Erases a previously placed `CloudSprite` from the layout.
 
 Pass the original `CloudSprite` instance that was given to `place()`, not the
-plain placed-word snapshot returned by `place()`. This call is unchecked: pass
+plain placed sprite snapshot returned by `place()`. This call is unchecked: pass
 only the same sprite instance that was actually placed and has not already been
 removed. This low-level operation does not shrink `bounds()` unless the layout
 becomes completely empty.
@@ -102,7 +102,7 @@ becomes completely empty.
 Attempts to place a single prepared `CloudSprite` immediately and returns the
 placed sprite snapshot, or `null` if it could not be placed.
 
-The returned object is a plain placed-word snapshot. Internal raster fields
+The returned object is a plain placed sprite snapshot. Internal raster fields
 such as `sprite`, `spriteWidth`, and `hasPixels` are omitted, while custom
 metadata from `getSprite(..., options)` is preserved.
 
@@ -123,7 +123,7 @@ Builds and returns a `CloudSprite` for the specified text or image-like source,
 or `null` if it could not be rasterized into the internal scratch canvas.
 
 The returned value is a prepared reusable `CloudSprite`, not the plain placed
-word snapshot returned by `place()`.
+sprite snapshot returned by `place()`.
 
 The optional *options* object may include `font`, `style`, `weight`, `rotate`,
 `size`, `padding`, and any additional fields you want to carry through to the
@@ -136,7 +136,7 @@ pixels are ignored automatically. For image sources, `options.width` and
 `options.height` may be used to resize the image before extraction; if only one
 dimension is provided, the other is derived from the source aspect ratio.
 
-Words that cannot be placed simply return `null`. To place multiple sprites,
+Sprites that cannot be placed simply return `null`. To place multiple sprites,
 call `place()` in your own loop.
 
 <a name="size" href="#size">#</a> <b>size</b>([<i>size</i>])

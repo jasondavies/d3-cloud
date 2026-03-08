@@ -88,7 +88,7 @@ export type CloudSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & 
   padding?: number;
 };
 
-export type PlacedWord<T extends SpriteMetadata = SpriteMetadata> = T & {
+export type PlacedSprite<T extends SpriteMetadata = SpriteMetadata> = T & {
   text: string;
   image: ImageLike | null;
   imageWidth: number | null;
@@ -173,7 +173,7 @@ declare class CloudLayout {
   getSprite<T extends SpriteMetadata = SpriteMetadata>(source: TextSource, options?: TextSpriteOptions<T>): CloudSprite<T> | null;
   getSprite<T extends SpriteMetadata = SpriteMetadata>(source: ImageLike, options?: ImageSpriteOptions<T>): CloudSprite<T> | null;
 
-  place<T extends SpriteMetadata = SpriteMetadata>(sprite: CloudSprite<T>, options?: PlaceOptions): PlacedWord<T> | null;
+  place<T extends SpriteMetadata = SpriteMetadata>(sprite: CloudSprite<T>, options?: PlaceOptions): PlacedSprite<T> | null;
 }
 
 export default CloudLayout;
