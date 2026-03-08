@@ -20,7 +20,7 @@ export default class CloudLayout {
     this._canvasFactory = defaultCanvasFactory;
     this._spriteContext = null;
     this._bounds = null;
-    this._blocks = createSparseBlocks(this._blockSize);
+    this._blocks = createOccupancyBlocks(this._blockSize);
   }
 
   canvas(_) {
@@ -37,7 +37,7 @@ export default class CloudLayout {
 
   clear() {
     this._bounds = null;
-    this._blocks = createSparseBlocks(this._blockSize);
+    this._blocks = createOccupancyBlocks(this._blockSize);
     return this;
   }
 
@@ -86,7 +86,7 @@ export default class CloudLayout {
       throw new Error("Cannot change blockSize after placement; call clear() first");
     }
     this._blockSize = nextBlockSize;
-    this._blocks = createSparseBlocks(this._blockSize);
+    this._blocks = createOccupancyBlocks(this._blockSize);
     return this;
   }
 
@@ -136,13 +136,13 @@ export default class CloudLayout {
     if (!sprite.hasPixels) {
       return null;
     }
-    if (!placeSprite(this._blocks, sprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
+    if (!tryPlaceSprite(this._blocks, sprite, this._bounds, strategy, this._size, this._overflow, this._random, this._maxDelta)) {
       return null;
     }
 
     extendBounds(this, sprite);
 
-    return outputWord(sprite);
+    return snapshotPlacedSprite(sprite);
   }
 
   _getContext() {
@@ -176,7 +176,7 @@ function createCloudSprite(source, options) {
   throw new TypeError("getSprite() expects text or an image-like source");
 }
 
-function placeSprite(blocks, sprite, bounds, strategy, size, overflow, random, maxDelta) {
+function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random, maxDelta) {
   var startX = sprite.x,
       startY = sprite.y,
       deltaLimit = resolveMaxDelta(sprite, bounds, maxDelta, size, overflow),
@@ -229,7 +229,7 @@ function placeSprite(blocks, sprite, bounds, strategy, size, overflow, random, m
   return false;
 }
 
-function createSparseBlocks(cellSize) {
+function createOccupancyBlocks(cellSize) {
   const blocks = new Map();
   const blockSize = normalizeBlockSize(cellSize);
   const blockWords = blockSize >>> 5;
@@ -504,14 +504,14 @@ function resolveMaxDelta(sprite, bounds, maxDelta, size, overflow) {
   return Math.max(256, wordExtent * 4, boundsExtent * 2, sizeExtent);
 }
 
-function outputWord(d) {
+function snapshotPlacedSprite(d) {
   const { hasPixels, sprite, spriteWidth, ...word } = d;
   return word;
 }
 
 function extendBounds(layout, sprite) {
   if (layout._bounds) {
-    cloudBounds(layout._bounds, sprite);
+    expandBounds(layout._bounds, sprite);
   } else {
     layout._bounds = [
       { x: sprite.x + sprite.x0, y: sprite.y + sprite.y0 },
@@ -530,7 +530,7 @@ function cloneBounds(bounds) {
   ];
 }
 
-function cloudBounds(bounds, d) {
+function expandBounds(bounds, d) {
   var b0 = bounds[0],
       b1 = bounds[1];
   if (d.x + d.x0 < b0.x) b0.x = d.x + d.x0;
