@@ -6,8 +6,9 @@ const words = ["Hello", "world", "normally", "you", "want", "more", "words", "th
       return {text: d, size: 10 + Math.random() * 90};
     });
 
-cloud().size([960, 500])
-    .canvas(() => createCanvas(1, 1))
+cloud().canvas(() => createCanvas(1, 1))
+    .aspectRatio(960 / 500)
+    .startBox([960, 500])
     .words(words)
     .padding(5)
     .rotate(() => Math.floor(Math.random() * 2) * 90)

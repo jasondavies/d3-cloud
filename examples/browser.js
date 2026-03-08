@@ -1,9 +1,9 @@
 import cloud from "../build/d3-cloud.js";
 
+const SVG_NS = "http://www.w3.org/2000/svg";
 const width = 720;
 const height = 480;
-const displayCanvas = document.querySelector("[data-cloud]");
-const displayContext = displayCanvas.getContext("2d");
+const displaySvg = document.querySelector("[data-cloud]");
 const status = document.querySelector("[data-status]");
 const rerender = document.querySelector("[data-rerender]");
 const wordBank = [
@@ -16,9 +16,10 @@ const wordBank = [
 let currentLayout = null;
 let renderSeed = 0x243f6a88;
 
-configureDisplayCanvas();
+displaySvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+displaySvg.setAttribute("viewBox", `${-width / 2} ${-height / 2} ${width} ${height}`);
+
 rerender.addEventListener("click", render);
-window.addEventListener("resize", configureDisplayCanvas);
 render();
 
 function render() {
@@ -27,25 +28,26 @@ function render() {
   const layoutRandom = createRandom(renderSeed);
 
   status.textContent = "Placing words...";
-  clearDisplay();
+  displaySvg.replaceChildren();
 
   if (currentLayout) {
     currentLayout.stop();
   }
 
   const layout = cloud()
-    .size([width, height])
+    .aspectRatio(width / height)
+    .startBox([width, height])
     .words(createWords(sizeRandom))
     .padding(0)
     .rotate(() => (layoutRandom() < 0.18 ? 90 : 0))
     .font("Impact")
     .fontSize(d => d.size)
     .random(layoutRandom)
-    .on("end", words => {
+    .on("end", (words, bounds) => {
       if (layout !== currentLayout) {
         return;
       }
-      draw(words);
+      draw(words, bounds || measureBounds(words));
     });
 
   currentLayout = layout;
@@ -59,43 +61,38 @@ function createWords(random) {
   }));
 }
 
-function draw(words) {
-  clearDisplay();
-  displayContext.save();
-  displayContext.translate(width / 2, height / 2);
-  displayContext.textAlign = "center";
-  displayContext.textBaseline = "alphabetic";
+function draw(words, bounds) {
+  const extent = bounds || measureBounds(words);
+  const padding = 28;
+  const extentWidth = Math.max(1, extent[1].x - extent[0].x);
+  const extentHeight = Math.max(1, extent[1].y - extent[0].y);
+  const viewBoxX = extent[0].x - padding;
+  const viewBoxY = extent[0].y - padding;
+  const viewBoxWidth = extentWidth + padding * 2;
+  const viewBoxHeight = extentHeight + padding * 2;
+  const fragment = document.createDocumentFragment();
+
   for (const word of words) {
-    displayContext.save();
-    displayContext.translate(word.x, word.y);
-    displayContext.rotate((word.rotate * Math.PI) / 180);
-    displayContext.font = formatWordFont(word);
-    displayContext.fillStyle = pickColor(word);
-    displayContext.fillText(word.text, 0, 0);
-    displayContext.restore();
+    const textNode = document.createElementNS(SVG_NS, "text");
+    textNode.setAttribute("transform", `translate(${word.x} ${word.y}) rotate(${word.rotate})`);
+    textNode.setAttribute("text-anchor", "middle");
+    textNode.setAttribute("font-family", word.font);
+    textNode.setAttribute("font-size", `${word.size + 1}px`);
+    textNode.setAttribute("font-style", word.style);
+    textNode.setAttribute("font-weight", word.weight);
+    textNode.setAttribute("fill", pickColor(word));
+    textNode.textContent = word.text;
+    fragment.append(textNode);
   }
-  displayContext.restore();
-  status.textContent = `Placed ${words.length} words`;
+
+  displaySvg.setAttribute("viewBox", `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
+  displaySvg.replaceChildren(fragment);
+  status.textContent = `Placed ${words.length} words · extent ${Math.round(extentWidth)} × ${Math.round(extentHeight)}`;
 }
 
 function pickColor(word) {
   const palette = ["#111111", "#8c2f39", "#1d4e89", "#8f5b00", "#2f6b3b"];
   return palette[word.text.length % palette.length];
-}
-
-function configureDisplayCanvas() {
-  const dpr = window.devicePixelRatio || 1;
-  displayCanvas.width = Math.round(width * dpr);
-  displayCanvas.height = Math.round(height * dpr);
-  displayCanvas.style.aspectRatio = `${width} / ${height}`;
-  displayContext.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
-function clearDisplay() {
-  displayContext.save();
-  displayContext.setTransform(1, 0, 0, 1, 0, 0);
-  displayContext.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
-  displayContext.restore();
 }
 
 function createRandom(seed) {
@@ -109,6 +106,22 @@ function createRandom(seed) {
   };
 }
 
-function formatWordFont(word) {
-  return `${word.style} ${word.weight} ${word.size + 1}px ${word.font}`;
+function measureBounds(words) {
+  if (!words.length) {
+    return [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+  }
+
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+
+  for (const word of words) {
+    if (word.x + word.x0 < x0) x0 = word.x + word.x0;
+    if (word.y + word.y0 < y0) y0 = word.y + word.y0;
+    if (word.x + word.x1 > x1) x1 = word.x + word.x1;
+    if (word.y + word.y1 > y1) y1 = word.y + word.y1;
+  }
+
+  return [{ x: x0, y: y0 }, { x: x1, y: y1 }];
 }

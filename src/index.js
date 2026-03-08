@@ -14,12 +14,13 @@ const cw = (1 << 11) >>> 5;
 const ch = 1 << 11;
 
 export default function() {
-  var size = [256, 256],
-      text = cloudText,
+  var text = cloudText,
       font = cloudFont,
       fontSize = cloudFontSize,
       fontStyle = cloudFontNormal,
       fontWeight = cloudFontNormal,
+      aspectRatio = 1,
+      startBox = [256, 256],
       padding = cloudPadding,
       spiral = archimedeanSpiral,
       words = [],
@@ -28,6 +29,8 @@ export default function() {
       timer = null,
       random = Math.random,
       rotate = () => (~~(random() * 6) - 3) * 30,
+      blockSize = 512,
+      maxDelta = null,
       activeWords = null,
       cloud = {},
       canvas = cloudCanvas;
@@ -40,8 +43,7 @@ export default function() {
     cloud.stop();
 
     var contextAndRatio = getContext(canvas()),
-        boardWidth = boardWidthWords(size[0]),
-        board = zeroArray(boardWidth * size[1]),
+        blockState = createSparseBlocks(blockSize),
         bounds = null,
         n = words.length,
         i = -1,
@@ -69,22 +71,23 @@ export default function() {
       var start = Date.now();
       while (Date.now() - start < timeInterval && ++i < n && timer) {
         var d = data[i];
-        d.x = (size[0] * (random() + .5)) >> 1;
-        d.y = (size[1] * (random() + .5)) >> 1;
+        d.x = seedCoordinate(startBox[0], random);
+        d.y = seedCoordinate(startBox[1], random);
         cloudSprite(contextAndRatio, d, data, i);
-        if (d.hasText && place(board, boardWidth, d, bounds)) {
+        if (d.hasText && place(blockState, d, bounds)) {
           tags.push(d);
-          event.call("word", cloud, d);
           if (bounds) cloudBounds(bounds, d);
           else bounds = [{x: d.x + d.x0, y: d.y + d.y0}, {x: d.x + d.x1, y: d.y + d.y1}];
-          // Temporary hack
-          d.x -= size[0] >> 1;
-          d.y -= size[1] >> 1;
+          event.call("word", cloud, outputWord(d));
         }
       }
       if (i >= n) {
+        var outputTags = tags.map(function(tag) {
+              return outputWord(tag);
+            }),
+            finalBounds = cloneBounds(bounds);
         cloud.stop();
-        event.call("end", cloud, tags, bounds);
+        event.call("end", cloud, outputTags, finalBounds);
       }
     }
   }
@@ -124,12 +127,11 @@ export default function() {
     };
   }
 
-  function place(board, boardWidth, tag, bounds) {
-    var perimeter = [{x: 0, y: 0}, {x: size[0], y: size[1]}],
-        startX = tag.x,
+  function place(state, tag, bounds) {
+    var startX = tag.x,
         startY = tag.y,
-        maxDelta = Math.sqrt(size[0] * size[0] + size[1] * size[1]),
-        s = spiral(size),
+        deltaLimit = resolveMaxDelta(tag, bounds, maxDelta),
+        s = spiral(aspectRatio),
         dt = random() < .5 ? 1 : -1,
         t = -dt,
         dxdy,
@@ -140,32 +142,15 @@ export default function() {
       dx = ~~dxdy[0];
       dy = ~~dxdy[1];
 
-      if (Math.min(Math.abs(dx), Math.abs(dy)) >= maxDelta) break;
+      if (Math.min(Math.abs(dx), Math.abs(dy)) >= deltaLimit) break;
 
       tag.x = startX + dx;
       tag.y = startY + dy;
 
-      if (tag.x + tag.x0 < 0 || tag.y + tag.y0 < 0 ||
-          tag.x + tag.x1 > size[0] || tag.y + tag.y1 > size[1]) continue;
       // TODO only check for collisions within current bounds.
       if (!bounds || collideRects(tag, bounds)) {
-        if (!cloudCollide(tag, board, boardWidth)) {
-          var sprite = tag.sprite,
-              w = tag.width >>> 5,
-              sw = boardWidth,
-              lx = tag.x - (w << 4),
-              sx = lx & 0x7f,
-              msx = 32 - sx,
-              h = tag.y1 - tag.y0,
-              x = (tag.y + tag.y0) * sw + (lx >>> 5),
-              last;
-          for (var j = 0; j < h; j++) {
-            last = 0;
-            for (var i = 0; i <= w; i++) {
-              board[x + i] |= (last << msx) | (i < w ? (last = sprite[j * w + i]) >>> sx : 0);
-            }
-            x += sw;
-          }
+        if (!state.collides(tag)) {
+          state.insert(tag);
           return true;
         }
       }
@@ -181,10 +166,6 @@ export default function() {
     return arguments.length ? (words = _, cloud) : words;
   };
 
-  cloud.size = function(_) {
-    return arguments.length ? (size = [+_[0], +_[1]], cloud) : size;
-  };
-
   cloud.font = function(_) {
     return arguments.length ? (font = functor(_), cloud) : font;
   };
@@ -195,6 +176,14 @@ export default function() {
 
   cloud.fontWeight = function(_) {
     return arguments.length ? (fontWeight = functor(_), cloud) : fontWeight;
+  };
+
+  cloud.aspectRatio = function(_) {
+    return arguments.length ? (aspectRatio = normalizeAspectRatio(_), cloud) : aspectRatio;
+  };
+
+  cloud.startBox = function(_) {
+    return arguments.length ? (startBox = normalizeStartBox(_), cloud) : startBox.slice();
   };
 
   cloud.rotate = function(_) {
@@ -219,6 +208,14 @@ export default function() {
 
   cloud.random = function(_) {
     return arguments.length ? (random = _, cloud) : random;
+  };
+
+  cloud.blockSize = function(_) {
+    return arguments.length ? (blockSize = normalizeBlockSize(_), cloud) : blockSize;
+  };
+
+  cloud.maxDelta = function(_) {
+    return arguments.length ? (maxDelta = _ == null ? null : +_, cloud) : maxDelta;
   };
 
   cloud.on = function() {
@@ -358,25 +355,208 @@ function cloudSprite(contextAndRatio, d, data, di) {
   }
 }
 
-// Use mask-based collision detection.
-function cloudCollide(tag, board, sw) {
-  var sprite = tag.sprite,
-      w = tag.width >>> 5,
-      lx = tag.x - (w << 4),
-      sx = lx & 0x7f,
-      msx = 32 - sx,
-      h = tag.y1 - tag.y0,
-      x = (tag.y + tag.y0) * sw + (lx >>> 5),
-      last;
-  for (var j = 0; j < h; j++) {
-    last = 0;
-    for (var i = 0; i <= w; i++) {
-      if (((last << msx) | (i < w ? (last = sprite[j * w + i]) >>> sx : 0))
-          & board[x + i]) return true;
+function createSparseBlocks(cellSize) {
+  const blocks = new Map();
+  const blockSize = normalizeBlockSize(cellSize);
+  const blockWords = blockSize >>> 5;
+
+  return {
+    collides(tag) {
+      var left = tag.x + tag.x0,
+          top = tag.y + tag.y0,
+          right = tag.x + tag.x1,
+          bottom = tag.y + tag.y1,
+          range = getRangeForBounds(left, top, right, bottom, blockSize);
+
+      for (var blockY = range.y0; blockY <= range.y1; blockY++) {
+        var blockTop = blockY * blockSize,
+            overlapTop = Math.max(top, blockTop),
+            overlapBottom = Math.min(bottom, blockTop + blockSize);
+        for (var blockX = range.x0; blockX <= range.x1; blockX++) {
+          var block = blocks.get(blockKey(blockX, blockY));
+          if (!block) continue;
+          var blockLeft = blockX * blockSize,
+              overlapLeft = Math.max(left, blockLeft),
+              overlapRight = Math.min(right, blockLeft + blockSize);
+          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
+          if (packedRegionCollides(
+            tag.sprite,
+            tag.width >>> 5,
+            left,
+            top,
+            block,
+            blockWords,
+            blockLeft,
+            blockTop,
+            overlapLeft,
+            overlapTop,
+            overlapRight,
+            overlapBottom
+          )) {
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+    insert(tag) {
+      var left = tag.x + tag.x0,
+          top = tag.y + tag.y0,
+          right = tag.x + tag.x1,
+          bottom = tag.y + tag.y1,
+          range = getRangeForBounds(left, top, right, bottom, blockSize);
+
+      for (var blockY = range.y0; blockY <= range.y1; blockY++) {
+        var blockTop = blockY * blockSize,
+            overlapTop = Math.max(top, blockTop),
+            overlapBottom = Math.min(bottom, blockTop + blockSize);
+        for (var blockX = range.x0; blockX <= range.x1; blockX++) {
+          var blockLeft = blockX * blockSize,
+              overlapLeft = Math.max(left, blockLeft),
+              overlapRight = Math.min(right, blockLeft + blockSize);
+          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
+          var key = blockKey(blockX, blockY),
+              block = blocks.get(key);
+          if (!block) {
+            block = new Uint32Array(blockWords * blockSize);
+            blocks.set(key, block);
+          }
+          stampPackedRegion(
+            tag.sprite,
+            tag.width >>> 5,
+            left,
+            top,
+            block,
+            blockWords,
+            blockLeft,
+            blockTop,
+            overlapLeft,
+            overlapTop,
+            overlapRight,
+            overlapBottom
+          );
+        }
+      }
     }
-    x += sw;
+  };
+}
+
+function packedRegionCollides(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, bTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
+  var rows = overlapBottom - overlapTop,
+      words = (overlapRight - overlapLeft + 31) >>> 5,
+      aStartBit = overlapLeft - aLeft,
+      bStartBit = overlapLeft - bLeft,
+      aStartRow = overlapTop - aTop,
+      bStartRow = overlapTop - bTop,
+      trailing = (overlapRight - overlapLeft) & 31,
+      lastMask = trailing ? (~0 << (32 - trailing)) >>> 0 : 0xffffffff;
+
+  for (var row = 0; row < rows; row++) {
+    var aRowOffset = (aStartRow + row) * aWidth,
+        bRowOffset = (bStartRow + row) * bWidth;
+    for (var word = 0; word < words; word++) {
+      var mask = word === words - 1 ? lastMask : 0xffffffff,
+          aWord = readPackedWord(aData, aRowOffset, aWidth, aStartBit + (word << 5)),
+          bWord = readPackedWord(bData, bRowOffset, bWidth, bStartBit + (word << 5));
+      if ((aWord & bWord & mask) !== 0) {
+        return true;
+      }
+    }
   }
+
   return false;
+}
+
+function stampPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targetData, targetWidth, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
+  var rows = overlapBottom - overlapTop,
+      words = (overlapRight - overlapLeft + 31) >>> 5,
+      sourceStartBit = overlapLeft - sourceLeft,
+      targetStartBit = overlapLeft - targetLeft,
+      sourceStartRow = overlapTop - sourceTop,
+      targetStartRow = overlapTop - targetTop,
+      trailing = (overlapRight - overlapLeft) & 31,
+      lastMask = trailing ? (~0 << (32 - trailing)) >>> 0 : 0xffffffff;
+
+  for (var row = 0; row < rows; row++) {
+    var sourceRowOffset = (sourceStartRow + row) * sourceWidth,
+        targetRowOffset = (targetStartRow + row) * targetWidth;
+    for (var word = 0; word < words; word++) {
+      var mask = word === words - 1 ? lastMask : 0xffffffff,
+          sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWidth, sourceStartBit + (word << 5)) & mask;
+      orPackedWord(targetData, targetRowOffset, targetWidth, targetStartBit + (word << 5), sourceWord);
+    }
+  }
+}
+
+function readPackedWord(sprite, rowOffset, rowWidth, bitIndex) {
+  var wordIndex = bitIndex >>> 5,
+      bitOffset = bitIndex & 31,
+      current = wordIndex < rowWidth ? sprite[rowOffset + wordIndex] : 0;
+
+  if (!bitOffset) {
+    return current;
+  }
+
+  var next = wordIndex + 1 < rowWidth ? sprite[rowOffset + wordIndex + 1] : 0;
+  return ((current << bitOffset) | (next >>> (32 - bitOffset))) >>> 0;
+}
+
+function orPackedWord(target, rowOffset, rowWidth, bitIndex, value) {
+  var wordIndex = bitIndex >>> 5,
+      bitOffset = bitIndex & 31;
+
+  if (!bitOffset) {
+    target[rowOffset + wordIndex] |= value;
+    return;
+  }
+
+  target[rowOffset + wordIndex] |= value >>> bitOffset;
+  if (wordIndex + 1 < rowWidth) {
+    target[rowOffset + wordIndex + 1] |= (value << (32 - bitOffset)) >>> 0;
+  }
+}
+
+function getRangeForBounds(left, top, right, bottom, cellSize) {
+  right -= 1;
+  bottom -= 1;
+  return {
+    x0: Math.floor(left / cellSize),
+    y0: Math.floor(top / cellSize),
+    x1: Math.floor(right / cellSize),
+    y1: Math.floor(bottom / cellSize)
+  };
+}
+
+function blockKey(x, y) {
+  return x + "," + y;
+}
+
+function resolveMaxDelta(tag, bounds, maxDelta) {
+  if (maxDelta != null) {
+    return maxDelta;
+  }
+  var wordExtent = Math.max(tag.width || 0, tag.height || 0),
+      boundsExtent = bounds
+        ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y)
+        : 0;
+  return Math.max(256, wordExtent * 4, boundsExtent * 2);
+}
+
+function outputWord(d) {
+  return {
+    ...d,
+    sprite: undefined
+  };
+}
+
+function cloneBounds(bounds) {
+  if (!bounds) {
+    return bounds;
+  }
+  return [
+    { x: bounds[0].x, y: bounds[0].y },
+    { x: bounds[1].x, y: bounds[1].y }
+  ];
 }
 
 function cloudBounds(bounds, d) {
@@ -392,16 +572,17 @@ function collideRects(a, b) {
   return a.x + a.x1 > b[0].x && a.x + a.x0 < b[1].x && a.y + a.y1 > b[0].y && a.y + a.y0 < b[1].y;
 }
 
-function archimedeanSpiral(size) {
-  var e = size[0] / size[1];
+function archimedeanSpiral(aspectRatio) {
+  var e = normalizeAspectRatio(aspectRatio);
   return function(t) {
-    return [e * (t *= .1) * Math.cos(t), t * Math.sin(t)];
+    t *= .1;
+    return [e * t * Math.cos(t), t * Math.sin(t)];
   };
 }
 
-function rectangularSpiral(size) {
+function rectangularSpiral(aspectRatio) {
   var dy = 4,
-      dx = dy * size[0] / size[1],
+      dx = dy * normalizeAspectRatio(aspectRatio),
       x = 0,
       y = 0;
   return function(t) {
@@ -417,17 +598,41 @@ function rectangularSpiral(size) {
   };
 }
 
-// TODO reuse arrays?
-function zeroArray(n) {
-  return new Uint32Array(n);
-}
-
-function boardWidthWords(width) {
-  return (width + 31) >>> 5;
-}
-
 function cloudCanvas() {
   return document.createElement("canvas");
+}
+
+function normalizeAspectRatio(value) {
+  value = +value;
+  return value > 0 && Number.isFinite(value) ? value : 1;
+}
+
+function normalizeBlockSize(value) {
+  value = +value;
+  value = value > 0 && Number.isFinite(value) ? Math.max(1, value | 0) : 512;
+  return ((value + 31) >>> 5) << 5;
+}
+
+function normalizeStartBox(value) {
+  if (!Array.isArray(value)) {
+    value = [value, value];
+  }
+  return [
+    normalizeStartBoxSize(value[0]),
+    normalizeStartBoxSize(value[1])
+  ];
+}
+
+function normalizeStartBoxSize(value) {
+  value = +value;
+  return value > 0 && Number.isFinite(value) ? value : 0;
+}
+
+function seedCoordinate(size, random) {
+  if (!(size > 0)) {
+    return 0;
+  }
+  return Math.floor((random() - 0.5) * size);
 }
 
 function functor(d) {

@@ -13,8 +13,8 @@ demonstration along with implementation details.
 
 See the samples in `examples/`.
 
-For a browser-loadable example, run `npm run build`, serve the repository root
-with any static file server, and open `examples/`.
+For a browser-loadable SVG example, run `npm run build`, serve the repository
+root with any static file server, and open `examples/`.
 
 This package is ESM-only.
 
@@ -26,6 +26,11 @@ import cloud from "d3-cloud";
 
 Run `npm run build` to generate the browser bundle at `build/d3-cloud.js`,
 which exports the layout as an ESM module for browser use.
+
+Placement uses sparse packed occupancy blocks for collision checks, so the
+final cloud may extend arbitrarily far if the search limit allows it. Use
+`startBox()` to jitter initial placements around the origin and
+`aspectRatio()` to bias the built-in spirals toward wider or taller clouds.
 
 ## API Reference
 
@@ -50,10 +55,11 @@ word objects that were successfully placed, and a *bounds* object of the form
 <a name="start" href="#start">#</a> <b>start</b>()
 
 Starts the layout algorithm. It derives internal layout objects from the input
-words and attempts to place each word, starting with the largest word.
-Starting with the centre of the rectangular area, each word is tested for
-collisions with all previously-placed words.  If a collision is found, it tries
-to place the word in a new position along the spiral.
+words and attempts to place each word, starting with the largest word. Each
+word starts from a random point inside the configured `startBox()`, centered on
+the origin, and is then tested for collisions with previously-placed words. If
+a collision is found, it tries to place the word in a new position along the
+spiral.
 
 The configured input word objects are not mutated. Event listeners receive the
 derived layout objects for successfully placed words.
@@ -78,11 +84,6 @@ maximum time interval, which defaults to `Infinity`.
 If specified, sets the **words** array.  If not specified, returns the current
 words array, which defaults to `[]`.
 
-<a name="size" href="#size">#</a> <b>size</b>([<i>size</i>])
-
-If specified, sets the rectangular `[width, height]` of the layout.  If not
-specified, returns the current size, which defaults to `[256, 256]`.
-
 <a name="font" href="#font">#</a> <b>font</b>([<i>font</i>])
 
 If specified, sets the **font** accessor function, which indicates the font
@@ -103,6 +104,19 @@ If specified, sets the **fontWeight** accessor function, which indicates the
 font weight for each word.  If not specified, returns the current fontWeight
 accessor function, which defaults to `"normal"`.
 A constant may be specified instead of a function.
+
+<a name="aspectRatio" href="#aspectRatio">#</a> <b>aspectRatio</b>([<i>ratio</i>])
+
+If specified, sets the aspect ratio used by the built-in `"archimedean"` and
+`"rectangular"` spirals. If not specified, returns the current aspect ratio,
+which defaults to `1`.
+
+<a name="startBox" href="#startBox">#</a> <b>startBox</b>([<i>box</i>])
+
+If specified, sets the centered seed box used for initial word positions before
+spiral placement. The value should be `[width, height]`. If not specified,
+returns the current seed box, which defaults to `[256, 256]`. Use `[0, 0]` to
+start every word exactly at the origin.
 
 <a name="fontSize" href="#fontSize">#</a> <b>fontSize</b>([<i>fontSize</i>])
 
@@ -147,8 +161,7 @@ can either be one of the two built-in spirals, "archimedean" and "rectangular",
 or an arbitrary spiral generator can be used, of the following form:
 
 ```js
-// size is the [width, height] array specified in cloud.size
-function(size) {
+function(aspectRatio) {
   // t indicates the current step along the spiral; it may monotonically
   // increase or decrease indicating clockwise or counterclockwise motion.
   return function(t) { return [x, y]; };
@@ -167,11 +180,25 @@ padding, which defaults to 1.
 <a name="random" href="#random">#</a> <b>random</b>([<i>random</i>])
 
 If specified, sets the internal random number generator, used for selecting the
-initial position of each word, and the clockwise/counterclockwise direction of
-the spiral for each word.  This should return a number in the range `[0, 1)`.
+initial position of each word inside `startBox()`, and the
+clockwise/counterclockwise direction of the spiral for each word. This should
+return a number in the range `[0, 1)`.
 
 If not specified, returns the current random number generator, which defaults
 to `Math.random`.
+
+<a name="blockSize" href="#blockSize">#</a> <b>blockSize</b>([<i>size</i>])
+
+If specified, sets the sparse block size used during placement. Block sizes
+are rounded up to the next multiple of 32 pixels so they align with the
+packed sprite representation. If not specified, returns the current size,
+which defaults to `512`.
+
+<a name="maxDelta" href="#maxDelta">#</a> <b>maxDelta</b>([<i>distance</i>])
+
+If specified, sets the maximum spiral delta used while searching for a
+placement. If not specified, returns the current limit. By default, this grows
+with the current word and the extent of the words already placed.
 
 <a name="canvas" href="#canvas">#</a> <b>canvas</b>([<i>canvas</i>])
 
