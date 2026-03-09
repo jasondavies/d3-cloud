@@ -95,6 +95,10 @@ function normalizeNumber(value) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function ceilToRatio(value, ratio) {
+  return Math.max(1, Math.ceil(value / ratio) * ratio);
+}
+
 function resetSprite(sprite) {
   sprite.hasPixels = false;
   sprite.width = 0;
@@ -144,19 +148,23 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     const heightCosine = height * cosine;
     const heightSine = height * sine;
     width = (Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine)) + 0x1f) >>> 5 << 5;
-    height = Math.trunc(Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine)));
+    height = Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine));
   } else {
     width = (width + 0x1f) >>> 5 << 5;
   }
 
-  if (width > pixelWidth || height > SCRATCH_HEIGHT) {
+  const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * ratio * 2));
+  const rasterWidth = ceilToRatio(width, ratio);
+  const rasterHeight = ceilToRatio(height + overscan * 2, ratio);
+
+  if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
     context.restore();
     contextAndRatio.clearWidth = 0;
     contextAndRatio.clearHeight = 0;
     return sprite;
   }
 
-  context.translate((width >> 1) / ratio, (height >> 1) / ratio);
+  context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
   if (sprite.rotate) {
     context.rotate(sprite.rotate * RADIANS);
   }
@@ -167,56 +175,43 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   }
   context.restore();
 
-  contextAndRatio.clearWidth = width;
-  contextAndRatio.clearHeight = height;
-  sprite.width = width;
-  sprite.height = height;
-  sprite.spriteWidth = width;
-  sprite.x1 = width >> 1;
-  sprite.y1 = height >> 1;
-  sprite.x0 = -sprite.x1;
-  sprite.y0 = -sprite.y1;
-  sprite.trimWidth = width;
-  sprite.hasPixels = true;
+  contextAndRatio.clearWidth = rasterWidth;
+  contextAndRatio.clearHeight = rasterHeight;
 
-  const pixels = context.getImageData(0, 0, width / ratio, height / ratio).data;
-  const scratch = contextAndRatio.sprite;
-  const wordsPerRow = width >>> 5;
-  let spriteHeight = sprite.y1 - sprite.y0;
-  scratch.fill(0, 0, spriteHeight * wordsPerRow);
+  const pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
+  const alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
 
-  let seen = 0;
-  let seenRow = -1;
-  let topOffset = 0;
-
-  for (let row = 0; row < spriteHeight; row += 1) {
-    for (let column = 0; column < width; column += 1) {
-      const wordIndex = wordsPerRow * row + (column >>> 5);
-      const bit = pixels[(((topOffset + row) * width + column) << 2) + 3] ? 1 << (31 - (column & 31)) : 0;
-      scratch[wordIndex] |= bit;
-      seen |= bit;
-    }
-    if (seen) {
-      seenRow = row;
-    } else {
-      sprite.y0 += 1;
-      spriteHeight -= 1;
-      row -= 1;
-      topOffset += 1;
-    }
-  }
-
-  if (seenRow < 0) {
-    sprite.hasPixels = false;
+  if (!alphaBounds) {
     return sprite;
   }
 
-  sprite.trimY = sprite.y0 + (height >> 1);
-  sprite.y1 = sprite.y0 + seenRow;
-  sprite.trimHeight = sprite.y1 - sprite.y0;
-  const spriteLength = (sprite.y1 - sprite.y0) * wordsPerRow;
-  sprite.sprite = new Uint32Array(spriteLength);
-  sprite.sprite.set(scratch.subarray(0, spriteLength));
+  const wordsPerRow = rasterWidth >>> 5;
+  const originY = -(rasterHeight >> 1);
+
+  sprite.width = rasterWidth;
+  sprite.height = alphaBounds.height;
+  sprite.spriteWidth = rasterWidth;
+  sprite.trimX = alphaBounds.x0;
+  sprite.trimY = alphaBounds.y0;
+  sprite.trimWidth = alphaBounds.width;
+  sprite.trimHeight = alphaBounds.height;
+  sprite.x0 = -(rasterWidth >> 1);
+  sprite.y0 = originY + alphaBounds.y0;
+  sprite.x1 = sprite.x0 + rasterWidth;
+  sprite.y1 = sprite.y0 + sprite.height;
+  sprite.hasPixels = true;
+  sprite.sprite = new Uint32Array(wordsPerRow * sprite.height);
+
+  for (let row = 0; row < sprite.height; row += 1) {
+    const sourceRow = alphaBounds.y0 + row;
+    const rowOffset = row * wordsPerRow;
+    for (let column = 0; column < rasterWidth; column += 1) {
+      if (pixels[((sourceRow * rasterWidth + column) << 2) + 3]) {
+        sprite.sprite[rowOffset + (column >>> 5)] |= 1 << (31 - (column & 31));
+      }
+    }
+  }
+
   return sprite;
 }
 

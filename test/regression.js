@@ -10,6 +10,9 @@ import CloudLayout, {
 } from "../src/index.js";
 
 const require = createRequire(import.meta.url);
+const NODE_CANVAS_OVERLAP_FILL_STYLE = "rgba(255, 255, 255, 0.125)";
+const NODE_CANVAS_OVERLAP_SEEDS = Array.from({ length: 16 }, (_value, index) => index + 1);
+const NODE_CANVAS_ROTATIONS = [-90, 0, 90];
 
 test("package exports resolve to the layout class in ESM", async () => {
   const {
@@ -468,6 +471,53 @@ test("default placement produces a collision-free layout", () => {
   assertCollisionFree(placedWords);
 });
 
+test("node-canvas rendering stays overlap-free across seeded layouts", (t) => {
+  const nodeCanvas = loadNodeCanvas();
+  if (!nodeCanvas) {
+    t.skip("optional canvas module is not installed");
+    return;
+  }
+  if (!nodeCanvasSupportsBinaryText(nodeCanvas.createCanvas)) {
+    t.skip("canvas build does not expose antialias control");
+    return;
+  }
+
+  const words = createNodeCanvasStressWords(256);
+  const maxSingleWordAlpha = measureNodeCanvasSingleWordAlpha(nodeCanvas.createCanvas, words);
+
+  assert.ok(maxSingleWordAlpha > 0);
+
+  for (const seed of NODE_CANVAS_OVERLAP_SEEDS) {
+    const { placedWords, bounds } = runLayout(
+      new CloudLayout()
+        .canvas(() => createNodeCanvasLayoutCanvas(nodeCanvas.createCanvas))
+        .size([1024, 768])
+        .overflow(true)
+        .random(createSeededRandom(seed)),
+      words
+    );
+
+    assert.equal(
+      placedWords.length,
+      words.length,
+      `seed ${seed} placed ${placedWords.length} of ${words.length} words`
+    );
+
+    const overlap = detectNodeCanvasOverlap(
+      nodeCanvas.createCanvas,
+      placedWords,
+      bounds,
+      maxSingleWordAlpha
+    );
+
+    assert.equal(
+      overlap.count,
+      0,
+      `seed ${seed} rendered ${overlap.count} overlapping pixels (alpha ${overlap.maxAlpha} > ${maxSingleWordAlpha}) at ${overlap.x},${overlap.y}`
+    );
+  }
+});
+
 test("block size changes do not affect deterministic placement", () => {
   const words = [
     { text: "alpha", size: 28 },
@@ -918,6 +968,200 @@ function createFakeImage(width, height, opaquePixels) {
     naturalHeight: height,
     data
   };
+}
+
+function loadNodeCanvas() {
+  try {
+    return require("canvas");
+  } catch (error) {
+    if (error && error.code === "MODULE_NOT_FOUND") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function createNodeCanvasStressWords(count) {
+  const syllables = [
+    "al", "be", "cor", "di", "el", "fi", "gan", "hel",
+    "io", "jun", "kel", "lin", "mor", "nor", "or", "pra"
+  ];
+  const random = createSeededRandom(0x5eedc0de);
+
+  return Array.from({ length: count }, (_value, index) => {
+    const parts = 2 + Math.floor(random() * 4);
+    let text = "w";
+
+    for (let part = 0; part < parts; part += 1) {
+      text += syllables[Math.floor(random() * syllables.length)];
+    }
+
+    text += `-${index.toString(36).padStart(3, "0")}`;
+
+    return {
+      text,
+      font: "serif",
+      style: "normal",
+      weight: "normal",
+      size: 10 + Math.floor(random() * 46),
+      rotate: NODE_CANVAS_ROTATIONS[Math.floor(random() * NODE_CANVAS_ROTATIONS.length)],
+      padding: 0
+    };
+  }).sort((a, b) => b.size - a.size || a.text.localeCompare(b.text));
+}
+
+function createNodeCanvasLayoutCanvas(createCanvas) {
+  const canvas = createCanvas(1, 1);
+  let context = null;
+
+  return {
+    get width() {
+      return canvas.width;
+    },
+    set width(value) {
+      canvas.width = value;
+      if (context) {
+        configureNodeCanvasTextContext(context);
+      }
+    },
+    get height() {
+      return canvas.height;
+    },
+    set height(value) {
+      canvas.height = value;
+      if (context) {
+        configureNodeCanvasTextContext(context);
+      }
+    },
+    getContext(type, options) {
+      context = canvas.getContext(type, options);
+      configureNodeCanvasTextContext(context);
+      return context;
+    }
+  };
+}
+
+function configureNodeCanvasTextContext(context) {
+  if ("antialias" in context) {
+    context.antialias = "none";
+  }
+  if ("textDrawingMode" in context) {
+    context.textDrawingMode = "path";
+  }
+}
+
+function nodeCanvasSupportsBinaryText(createCanvas) {
+  const context = createCanvas(1, 1).getContext("2d");
+  return "antialias" in context;
+}
+
+function measureNodeCanvasSingleWordAlpha(createCanvas, words) {
+  let maxAlpha = 0;
+
+  for (const word of words) {
+    const canvas = createCanvas(1, 1);
+    let context = canvas.getContext("2d");
+    configureNodeCanvasTextContext(context);
+    context.font = getNodeCanvasWordFont(word);
+
+    const width = Math.max(1, Math.ceil(context.measureText(word.text).width + (word.size + 1) * 2 + 8));
+    const height = Math.max(1, Math.ceil((word.size + 1) * 2 + 8));
+
+    canvas.width = width;
+    canvas.height = height;
+    context = canvas.getContext("2d");
+    configureNodeCanvasTextContext(context);
+    context.fillStyle = NODE_CANVAS_OVERLAP_FILL_STYLE;
+    context.strokeStyle = NODE_CANVAS_OVERLAP_FILL_STYLE;
+    context.globalCompositeOperation = "source-over";
+    renderNodeCanvasWord(context, word, width / 2, height / 2);
+
+    maxAlpha = Math.max(maxAlpha, getMaxAlpha(context.getImageData(0, 0, width, height).data));
+  }
+
+  return maxAlpha;
+}
+
+function detectNodeCanvasOverlap(createCanvas, words, bounds, singleWordAlphaLimit) {
+  const margin = 8;
+  const width = Math.max(1, Math.ceil(bounds[1].x - bounds[0].x + margin * 2));
+  const height = Math.max(1, Math.ceil(bounds[1].y - bounds[0].y + margin * 2));
+  const offsetX = margin - bounds[0].x;
+  const offsetY = margin - bounds[0].y;
+  const canvas = createCanvas(width, height);
+  const context = canvas.getContext("2d");
+
+  configureNodeCanvasTextContext(context);
+  context.fillStyle = NODE_CANVAS_OVERLAP_FILL_STYLE;
+  context.strokeStyle = NODE_CANVAS_OVERLAP_FILL_STYLE;
+  context.globalCompositeOperation = "lighter";
+
+  for (const word of words) {
+    renderNodeCanvasWord(context, word, word.x + offsetX, word.y + offsetY);
+  }
+
+  return summarizeNodeCanvasOverlap(
+    context.getImageData(0, 0, width, height).data,
+    width,
+    singleWordAlphaLimit
+  );
+}
+
+function renderNodeCanvasWord(context, word, x, y) {
+  context.save();
+  context.font = getNodeCanvasWordFont(word);
+  context.textBaseline = "middle";
+  context.translate(x, y);
+
+  if (word.rotate) {
+    context.rotate(word.rotate * Math.PI / 180);
+  }
+
+  const anchor = -Math.floor(context.measureText(word.text).width / 2);
+
+  context.fillText(word.text, anchor, 0);
+  if (word.padding) {
+    context.lineWidth = 2 * word.padding;
+    context.strokeText(word.text, anchor, 0);
+  }
+  context.restore();
+}
+
+function getNodeCanvasWordFont(word) {
+  return `${word.style ?? "normal"} ${word.weight ?? "normal"} ${Math.trunc(word.size + 1)}px ${word.font ?? "serif"}`;
+}
+
+function summarizeNodeCanvasOverlap(data, width, alphaLimit) {
+  let count = 0;
+  let maxAlpha = 0;
+  let x = -1;
+  let y = -1;
+
+  for (let index = 3; index < data.length; index += 4) {
+    const alpha = data[index];
+
+    if (alpha > alphaLimit) {
+      if (x < 0) {
+        const pixelIndex = (index - 3) >> 2;
+        x = pixelIndex % width;
+        y = Math.floor(pixelIndex / width);
+      }
+      count += 1;
+      maxAlpha = Math.max(maxAlpha, alpha);
+    }
+  }
+
+  return { count, maxAlpha, x, y };
+}
+
+function getMaxAlpha(data) {
+  let maxAlpha = 0;
+
+  for (let index = 3; index < data.length; index += 4) {
+    maxAlpha = Math.max(maxAlpha, data[index]);
+  }
+
+  return maxAlpha;
 }
 
 function createSeededRandom(seed) {
