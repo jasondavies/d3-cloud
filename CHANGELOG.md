@@ -38,6 +38,9 @@ release was `v1.2.9`.
 
 - Optimized sprite extraction to use partial canvas readback and `Uint32Array`
   mask storage.
+- Documented the rendering anchor contract: placed `x` and `y` coordinates are
+  sprite centers, with text centered horizontally and vertically via a middle
+  anchor / middle baseline.
 - Fixed layout state reuse between runs and corrected right-edge occupancy for
   non-word-aligned widths.
 - Removed `maxDelta()` and now always derives the placement search limit from

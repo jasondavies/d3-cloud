@@ -67,6 +67,36 @@ By default, `overflow(true)` allows placement to extend beyond the centered
 controlled by the caller; in most cases you will want to place larger words
 first.
 
+Placed `x` and `y` coordinates always mark the sprite center. Text uses a
+centered horizontal anchor together with a middle vertical baseline.
+
+## Rendering Placed Words
+
+Render text from the placed center with a middle/middle anchor:
+
+```js
+context.save();
+context.font = `${word.style} ${word.weight} ${Math.ceil(word.size)}px ${word.font}`;
+context.textAlign = "center";
+context.textBaseline = "middle";
+context.translate(word.x, word.y);
+context.rotate(word.rotate * Math.PI / 180);
+context.fillText(word.text, 0, 0);
+context.restore();
+```
+
+For SVG, the matching anchor is:
+
+```html
+<text
+  x="..."
+  y="..."
+  text-anchor="middle"
+  dominant-baseline="middle"
+  transform="rotate(...)"
+>word</text>
+```
+
 ## Using With React
 
 See `examples/react/README.md` for a minimal Vite + React sample that runs the
@@ -138,8 +168,9 @@ If specified, `options.strategy` overrides the layout-level default strategy
 for this placement only.
 
 For both text and image sprites, the returned `x` and `y` coordinates mark the
-sprite center. When rendering text in SVG, use `text-anchor="middle"` together
-with `dominant-baseline="middle"` to match the layout coordinates.
+sprite center. Text should be rendered with a centered horizontal anchor and a
+middle vertical baseline. In SVG, use `text-anchor="middle"` together with
+`dominant-baseline="middle"` to match the layout coordinates.
 
 <a name="getsprite" href="#getsprite">#</a> <b>getSprite</b>(<i>source</i>[, <i>options</i>])
 
