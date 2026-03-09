@@ -136,7 +136,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   context.textBaseline = "middle";
 
   const metrics = context.measureText(sprite.text);
-  const anchor = -Math.floor(metrics.width / 2);
+  const anchor = -metrics.width / 2;
   let width = (metrics.width + 1) * ratio;
   let height = sprite.size << 1;
 
