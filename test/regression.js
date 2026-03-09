@@ -555,6 +555,42 @@ test("node-canvas rendered text keeps padded words from touching in seeded seed-
   );
 });
 
+test("node-canvas rendered text keeps padded words from touching in seeded seed-20 five-orientation layout", (t) => {
+  const nodeCanvas = loadNodeCanvas();
+  if (!nodeCanvas) {
+    t.skip("optional canvas module is not installed");
+    return;
+  }
+  if (!nodeCanvasSupportsBinaryText(nodeCanvas.createCanvas)) {
+    t.skip("canvas build does not expose antialias control");
+    return;
+  }
+
+  const words = createNodeCanvasSeed20TouchWords();
+  const { placedWords, bounds } = runLayout(
+    new CloudLayout()
+      .canvas(() => createNodeCanvasLayoutCanvas(nodeCanvas.createCanvas))
+      .size([960, 600])
+      .overflow(true)
+      .random(createBrowserSeededRandom(20)),
+    words
+  );
+
+  assert.equal(
+    placedWords.length,
+    words.length,
+    `seed 20 placed ${placedWords.length} of ${words.length} words`
+  );
+
+  const collision = detectNodeCanvasTouch(nodeCanvas.createCanvas, placedWords, bounds);
+
+  assert.equal(
+    collision,
+    null,
+    collision && `seed 20 rendered a ${collision.kind} between ${collision.a} and ${collision.b} at ${collision.x},${collision.y}`
+  );
+});
+
 test("block size changes do not affect deterministic placement", () => {
   const words = [
     { text: "alpha", size: 28 },
@@ -1048,20 +1084,93 @@ function createNodeCanvasStressWords(count) {
 }
 
 function createNodeCanvasTouchWords() {
-  return [
-    { text: "layout", font: "sans-serif", style: "normal", weight: "normal", size: 64.18539921951661, rotate: 0, padding: 1 },
-    { text: "algorithm", font: "sans-serif", style: "normal", weight: "normal", size: 64.18539921951661, rotate: 0, padding: 1 },
-    { text: "area", font: "sans-serif", style: "normal", weight: "normal", size: 64.18539921951661, rotate: 0, padding: 1 },
-    { text: "without", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
-    { text: "step", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
-    { text: "bounding", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
-    { text: "retrieve", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
-    { text: "operation", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
-    { text: "collision", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
-    { text: "candidate", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
-    { text: "separately", font: "sans-serif", style: "normal", weight: "normal", size: 37.092699609758306, rotate: 0, padding: 1 },
-    { text: "expensive", font: "sans-serif", style: "normal", weight: "normal", size: 37.092699609758306, rotate: 0, padding: 1 }
-  ];
+  return createNodeCanvasTouchFixture([
+    ["layout", 64.18539921951661, 0],
+    ["algorithm", 64.18539921951661, 0],
+    ["area", 64.18539921951661, 0],
+    ["without", 52.940912924769606, 0],
+    ["step", 52.940912924769606, 0],
+    ["bounding", 52.940912924769606, 0],
+    ["retrieve", 52.940912924769606, 0],
+    ["operation", 52.940912924769606, 0],
+    ["collision", 52.940912924769606, 0],
+    ["candidate", 52.940912924769606, 0],
+    ["separately", 37.092699609758306, 0],
+    ["expensive", 37.092699609758306, 0]
+  ]);
+}
+
+function createNodeCanvasSeed20TouchWords() {
+  return createNodeCanvasTouchFixture([
+    ["word", 100, 0],
+    ["words", 91.27809882927491, 0],
+    ["sprite", 86.0588236012831, 90],
+    ["placed", 72.90730039024169, 45],
+    ["layout", 64.18539921951661, -45],
+    ["algorithm", 64.18539921951661, 45],
+    ["area", 64.18539921951661, 0],
+    ["without", 52.940912924769606, 45],
+    ["step", 52.940912924769606, -45],
+    ["bounding", 52.940912924769606, 90],
+    ["retrieve", 52.940912924769606, -90],
+    ["operation", 52.940912924769606, 90],
+    ["time", 37.092699609758306, -90],
+    ["possible", 37.092699609758306, -45],
+    ["even", 37.092699609758306, -90],
+    ["simple", 37.092699609758306, 0],
+    ["starting", 37.092699609758306, 45],
+    ["previously", 37.092699609758306, 0],
+    ["move", 37.092699609758306, -45],
+    ["perform", 37.092699609758306, 90],
+    ["hierarchical", 37.092699609758306, 45],
+    ["draw", 37.092699609758306, -45],
+    ["pixel", 37.092699609758306, -90],
+    ["data", 37.092699609758306, 45],
+    ["separately", 37.092699609758306, 0],
+    ["expensive", 37.092699609758306, 45],
+    ["pixels", 37.092699609758306, 90],
+    ["masks", 37.092699609758306, 45],
+    ["implementation", 37.092699609758306, 90],
+    ["detection", 37.092699609758306, 0],
+    ["source", 10, -90],
+    ["license", 10, 45],
+    ["d3cloud", 10, -45],
+    ["Note", 10, -90],
+    ["code", 10, 90],
+    ["converting", 10, 0],
+    ["text", 10, -90],
+    ["rendering", 10, -90],
+    ["final", 10, 45],
+    ["output", 10, 0],
+    ["configurable", 10, -45],
+    ["size", 10, 45],
+    ["makes", 10, 90],
+    ["animate", 10, -90],
+    ["stuttering", 10, -45],
+    ["recommended", 10, 90],
+    ["always", 10, 45],
+    ["use", 10, -90],
+    ["animations", 10, 45],
+    ["prevents", 10, 90],
+    ["hard", 10, -90],
+    ["part", 10, -45],
+    ["making", 10, 0],
+    ["efficiently", 10, -90],
+    ["According", 10, 90],
+    ["Jonathan", 10, 0]
+  ]);
+}
+
+function createNodeCanvasTouchFixture(specs) {
+  return specs.map(([text, size, rotate]) => ({
+    text,
+    font: "sans-serif",
+    style: "normal",
+    weight: "normal",
+    size,
+    rotate,
+    padding: 1
+  }));
 }
 
 function createNodeCanvasLayoutCanvas(createCanvas) {
@@ -1258,7 +1367,7 @@ function renderNodeCanvasFilledWord(context, word, x, y) {
     context.rotate(word.rotate * Math.PI / 180);
   }
 
-  const anchor = -Math.floor(context.measureText(word.text).width / 2);
+  const anchor = -context.measureText(word.text).width / 2;
 
   context.fillText(word.text, anchor, 0);
   context.restore();
