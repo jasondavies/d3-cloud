@@ -134,7 +134,7 @@ test("layout can build a reusable CloudSprite", () => {
   assert.ok(sprite.height > 0);
 });
 
-test("layout rasterizes text with a middle baseline", () => {
+test("layout rasterizes text with alphabetic baseline", () => {
   let seenBaseline = null;
   const layout = new CloudLayout()
     .canvas(() => createBaselineCanvas(value => {
@@ -149,7 +149,7 @@ test("layout rasterizes text with a middle baseline", () => {
   });
 
   assert.ok(sprite instanceof CloudSprite);
-  assert.equal(seenBaseline, "middle");
+  assert.equal(seenBaseline, "alphabetic");
 });
 
 test("layout can build a CloudSprite from image alpha", () => {
@@ -1346,7 +1346,6 @@ function renderNodeCanvasRenderedFilledWord(context, word, x, y) {
   context.save();
   context.font = getNodeCanvasRenderedWordFont(word);
   context.textAlign = "center";
-  context.textBaseline = "middle";
   context.translate(x, y);
 
   if (word.rotate) {
@@ -1360,7 +1359,6 @@ function renderNodeCanvasRenderedFilledWord(context, word, x, y) {
 function renderNodeCanvasFilledWord(context, word, x, y) {
   context.save();
   context.font = getNodeCanvasWordFont(word);
-  context.textBaseline = "middle";
   context.translate(x, y);
 
   if (word.rotate) {
