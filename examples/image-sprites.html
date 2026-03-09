@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>d3-cloud Image Sprite Example</title>
+    <link rel="stylesheet" href="./shared.css">
+    <style>
+      :root {
+        --ink: #111111;
+        --paper: #eef3f1;
+        --panel: rgba(255, 255, 255, 0.86);
+        --accent: #155e63;
+        --accent-soft: rgba(21, 94, 99, 0.12);
+        --body-background:
+          radial-gradient(circle at top left, rgba(21, 94, 99, 0.18), transparent 34%),
+          radial-gradient(circle at bottom right, rgba(226, 120, 80, 0.18), transparent 28%),
+          linear-gradient(160deg, #f7fbfa 0%, var(--paper) 42%, #dfe9e5 100%);
+        --frame-border: rgba(17, 17, 17, 0.1);
+        --frame-shadow: rgba(24, 43, 38, 0.14);
+        --button-text: #f4fffd;
+        --button-background: linear-gradient(135deg, #155e63, #2e7b72);
+        --button-shadow: rgba(21, 94, 99, 0.2);
+        --link-background: rgba(255, 255, 255, 0.75);
+        --link-shadow: inset 0 0 0 1px rgba(21, 94, 99, 0.16);
+        --canvas-background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(247, 251, 249, 0.92)),
+          radial-gradient(circle at center, rgba(21, 94, 99, 0.06), transparent 60%);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="frame">
+        <div class="masthead">
+          <div>
+            <h1>Image Sprite Example</h1>
+            <p>
+              This page generates icon images on the fly, converts them to
+              <code>CloudSprite</code> instances with <code>getSprite(image)</code>,
+              and renders the placed result back into SVG, including a giant
+              outline-only star with a transparent center to show off the
+              placement mask.
+            </p>
+          </div>
+          <div class="controls">
+            <div class="actions">
+              <a href="./">Text Example</a>
+              <button type="button" data-rerender>Render Again</button>
+            </div>
+            <div class="status" data-status></div>
+          </div>
+        </div>
+        <div class="canvas">
+          <svg data-cloud viewBox="-360 -240 720 480" aria-label="Example image sprite cloud"></svg>
+        </div>
+        <div class="note">
+          Serve the repo root with any static file server, then open
+          <code>/examples/image-sprites.html</code>.
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./image-sprites.js"></script>
+  </body>
+</html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>d3-cloud Mask Example</title>
+    <link rel="stylesheet" href="./shared.css">
+    <style>
+      :root {
+        --ink: #111111;
+        --paper: #f5efe2;
+        --panel: rgba(255, 252, 245, 0.86);
+        --accent: #8c2f39;
+        --accent-soft: rgba(140, 47, 57, 0.14);
+        --body-background:
+          radial-gradient(circle at top left, rgba(140, 47, 57, 0.18), transparent 32%),
+          radial-gradient(circle at bottom right, rgba(29, 78, 137, 0.14), transparent 26%),
+          linear-gradient(160deg, #f8f3e8 0%, var(--paper) 42%, #efe4cd 100%);
+        --frame-border: rgba(17, 17, 17, 0.12);
+        --frame-shadow: rgba(60, 41, 19, 0.12);
+        --button-text: #fffaf3;
+        --button-background: linear-gradient(135deg, #8c2f39, #c15436);
+        --button-shadow: rgba(140, 47, 57, 0.22);
+        --canvas-background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 249, 239, 0.9)),
+          repeating-linear-gradient(
+            0deg,
+            transparent 0,
+            transparent 31px,
+            rgba(17, 17, 17, 0.03) 31px,
+            rgba(17, 17, 17, 0.03) 32px
+          );
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="frame">
+        <div class="masthead">
+          <div>
+            <h1>Mask Example</h1>
+            <p>
+              This page generates an SVG heart mask, rasterizes it into the initial sprite at
+              <code>[0, 0]</code>, and then places the word cloud around that occupied shape.
+            </p>
+          </div>
+          <div class="controls">
+            <button type="button" data-rerender>Render Again</button>
+            <div class="status" data-status></div>
+          </div>
+        </div>
+        <div class="canvas">
+          <svg data-cloud viewBox="-360 -240 720 480" aria-label="Masked word cloud example"></svg>
+        </div>
+        <div class="note">
+          Serve the repo root with any static file server, then open <code>/examples/mask.html</code>.
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./mask.js"></script>
+  </body>
+</html>

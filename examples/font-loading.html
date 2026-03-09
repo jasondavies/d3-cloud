@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>d3-cloud Font Loading Example</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./shared.css">
+    <style>
+      :root {
+        --ink: #111111;
+        --paper: #f4efe8;
+        --panel: rgba(255, 253, 249, 0.88);
+        --accent: #8f5b00;
+        --accent-soft: rgba(143, 91, 0, 0.12);
+        --body-background:
+          radial-gradient(circle at top left, rgba(143, 91, 0, 0.18), transparent 32%),
+          radial-gradient(circle at bottom right, rgba(29, 78, 137, 0.14), transparent 28%),
+          linear-gradient(160deg, #fbf7ef 0%, var(--paper) 42%, #eee1c7 100%);
+        --frame-border: rgba(17, 17, 17, 0.1);
+        --frame-shadow: rgba(75, 52, 20, 0.14);
+        --button-text: #fffaf2;
+        --button-background: linear-gradient(135deg, #8f5b00, #c1831f);
+        --button-shadow: rgba(143, 91, 0, 0.2);
+        --link-background: rgba(255, 255, 255, 0.78);
+        --link-shadow: inset 0 0 0 1px rgba(143, 91, 0, 0.16);
+        --canvas-background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 249, 239, 0.92)),
+          radial-gradient(circle at center, rgba(143, 91, 0, 0.05), transparent 60%);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="frame">
+        <div class="masthead">
+          <div>
+            <h1>Font Loading Example</h1>
+            <p>
+              This example uses a Google font and waits for it to load before
+              calling <code>getSprite()</code>. That avoids the early-layout
+              collision mistakes described in issue
+              <a href="https://github.com/jasondavies/d3-cloud/issues/108">#108</a>.
+            </p>
+          </div>
+          <div class="controls">
+            <div class="actions">
+              <a href="./">Text Example</a>
+              <button type="button" data-rerender>Render Again</button>
+            </div>
+            <div class="status" data-status></div>
+          </div>
+        </div>
+        <div class="canvas">
+          <svg data-cloud viewBox="-360 -240 720 480" aria-label="Font loading example"></svg>
+        </div>
+        <div class="note">
+          The key step is to await <code>document.fonts.load('72px "Bungee"')</code>
+          and <code>document.fonts.ready</code> before preparing sprites.
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./font-loading.js"></script>
+  </body>
+</html>

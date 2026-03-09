@@ -1,17 +1,30 @@
-const { createCanvas } = require("canvas");
-const cloud = require("d3-cloud");
+import { createCanvas } from "canvas";
+import CloudLayout from "d3-cloud";
 
 const words = ["Hello", "world", "normally", "you", "want", "more", "words", "than", "this"]
     .map(function(d) {
       return {text: d, size: 10 + Math.random() * 90};
-    });
+    })
+    .sort((a, b) => b.size - a.size);
 
-cloud().size([960, 500])
-    .canvas(() => createCanvas(1, 1))
-    .words(words)
-    .padding(5)
-    .rotate(() => Math.floor(Math.random() * 2) * 90)
-    .font("Impact")
-    .fontSize(d => d.size)
-    .on("end", words => console.log(JSON.stringify(words)))
-    .start();
+const layout = new CloudLayout().canvas(() => createCanvas(1, 1))
+    .size([960, 500]);
+
+const sprites = words
+  .map(word => layout.getSprite(word.text, {
+    ...word,
+    font: "Impact",
+    padding: 5,
+    rotate: Math.floor(Math.random() * 2) * 90
+  }))
+  .filter(Boolean);
+const placedWords = [];
+
+for (const sprite of sprites) {
+  const word = layout.place(sprite);
+  if (word) {
+    placedWords.push(word);
+  }
+}
+
+console.log(JSON.stringify(placedWords));
