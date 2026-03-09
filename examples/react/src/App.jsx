@@ -64,7 +64,7 @@ export default function App() {
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fontFamily={word.font}
-                fontSize={`${word.size + 1}px`}
+                fontSize={`${Math.max(1, Math.ceil(word.size))}px`}
                 fontStyle={word.style}
                 fontWeight={word.weight}
                 fill={COLORS[index % COLORS.length]}

@@ -108,7 +108,7 @@ function draw(sprites, bounds) {
     textNode.setAttribute("text-anchor", "middle");
     textNode.setAttribute("dominant-baseline", "middle");
     textNode.setAttribute("font-family", sprite.font);
-    textNode.setAttribute("font-size", `${sprite.size + 1}px`);
+    textNode.setAttribute("font-size", `${Math.max(1, Math.ceil(sprite.size))}px`);
     textNode.setAttribute("font-style", sprite.style);
     textNode.setAttribute("font-weight", sprite.weight);
     textNode.setAttribute("fill", pickColor(sprite));

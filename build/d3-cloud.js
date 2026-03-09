@@ -157,7 +157,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   const ratio = contextAndRatio.ratio;
   const pixelWidth = contextAndRatio.pixelWidth;
   context.save();
-  context.font = `${sprite.style} ${sprite.weight} ${Math.trunc((sprite.size + 1) / ratio)}px ${sprite.font}`;
+  context.font = `${sprite.style} ${sprite.weight} ${Math.max(1, Math.ceil(sprite.size / ratio))}px ${sprite.font}`;
   context.textBaseline = "middle";
   const metrics = context.measureText(sprite.text);
   const anchor = -Math.floor(metrics.width / 2);

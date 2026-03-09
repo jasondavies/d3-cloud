@@ -151,7 +151,7 @@ function animateEntry(entry, target, onDone = undefined) {
       "transform",
       `translate(${entry.state.x} ${entry.state.y}) rotate(${entry.state.rotate})`
     );
-    entry.node.setAttribute("font-size", `${entry.state.size + 1}px`);
+    entry.node.setAttribute("font-size", `${Math.max(1, Math.ceil(entry.state.size))}px`);
     entry.node.style.opacity = String(entry.state.opacity);
 
     if (progress < 1) {
@@ -173,7 +173,7 @@ function applyNode(node, sprite, state) {
   node.setAttribute("font-weight", sprite.weight);
   node.setAttribute("fill", pickColor(sprite));
   node.setAttribute("transform", `translate(${state.x} ${state.y}) rotate(${state.rotate})`);
-  node.setAttribute("font-size", `${state.size + 1}px`);
+  node.setAttribute("font-size", `${Math.max(1, Math.ceil(state.size))}px`);
   node.style.opacity = String(state.opacity);
 }
 

@@ -12,6 +12,7 @@ import CloudLayout, {
 const require = createRequire(import.meta.url);
 const NODE_CANVAS_OVERLAP_FILL_STYLE = "rgba(255, 255, 255, 0.125)";
 const NODE_CANVAS_OVERLAP_SEEDS = Array.from({ length: 16 }, (_value, index) => index + 1);
+const NODE_CANVAS_TOUCH_ALPHA_THRESHOLD = 128;
 const NODE_CANVAS_ROTATIONS = [-90, 0, 90];
 
 test("package exports resolve to the layout class in ESM", async () => {
@@ -518,6 +519,42 @@ test("node-canvas rendering stays overlap-free across seeded layouts", (t) => {
   }
 });
 
+test("node-canvas rendered text keeps padded words from touching in seeded seed-523 layout", (t) => {
+  const nodeCanvas = loadNodeCanvas();
+  if (!nodeCanvas) {
+    t.skip("optional canvas module is not installed");
+    return;
+  }
+  if (!nodeCanvasSupportsBinaryText(nodeCanvas.createCanvas)) {
+    t.skip("canvas build does not expose antialias control");
+    return;
+  }
+
+  const words = createNodeCanvasTouchWords();
+  const { placedWords, bounds } = runLayout(
+    new CloudLayout()
+      .canvas(() => createNodeCanvasLayoutCanvas(nodeCanvas.createCanvas))
+      .size([960, 600])
+      .overflow(true)
+      .random(createBrowserSeededRandom(523)),
+    words
+  );
+
+  assert.equal(
+    placedWords.length,
+    words.length,
+    `seed 523 placed ${placedWords.length} of ${words.length} words`
+  );
+
+  const collision = detectNodeCanvasTouch(nodeCanvas.createCanvas, placedWords, bounds);
+
+  assert.equal(
+    collision,
+    null,
+    collision && `seed 523 rendered a ${collision.kind} between ${collision.a} and ${collision.b} at ${collision.x},${collision.y}`
+  );
+});
+
 test("block size changes do not affect deterministic placement", () => {
   const words = [
     { text: "alpha", size: 28 },
@@ -1010,6 +1047,23 @@ function createNodeCanvasStressWords(count) {
   }).sort((a, b) => b.size - a.size || a.text.localeCompare(b.text));
 }
 
+function createNodeCanvasTouchWords() {
+  return [
+    { text: "layout", font: "sans-serif", style: "normal", weight: "normal", size: 64.18539921951661, rotate: 0, padding: 1 },
+    { text: "algorithm", font: "sans-serif", style: "normal", weight: "normal", size: 64.18539921951661, rotate: 0, padding: 1 },
+    { text: "area", font: "sans-serif", style: "normal", weight: "normal", size: 64.18539921951661, rotate: 0, padding: 1 },
+    { text: "without", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
+    { text: "step", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
+    { text: "bounding", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
+    { text: "retrieve", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
+    { text: "operation", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
+    { text: "collision", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
+    { text: "candidate", font: "sans-serif", style: "normal", weight: "normal", size: 52.940912924769606, rotate: 0, padding: 1 },
+    { text: "separately", font: "sans-serif", style: "normal", weight: "normal", size: 37.092699609758306, rotate: 0, padding: 1 },
+    { text: "expensive", font: "sans-serif", style: "normal", weight: "normal", size: 37.092699609758306, rotate: 0, padding: 1 }
+  ];
+}
+
 function createNodeCanvasLayoutCanvas(createCanvas) {
   const canvas = createCanvas(1, 1);
   let context = null;
@@ -1064,8 +1118,8 @@ function measureNodeCanvasSingleWordAlpha(createCanvas, words) {
     configureNodeCanvasTextContext(context);
     context.font = getNodeCanvasWordFont(word);
 
-    const width = Math.max(1, Math.ceil(context.measureText(word.text).width + (word.size + 1) * 2 + 8));
-    const height = Math.max(1, Math.ceil((word.size + 1) * 2 + 8));
+    const width = Math.max(1, Math.ceil(context.measureText(word.text).width + Math.ceil(word.size) * 2 + 8));
+    const height = Math.max(1, Math.ceil(Math.ceil(word.size) * 2 + 8));
 
     canvas.width = width;
     canvas.height = height;
@@ -1074,7 +1128,7 @@ function measureNodeCanvasSingleWordAlpha(createCanvas, words) {
     context.fillStyle = NODE_CANVAS_OVERLAP_FILL_STYLE;
     context.strokeStyle = NODE_CANVAS_OVERLAP_FILL_STYLE;
     context.globalCompositeOperation = "source-over";
-    renderNodeCanvasWord(context, word, width / 2, height / 2);
+    renderNodeCanvasFilledWord(context, word, width / 2, height / 2);
 
     maxAlpha = Math.max(maxAlpha, getMaxAlpha(context.getImageData(0, 0, width, height).data));
   }
@@ -1097,7 +1151,7 @@ function detectNodeCanvasOverlap(createCanvas, words, bounds, singleWordAlphaLim
   context.globalCompositeOperation = "lighter";
 
   for (const word of words) {
-    renderNodeCanvasWord(context, word, word.x + offsetX, word.y + offsetY);
+    renderNodeCanvasFilledWord(context, word, word.x + offsetX, word.y + offsetY);
   }
 
   return summarizeNodeCanvasOverlap(
@@ -1107,7 +1161,94 @@ function detectNodeCanvasOverlap(createCanvas, words, bounds, singleWordAlphaLim
   );
 }
 
-function renderNodeCanvasWord(context, word, x, y) {
+function detectNodeCanvasTouch(createCanvas, words, bounds) {
+  const margin = 8;
+  const width = Math.max(1, Math.ceil(bounds[1].x - bounds[0].x + margin * 2));
+  const height = Math.max(1, Math.ceil(bounds[1].y - bounds[0].y + margin * 2));
+  const offsetX = margin - bounds[0].x;
+  const offsetY = margin - bounds[0].y;
+  const occupancy = new Int32Array(width * height).fill(-1);
+  const canvas = createCanvas(1, 1);
+  let context = canvas.getContext("2d");
+
+  for (let wordIndex = 0; wordIndex < words.length; wordIndex += 1) {
+    const word = words[wordIndex];
+    const left = Math.max(0, Math.floor(word.x + word.x0 + offsetX) - 2);
+    const top = Math.max(0, Math.floor(word.y + word.y0 + offsetY) - 2);
+    const right = Math.min(width, Math.ceil(word.x + word.x1 + offsetX) + 3);
+    const bottom = Math.min(height, Math.ceil(word.y + word.y1 + offsetY) + 3);
+    const wordWidth = Math.max(1, right - left);
+    const wordHeight = Math.max(1, bottom - top);
+
+    canvas.width = wordWidth;
+    canvas.height = wordHeight;
+    context = canvas.getContext("2d");
+
+    configureNodeCanvasTextContext(context);
+    context.clearRect(0, 0, wordWidth, wordHeight);
+    context.fillStyle = "rgba(255, 255, 255, 1)";
+    context.globalCompositeOperation = "source-over";
+    renderNodeCanvasRenderedFilledWord(context, word, word.x + offsetX - left, word.y + offsetY - top);
+
+    const data = context.getImageData(0, 0, wordWidth, wordHeight).data;
+
+    for (let y = 0; y < wordHeight; y += 1) {
+      for (let x = 0; x < wordWidth; x += 1) {
+        const alpha = data[((y * wordWidth + x) << 2) + 3];
+        if (alpha < NODE_CANVAS_TOUCH_ALPHA_THRESHOLD) {
+          continue;
+        }
+
+        const globalX = left + x;
+        const globalY = top + y;
+        const ownerIndex = globalY * width + globalX;
+        const owner = occupancy[ownerIndex];
+
+        if (owner >= 0 && owner !== wordIndex) {
+          return {
+            kind: "overlap",
+            a: words[owner].text,
+            b: word.text,
+            x: globalX,
+            y: globalY
+          };
+        }
+
+        const touchOwner = findNodeCanvasTouchOwner(occupancy, width, height, globalX, globalY, wordIndex);
+        if (touchOwner >= 0) {
+          return {
+            kind: "touch",
+            a: words[touchOwner].text,
+            b: word.text,
+            x: globalX,
+            y: globalY
+          };
+        }
+
+        occupancy[ownerIndex] = wordIndex;
+      }
+    }
+  }
+
+  return null;
+}
+
+function renderNodeCanvasRenderedFilledWord(context, word, x, y) {
+  context.save();
+  context.font = getNodeCanvasRenderedWordFont(word);
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.translate(x, y);
+
+  if (word.rotate) {
+    context.rotate(word.rotate * Math.PI / 180);
+  }
+
+  context.fillText(word.text, 0, 0);
+  context.restore();
+}
+
+function renderNodeCanvasFilledWord(context, word, x, y) {
   context.save();
   context.font = getNodeCanvasWordFont(word);
   context.textBaseline = "middle";
@@ -1120,15 +1261,15 @@ function renderNodeCanvasWord(context, word, x, y) {
   const anchor = -Math.floor(context.measureText(word.text).width / 2);
 
   context.fillText(word.text, anchor, 0);
-  if (word.padding) {
-    context.lineWidth = 2 * word.padding;
-    context.strokeText(word.text, anchor, 0);
-  }
   context.restore();
 }
 
 function getNodeCanvasWordFont(word) {
-  return `${word.style ?? "normal"} ${word.weight ?? "normal"} ${Math.trunc(word.size + 1)}px ${word.font ?? "serif"}`;
+  return `${word.style ?? "normal"} ${word.weight ?? "normal"} ${Math.max(1, Math.ceil(word.size))}px ${word.font ?? "serif"}`;
+}
+
+function getNodeCanvasRenderedWordFont(word) {
+  return `${word.style ?? "normal"} ${word.weight ?? "normal"} ${Math.max(1, Math.ceil(word.size))}px ${word.font ?? "serif"}`;
 }
 
 function summarizeNodeCanvasOverlap(data, width, alphaLimit) {
@@ -1154,6 +1295,31 @@ function summarizeNodeCanvasOverlap(data, width, alphaLimit) {
   return { count, maxAlpha, x, y };
 }
 
+function findNodeCanvasTouchOwner(owners, width, height, x, y, wordIndex) {
+  const neighborOffsets = [
+    [0, -1],
+    [-1, 0],
+    [1, 0],
+    [0, 1]
+  ];
+
+  for (const [dx, dy] of neighborOffsets) {
+    const neighborX = x + dx;
+    const neighborY = y + dy;
+
+    if (neighborX < 0 || neighborX >= width || neighborY < 0 || neighborY >= height) {
+      continue;
+    }
+
+    const owner = owners[neighborY * width + neighborX];
+    if (owner >= 0 && owner !== wordIndex) {
+      return owner;
+    }
+  }
+
+  return -1;
+}
+
 function getMaxAlpha(data) {
   let maxAlpha = 0;
 
@@ -1170,6 +1336,18 @@ function createSeededRandom(seed) {
   return function() {
     state = (state * 1664525 + 1013904223) >>> 0;
     return state / 0x100000000;
+  };
+}
+
+function createBrowserSeededRandom(seed) {
+  let state = seed >>> 0;
+
+  return function() {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
   };
 }
 
@@ -1211,7 +1389,7 @@ function fakeCanvasBoxesOverlap(a, b) {
 
 function getClippedFakeCanvasBox(word) {
   const inflate = word.padding ? word.padding * 2 : 0;
-  const fontPx = word.size + 1;
+  const fontPx = Math.ceil(word.size);
   const width = word.text.length * 10;
   const anchor = -Math.floor(width / 2);
   const spriteLeft = word.x + word.x0;

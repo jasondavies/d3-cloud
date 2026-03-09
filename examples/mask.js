@@ -123,7 +123,7 @@ function draw(words, bounds) {
     textNode.setAttribute("text-anchor", "middle");
     textNode.setAttribute("dominant-baseline", "middle");
     textNode.setAttribute("font-family", word.font);
-    textNode.setAttribute("font-size", `${word.size + 1}px`);
+    textNode.setAttribute("font-size", `${Math.max(1, Math.ceil(word.size))}px`);
     textNode.setAttribute("font-style", word.style);
     textNode.setAttribute("font-weight", word.weight);
     textNode.setAttribute("fill", pickColor(word));
