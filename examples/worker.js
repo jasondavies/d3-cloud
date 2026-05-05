@@ -77,7 +77,6 @@ function draw(sprites, bounds) {
     const textNode = document.createElementNS(SVG_NS, "text");
     textNode.setAttribute("transform", `translate(${sprite.x} ${sprite.y}) rotate(${sprite.rotate})`);
     textNode.setAttribute("text-anchor", "middle");
-    textNode.setAttribute("dominant-baseline", "middle");
     textNode.setAttribute("font-family", sprite.font);
     textNode.setAttribute("font-size", `${Math.max(1, Math.ceil(sprite.size))}px`);
     textNode.setAttribute("font-style", sprite.style);

@@ -62,7 +62,6 @@ export default function App() {
               <text
                 transform={`translate(${word.x} ${word.y}) rotate(${word.rotate})`}
                 textAnchor="middle"
-                dominantBaseline="middle"
                 fontFamily={word.font}
                 fontSize={`${Math.max(1, Math.ceil(word.size))}px`}
                 fontStyle={word.style}

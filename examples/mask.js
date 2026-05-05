@@ -121,7 +121,6 @@ function draw(words, bounds) {
     const textNode = document.createElementNS(SVG_NS, "text");
     textNode.setAttribute("transform", `translate(${word.x} ${word.y}) rotate(${word.rotate})`);
     textNode.setAttribute("text-anchor", "middle");
-    textNode.setAttribute("dominant-baseline", "middle");
     textNode.setAttribute("font-family", word.font);
     textNode.setAttribute("font-size", `${Math.max(1, Math.ceil(word.size))}px`);
     textNode.setAttribute("font-style", word.style);

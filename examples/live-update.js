@@ -109,7 +109,6 @@ function reconcile(placedSprites, bounds) {
       const node = document.createElementNS(SVG_NS, "text");
       node.classList.add("cloud-word");
       node.setAttribute("text-anchor", "middle");
-      node.setAttribute("dominant-baseline", "middle");
       node.textContent = sprite.text;
       displaySvg.append(node);
 

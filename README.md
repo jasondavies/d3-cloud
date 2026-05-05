@@ -18,6 +18,8 @@ root with any static file server, and open `examples/`.
 
 This package is ESM-only.
 
+See [RELEASING.md](./RELEASING.md) for the manual release checklist.
+
 ## Install
 
 ```sh
@@ -67,33 +69,29 @@ By default, `overflow(true)` allows placement to extend beyond the centered
 controlled by the caller; in most cases you will want to place larger words
 first.
 
-Placed `x` and `y` coordinates always mark the sprite center. Text uses a
-centered horizontal anchor together with a middle vertical baseline.
+Image sprites use `x` and `y` as the sprite center. For text, render from
+`word.x` and `word.y` directly and center the text horizontally.
 
 ## Rendering Placed Words
 
-Render text from the placed center with a middle/middle anchor:
+Render text from the placed position with a centered horizontal anchor:
 
 ```js
 context.save();
 context.font = `${word.style} ${word.weight} ${Math.ceil(word.size)}px ${word.font}`;
 context.textAlign = "center";
-context.textBaseline = "middle";
 context.translate(word.x, word.y);
 context.rotate(word.rotate * Math.PI / 180);
 context.fillText(word.text, 0, 0);
 context.restore();
 ```
 
-For SVG, the matching anchor is:
+For SVG:
 
 ```html
 <text
-  x="..."
-  y="..."
   text-anchor="middle"
-  dominant-baseline="middle"
-  transform="rotate(...)"
+  transform="translate(...) rotate(...)"
 >word</text>
 ```
 
@@ -167,10 +165,9 @@ derived from `size()`.
 If specified, `options.strategy` overrides the layout-level default strategy
 for this placement only.
 
-For both text and image sprites, the returned `x` and `y` coordinates mark the
-sprite center. Text should be rendered with a centered horizontal anchor and a
-middle vertical baseline. In SVG, use `text-anchor="middle"` together with
-`dominant-baseline="middle"` to match the layout coordinates.
+Image sprites use the returned `x` and `y` coordinates as the sprite center.
+For text, render from `x` and `y` directly with a centered horizontal anchor,
+as shown in the canvas and SVG snippets above.
 
 <a name="getsprite" href="#getsprite">#</a> <b>getSprite</b>(<i>source</i>[, <i>options</i>])
 
