@@ -143,10 +143,9 @@ conservative.
 Erases a previously placed `CloudSprite` from the layout.
 
 Pass the original `CloudSprite` instance that was given to `place()`, not the
-plain placed sprite snapshot returned by `place()`. This call is unchecked: pass
-only the same sprite instance that was actually placed and has not already been
-removed. This low-level operation does not shrink `bounds()` unless the layout
-becomes completely empty.
+plain placed sprite snapshot returned by `place()`. The sprite must currently be
+placed in this layout. This low-level operation does not shrink `bounds()` unless
+the layout becomes completely empty.
 
 <a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>[, <i>options</i>])
 
@@ -157,10 +156,13 @@ The returned object is a plain placed sprite snapshot. Internal raster fields
 such as `sprite`, `spriteWidth`, and `hasPixels` are omitted, while custom
 metadata from `getSprite(..., options)` is preserved.
 
+A `CloudSprite` instance can only be placed once at a time. Call
+`eraseSprite(sprite)` or `clear()` before placing the same sprite instance again.
+
 If specified, the optional *options* object may include `x` and `y` to control
 the initial placement attempt before the strategy search begins. Any omitted axis
 still uses the normal seeded position from the centered half-size seed box
-derived from `size()`.
+derived from `size()`. Explicit coordinates are rounded down to integer pixels.
 
 If specified, `options.strategy` overrides the layout-level default strategy
 for this placement only.
@@ -174,8 +176,9 @@ as shown in the canvas and SVG snippets above.
 Builds and returns a `CloudSprite` for the specified text or image-like source,
 or `null` if it could not be rasterized into the internal scratch canvas.
 
-The returned value is a prepared reusable `CloudSprite`, not the plain placed
-sprite snapshot returned by `place()`.
+The returned value is a prepared `CloudSprite`, not the plain placed sprite
+snapshot returned by `place()`. The prepared sprite can be placed, erased, and
+placed again.
 
 The optional *options* object may include `font`, `style`, `weight`, `rotate`,
 `size`, `padding`, and any additional fields you want to carry through to the
@@ -230,8 +233,8 @@ function(initial, context) {
 The `initial` argument is the initial `{x, y}` seed for this placement.
 `context` includes `size`, `aspectRatio`, `bounds`, `overflow`, and `random`.
 
-Each generated candidate must be returned as `{x, y}`. Returning `null` stops
-the search.
+Each generated candidate must be returned as `{x, y}`. Candidate coordinates
+are rounded down to integer pixels. Returning `null` stops the search.
 
 The built-in strategies are also exported as `archimedeanStrategy`,
 `rectangularStrategy`, and `noneStrategy`, so callers do not need to use string

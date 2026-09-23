@@ -385,6 +385,7 @@ var CloudLayout = class {
     this._spriteContext = null;
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
+    this._placedSprites = /* @__PURE__ */ new Set();
   }
   canvas(_) {
     if (!arguments.length) {
@@ -398,6 +399,10 @@ var CloudLayout = class {
     return this;
   }
   clear() {
+    for (const sprite of this._placedSprites) {
+      markSpriteUnplaced(sprite);
+    }
+    this._placedSprites.clear();
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
     return this;
@@ -438,7 +443,10 @@ var CloudLayout = class {
       return this._blockSize;
     }
     const nextBlockSize = normalizeBlockSize(_);
-    if (this._bounds && nextBlockSize !== this._blockSize) {
+    if (nextBlockSize === this._blockSize) {
+      return this;
+    }
+    if (this._bounds) {
       throw new Error("Cannot change blockSize after placement; call clear() first");
     }
     this._blockSize = nextBlockSize;
@@ -457,7 +465,12 @@ var CloudLayout = class {
     if (!(sprite instanceof CloudSprite)) {
       throw new TypeError("eraseSprite() expects a CloudSprite");
     }
+    if (sprite._placedLayout !== this) {
+      throw new Error("eraseSprite() expects a sprite placed in this layout");
+    }
     this._blocks.remove(sprite);
+    this._placedSprites.delete(sprite);
+    markSpriteUnplaced(sprite);
     if (this._blocks.isEmpty()) {
       this._bounds = null;
     }
@@ -468,6 +481,9 @@ var CloudLayout = class {
     }
     if (options != null && (!options || typeof options !== "object" || Array.isArray(options))) {
       throw new TypeError("place() expects an options object");
+    }
+    if (sprite._placedLayout) {
+      throw new Error("Cannot place a CloudSprite that is already placed; call eraseSprite() first");
     }
     const strategy = (options == null ? void 0 : options.strategy) == null ? this._strategy : resolveStrategy(options.strategy);
     sprite.x = (options == null ? void 0 : options.x) == null ? seedCoordinate(this._size[0], this._random) : normalizeCoordinate(options.x);
@@ -480,6 +496,8 @@ var CloudLayout = class {
       return null;
     }
     extendBounds(this, sprite);
+    sprite._placedLayout = this;
+    this._placedSprites.add(sprite);
     return snapshotPlacedSprite(sprite);
   }
   _getContext() {
@@ -728,8 +746,11 @@ function resolveMaxDelta(sprite, bounds, size, overflow) {
   return Math.max(256, wordExtent * 4, boundsExtent * 2, sizeExtent);
 }
 function snapshotPlacedSprite(d) {
-  const _a = d, { hasPixels, sprite, spriteWidth } = _a, word = __objRest(_a, ["hasPixels", "sprite", "spriteWidth"]);
+  const _a = d, { hasPixels, sprite, spriteWidth, _placedLayout } = _a, word = __objRest(_a, ["hasPixels", "sprite", "spriteWidth", "_placedLayout"]);
   return word;
+}
+function markSpriteUnplaced(sprite) {
+  sprite._placedLayout = null;
 }
 function extendBounds(layout, sprite) {
   if (layout._bounds) {
@@ -830,7 +851,7 @@ function normalizeBlockSize(value) {
 }
 function normalizeCoordinate(value) {
   value = +value;
-  return Number.isFinite(value) ? value : 0;
+  return Number.isFinite(value) ? Math.floor(value) : 0;
 }
 function spriteWords(sprite) {
   var _a;

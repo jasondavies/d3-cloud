@@ -327,6 +327,8 @@ test("placed words omit internal raster state and preserve custom fields", () =>
   const placed = layout.place(sprite);
 
   assert.equal(placed.id, "greeting");
+  assert.deepEqual(structuredClone(placed), placed);
+  assert.equal("_placedLayout" in placed, false);
   assert.equal("sprite" in placed, false);
   assert.equal("spriteWidth" in placed, false);
   assert.equal("hasPixels" in placed, false);
@@ -375,10 +377,90 @@ test("place mixes explicit coordinates with seeded defaults", () => {
   assert.equal(placed.y, -3);
 });
 
+test("fractional coordinates are floored and preserve collision detection", () => {
+  for (const coordinates of [{ x: 0.1, y: 0.1 }, { x: 12.75, y: -8.25 }, { x: -12.25, y: 8.75 }]) {
+    const layout = new CloudLayout()
+      .canvas(() => createFakeCanvas())
+      .size(0)
+      .strategy("none");
+    const first = layout.getSprite("hello", { size: 20, padding: 0 });
+    const second = layout.getSprite("hello", { size: 20, padding: 0 });
+    const integerCoordinates = { x: Math.floor(coordinates.x), y: Math.floor(coordinates.y) };
+    const placed = layout.place(first, coordinates);
+
+    assert.equal(placed.x, integerCoordinates.x);
+    assert.equal(placed.y, integerCoordinates.y);
+    assert.equal(layout.place(second, coordinates), null);
+    assert.equal(layout.place(second, integerCoordinates), null);
+    assert.equal(layout.place(second, {
+      x: 100,
+      y: 100,
+      strategy: singleCandidateStrategy(coordinates.x, coordinates.y)
+    }), null);
+
+    layout.eraseSprite(first);
+    assert.equal(layout.bounds(), null);
+    assert.ok(layout.place(second, integerCoordinates));
+  }
+});
+
+test("custom strategy placements use integer pixel coordinates", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createRightEdgeCanvas())
+    .size(0);
+  const first = layout.getSprite("first", { size: 16, padding: 0 });
+  const second = layout.getSprite("second", { size: 16, padding: 0 });
+
+  assert.ok(layout.place(first));
+  const placed = layout.place(second, { strategy: singleCandidateStrategy(31.9, -0.1) });
+  assert.ok(placed);
+  assert.equal(placed.x, 31);
+  assert.equal(placed.y, -1);
+});
+
 test("place rejects raw word objects", () => {
   const layout = new CloudLayout();
 
   assert.throws(() => layout.place({ text: "hello" }), /CloudSprite/);
+});
+
+test("place rejects an already placed CloudSprite without moving it", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createRightEdgeCanvas())
+    .size([0, 0])
+    .overflow(true)
+    .strategy(noneStrategy);
+  const sprite = extractSprite(layout, { text: "hello", size: 16, padding: 0, rotate: 0, font: "serif" });
+  const original = layout.place(sprite, { x: 0, y: 0 });
+
+  assert.ok(original);
+  assert.throws(
+    () => layout.place(sprite, { x: 31, y: 0, strategy: "none" }),
+    /already placed/
+  );
+  assert.equal(sprite.x, 0);
+  assert.equal(sprite.y, 0);
+
+  layout.eraseSprite(sprite);
+  assert.ok(layout.place(sprite, { x: 0, y: 0, strategy: "none" }));
+});
+
+test("eraseSprite rejects unplaced and foreign sprites", () => {
+  const firstLayout = new CloudLayout()
+    .canvas(() => createRightEdgeCanvas())
+    .size([0, 0])
+    .overflow(true)
+    .strategy(noneStrategy);
+  const secondLayout = new CloudLayout()
+    .canvas(() => createRightEdgeCanvas())
+    .size([0, 0])
+    .overflow(true)
+    .strategy(noneStrategy);
+  const sprite = extractSprite(firstLayout, { text: "hello", size: 16, padding: 0, rotate: 0, font: "serif" });
+
+  assert.throws(() => firstLayout.eraseSprite(sprite), /placed in this layout/);
+  assert.ok(firstLayout.place(sprite, { x: 0, y: 0 }));
+  assert.throws(() => secondLayout.eraseSprite(sprite), /placed in this layout/);
 });
 
 test("place accepts a per-call strategy override", () => {
@@ -437,6 +519,40 @@ test("clear resets bounds and unlocks blockSize changes", () => {
   assert.equal(layout.bounds(), null);
   assert.equal(layout.blockSize(256), layout);
   assert.equal(layout.blockSize(), 256);
+});
+
+test("setting the same normalized block size preserves occupied pixels", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas())
+    .size(0)
+    .strategy("none");
+  const first = layout.getSprite("hello", { size: 20, padding: 0 });
+  const second = layout.getSprite("hello", { size: 20, padding: 0 });
+  assert.ok(layout.place(first));
+  const bounds = layout.bounds();
+
+  for (const size of [layout.blockSize(), layout.blockSize() - 1]) {
+    assert.equal(layout.blockSize(size), layout);
+    assert.deepEqual(layout.bounds(), bounds);
+    assert.equal(layout.place(second), null);
+  }
+
+  layout.eraseSprite(first);
+  assert.equal(layout.bounds(), null);
+  assert.ok(layout.place(second));
+});
+
+test("clear releases placed sprites for reuse", () => {
+  const layout = new CloudLayout()
+    .canvas(() => createFakeCanvas())
+    .size([0, 0])
+    .overflow(true)
+    .strategy(noneStrategy);
+  const sprite = extractSprite(layout, { text: "hello", size: 20, padding: 0, rotate: 0, font: "serif" });
+
+  assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+  layout.clear();
+  assert.ok(layout.place(sprite, { x: 0, y: 0 }));
 });
 
 test("place handles one word at a time", () => {
