@@ -39,6 +39,9 @@ jobs:
       - name: Run test suite
         run: npm test
 
+      - name: Check committed browser bundle
+        run: git diff --exit-code -- build/
+
   package:
     name: Package checks
     runs-on: ubuntu-latest

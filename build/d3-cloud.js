@@ -175,7 +175,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     width = width + 31 >>> 5 << 5;
   }
   const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * ratio * 2));
-  const rasterWidth = ceilToRatio(width, ratio);
+  const rasterWidth = ceilToRatio(Math.ceil((width + overscan * 2) / 32) * 32, ratio);
   const rasterHeight = ceilToRatio(height + overscan * 2, ratio);
   if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
     context.restore();
@@ -200,11 +200,12 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   if (!alphaBounds) {
     return sprite;
   }
-  const wordsPerRow = rasterWidth >>> 5;
+  const packedWidth = Math.ceil(rasterWidth / 32) * 32;
+  const wordsPerRow = packedWidth >>> 5;
   const originY = -(rasterHeight >> 1);
   sprite.width = rasterWidth;
   sprite.height = alphaBounds.height;
-  sprite.spriteWidth = rasterWidth;
+  sprite.spriteWidth = packedWidth;
   sprite.trimX = alphaBounds.x0;
   sprite.trimY = alphaBounds.y0;
   sprite.trimWidth = alphaBounds.width;
@@ -544,7 +545,8 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
   if (typeof next !== "function") {
     throw new TypeError("strategy factories must return a candidate generator");
   }
-  while (candidate = normalizeStrategyCandidate(next())) {
+  const candidateLimit = strategy === archimedeanStrategy || strategy === rectangularStrategy ? Infinity : 1e5;
+  for (let attempt = 0; attempt < candidateLimit && (candidate = normalizeStrategyCandidate(next())); attempt++) {
     dx = candidate.x - startX;
     dy = candidate.y - startY;
     if (Math.min(Math.abs(dx), Math.abs(dy)) >= deltaLimit) break;
@@ -901,7 +903,7 @@ function seedCoordinate(size, random) {
   return Math.floor((random() - 0.5) * (size / 2));
 }
 function resolveStrategy(value) {
-  const strategy = STRATEGIES[value] || value;
+  const strategy = typeof value === "string" && Object.prototype.hasOwnProperty.call(STRATEGIES, value) ? STRATEGIES[value] : value;
   if (typeof strategy !== "function") {
     throw new TypeError("strategy() expects a built-in strategy name or strategy factory");
   }

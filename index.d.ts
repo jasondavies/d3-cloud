@@ -62,6 +62,7 @@ export interface BaseSpriteOptions {
   fontSize?: number;
   size?: number;
   rotate?: number;
+  /** Text only; image masks use the source alpha without padding. */
   padding?: number;
 }
 

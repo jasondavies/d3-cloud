@@ -138,7 +138,7 @@ function average(values) {
 
 function printResult(result) {
   console.log(
-    `blocks avg=${formatMs(result.avgDuration)} ` +
+    `layout avg=${formatMs(result.avgDuration)} ` +
     `min=${formatMs(result.minDuration)} ` +
     `max=${formatMs(result.maxDuration)} ` +
     `placed=${formatNumber(result.avgPlaced)} ` +

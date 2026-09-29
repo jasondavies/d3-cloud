@@ -153,7 +153,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   }
 
   const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * ratio * 2));
-  const rasterWidth = ceilToRatio(width, ratio);
+  const rasterWidth = ceilToRatio(Math.ceil((width + overscan * 2) / 32) * 32, ratio);
   const rasterHeight = ceilToRatio(height + overscan * 2, ratio);
 
   if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
@@ -184,12 +184,13 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     return sprite;
   }
 
-  const wordsPerRow = rasterWidth >>> 5;
+  const packedWidth = Math.ceil(rasterWidth / 32) * 32;
+  const wordsPerRow = packedWidth >>> 5;
   const originY = -(rasterHeight >> 1);
 
   sprite.width = rasterWidth;
   sprite.height = alphaBounds.height;
-  sprite.spriteWidth = rasterWidth;
+  sprite.spriteWidth = packedWidth;
   sprite.trimX = alphaBounds.x0;
   sprite.trimY = alphaBounds.y0;
   sprite.trimWidth = alphaBounds.width;

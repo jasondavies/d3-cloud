@@ -61,9 +61,9 @@ for (const sprite of sprites) {
 Run `npm run build` to generate the browser bundle at `build/d3-cloud.js`,
 which exports the layout as an ESM module for browser use.
 
-Placement uses sparse packed occupancy blocks for collision checks, so the
-final cloud uses `size()` both as the aspect ratio hints for the built-in
-strategies and to define a centered half-size seed box for initial placement.
+Placement uses sparse packed occupancy blocks for collision checks.
+`size()` sets the aspect ratio for the built-in strategies and defines a
+centered half-size box for initial placement seeds.
 By default, `overflow(true)` allows placement to extend beyond the centered
 `size()` box; switch to `overflow(false)` for a bounded layout. Word order is
 controlled by the caller; in most cases you will want to place larger words
@@ -80,6 +80,7 @@ Render text from the placed position with a centered horizontal anchor:
 context.save();
 context.font = `${word.style} ${word.weight} ${Math.ceil(word.size)}px ${word.font}`;
 context.textAlign = "center";
+context.textBaseline = "alphabetic";
 context.translate(word.x, word.y);
 context.rotate(word.rotate * Math.PI / 180);
 context.fillText(word.text, 0, 0);
@@ -106,6 +107,11 @@ default canvas factory uses `document.createElement("canvas")`.
 
 ## Migrating From 1.x
 
+See the [migration guide](./MIGRATING.md) for a before-and-after example,
+changed defaults, scheduling, TypeScript, and browser script migration.
+Existing `^1.x` dependencies stay on v1; pin legacy CDN scripts to a 1.x
+version before changing any unversioned URLs.
+
 - The package is now ESM-only. `require("d3-cloud")` is no longer supported.
 - The old factory and event API is gone. Use `new CloudLayout()` together with
   `getSprite()` and `place()` instead of `start()`, `stop()`, `on()`,
@@ -117,7 +123,7 @@ default canvas factory uses `document.createElement("canvas")`.
   Use `overflow(false)` to keep placement inside that box or `overflow(true)`
   to allow the layout to grow beyond it.
 - `strategy()` replaces the old `spiral()` API. Built-in strategies are
-  `"archimedean"` and `"rectangular"`, and custom strategies now receive an
+  `"archimedean"`, `"rectangular"`, and `"none"`, and custom strategies now receive an
   initial `{x, y}` seed plus layout context.
 
 ## API Reference
@@ -156,6 +162,11 @@ The returned object is a plain placed sprite snapshot. Internal raster fields
 such as `sprite`, `spriteWidth`, and `hasPixels` are omitted, while custom
 metadata from `getSprite(..., options)` is preserved.
 
+Snapshots are shallow objects, not a serialization format. An image sprite
+retains its `image` source, which may be a DOM element. Before posting or
+serializing a result, omit that source and any non-serializable custom metadata;
+carry an image URL or ID for the renderer instead.
+
 A `CloudSprite` instance can only be placed once at a time. Call
 `eraseSprite(sprite)` or `clear()` before placing the same sprite instance again.
 
@@ -190,6 +201,21 @@ Image sprites are extracted from the source alpha channel, so transparent
 pixels are ignored automatically. For image sources, `options.width` and
 `options.height` may be used to resize the image before extraction; if only one
 dimension is provided, the other is derived from the source aspect ratio.
+
+`padding` applies only to text. Image masks use the source alpha unchanged;
+adding transparent margins does not create occupied padding pixels.
+
+Built-in sprite fields are reserved and take precedence over custom metadata:
+`text`, `image`, `imageWidth`, `imageHeight`, `font`, `style`, `weight`, `rotate`,
+`size`, `padding`, `x`, `y`, `width`, `height`, `x0`, `y0`, `x1`, `y1`,
+`trimX`, `trimY`, `trimWidth`, `trimHeight`, `hasPixels`, `spriteWidth`, and
+`sprite`. Avoid method names such as `rasterize` and internal names beginning
+with `_` as well. Use a nested `datum` object to carry arbitrary input fields.
+
+Text bounds include horizontal raster slack; image bounds are trimmed to
+nontransparent pixels. Thus text bounds and bounded placement are conservative.
+`null` can indicate empty text, an unloaded or empty image, or a raster exceeding
+the 2048-pixel scratch dimensions. Load images and fonts before preparing sprites.
 
 Sprites that cannot be placed simply return `null`. To place multiple sprites,
 call `place()` in your own loop.
@@ -235,6 +261,9 @@ The `initial` argument is the initial `{x, y}` seed for this placement.
 
 Each generated candidate must be returned as `{x, y}`. Candidate coordinates
 are rounded down to integer pixels. Returning `null` stops the search.
+Custom strategies are limited to 100,000 candidates per placement; exhausting
+the budget returns `null`. This limits repeated or one-axis searches, but cannot
+interrupt a generator that never returns from an individual call.
 
 The built-in strategies are also exported as `archimedeanStrategy`,
 `rectangularStrategy`, and `noneStrategy`, so callers do not need to use string
@@ -255,7 +284,7 @@ should return a number in the range `[0, 1)`.
 If not specified, returns the current random number generator, which defaults
 to `Math.random`.
 
-<a name="blockSize" href="#blockSize">#</a> <b>blockSize</b>([<i>size</i>])
+<a name="blocksize" href="#blocksize">#</a> <b>blockSize</b>([<i>size</i>])
 
 If specified, sets the sparse block size used during placement. Block sizes
 are rounded up to the next multiple of 32 pixels so they align with the

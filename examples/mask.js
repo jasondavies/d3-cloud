@@ -107,7 +107,7 @@ function placeSprites(layout, sprites) {
 }
 
 function draw(words, bounds) {
-  const extent = bounds;
+  const extent = bounds || [{ x: -width / 2, y: -height / 2 }, { x: width / 2, y: height / 2 }];
   const padding = 28;
   const extentWidth = Math.max(1, extent[1].x - extent[0].x);
   const extentHeight = Math.max(1, extent[1].y - extent[0].y);

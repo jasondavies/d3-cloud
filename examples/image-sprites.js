@@ -76,7 +76,6 @@ async function createSprites(layout, descriptors) {
       text: descriptor.label,
       width: descriptor.size,
       height: descriptor.size,
-      padding: descriptor.shape === "star" || descriptor.shape === "planet" ? 4 : 2,
       imageHref: image.currentSrc || image.src,
       shape: descriptor.shape
     });
@@ -99,7 +98,7 @@ function placeSprites(layout, sprites) {
 }
 
 function draw(words, bounds) {
-  const extent = bounds;
+  const extent = bounds || [{ x: -width / 2, y: -height / 2 }, { x: width / 2, y: height / 2 }];
   const padding = 32;
   const extentWidth = Math.max(1, extent[1].x - extent[0].x);
   const extentHeight = Math.max(1, extent[1].y - extent[0].y);

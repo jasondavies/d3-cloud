@@ -66,10 +66,10 @@ async function waitForFont(font) {
     throw new Error("This browser does not expose document.fonts.");
   }
 
-  await document.fonts.load(font);
+  const faces = await document.fonts.load(font);
   await document.fonts.ready;
 
-  if (!document.fonts.check(font)) {
+  if (!faces.length || faces.some(face => face.status !== "loaded")) {
     throw new Error(`The ${fontFamily} font did not finish loading.`);
   }
 }

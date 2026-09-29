@@ -12,12 +12,14 @@
   "homepage": "https://www.jasondavies.com/wordcloud/",
   "license": "BSD-3-Clause",
   "type": "module",
+  "sideEffects": false,
   "types": "./index.d.ts",
   "files": [
     "src/",
     "build/",
     "index.d.ts",
     "README.md",
+    "MIGRATING.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
@@ -47,6 +49,7 @@
     "test": "node --test"
   },
   "devDependencies": {
+    "canvas": "^3.2.3",
     "esbuild": "^0.25.0"
   }
 }

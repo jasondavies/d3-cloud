@@ -215,7 +215,11 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
     throw new TypeError("strategy factories must return a candidate generator");
   }
 
-  while (candidate = normalizeStrategyCandidate(next())) {
+  // Built-in spirals terminate by distance. User generators need a budget
+  // because they may repeat a point or never move on both axes.
+  const candidateLimit = strategy === archimedeanStrategy || strategy === rectangularStrategy
+    ? Infinity : 100000;
+  for (let attempt = 0; attempt < candidateLimit && (candidate = normalizeStrategyCandidate(next())); attempt++) {
     dx = candidate.x - startX;
     dy = candidate.y - startY;
 
@@ -697,7 +701,8 @@ function seedCoordinate(size, random) {
 }
 
 function resolveStrategy(value) {
-  const strategy = STRATEGIES[value] || value;
+  const strategy = typeof value === "string" && Object.prototype.hasOwnProperty.call(STRATEGIES, value)
+    ? STRATEGIES[value] : value;
   if (typeof strategy !== "function") {
     throw new TypeError("strategy() expects a built-in strategy name or strategy factory");
   }

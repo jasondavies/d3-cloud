@@ -7,10 +7,19 @@ release was `v1.2.9`.
 
 ## [2.0.0] - Unreleased
 
+See the [1.x to 2.x migration guide](./MIGRATING.md) before upgrading.
+Dependencies constrained to 1.x continue to use the old API.
+
 ### Breaking
 
 - Switched the package to ESM-only publishing and removed the old Browserify /
   CommonJS distribution shape.
+- Removed the UMD/script-tag build, the `d3.layout.cloud` global, and the
+  `d3-dispatch` dependency. Browser scripts must use ESM imports.
+- Changed the default rotation from random multiples of 30 degrees to zero,
+  and the default font size from `sqrt(value)` to 1. Set styling explicitly.
+- Input word objects are no longer mutated. Placement returns separate snapshots,
+  and callers control the word ordering.
 - Replaced the old event-driven factory API (`start()`, `stop()`, `on()`,
   `words()`, `timeInterval()`, accessor-based text/font configuration) with the
   class-based `CloudLayout` / `CloudSprite` API.

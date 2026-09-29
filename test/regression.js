@@ -182,6 +182,98 @@ test("layout can build a CloudSprite from image alpha", () => {
   assert.ok(sprite.sprite instanceof Uint32Array);
 });
 
+test("image masks ignore the text-only padding option", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas);
+  const image = createFakeImage(4, 4, [[1, 1], [2, 2]]);
+  const plain = layout.getSprite(image);
+  const padded = layout.getSprite(image, { padding: 10 });
+  assert.deepEqual(padded.sprite, plain.sprite);
+  assert.equal(padded.width, plain.width);
+  assert.equal(padded.height, plain.height);
+});
+
+test("text masks retain all padded pixels at the alphabetic rendering origin", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const layout = new CloudLayout().canvas(() => createNodeCanvasLayoutCanvas(createCanvas));
+  for (const text of ["MMMM", "gy", "fij"]) {
+    for (const rotate of [0, 45, 90]) {
+      for (const padding of [0, 5, 12]) {
+        const sprite = layout.getSprite(text, { size: 32, font: "serif", style: "italic", rotate, padding });
+        assert.ok(sprite);
+        const canvas = createCanvas(512, 512);
+        const context = canvas.getContext("2d");
+        configureNodeCanvasTextContext(context);
+        context.font = "italic normal 32px serif";
+        context.textBaseline = "alphabetic";
+        const anchor = -context.measureText(text).width / 2;
+        context.translate(256, 256);
+        context.rotate(rotate * Math.PI / 180);
+        context.fillText(text, anchor, 0);
+        if (padding) {
+          context.lineWidth = 2 * padding;
+          context.strokeText(text, anchor, 0);
+        }
+        const pixels = context.getImageData(0, 0, 512, 512).data;
+        for (let y = 0; y < 512; y++) {
+          for (let x = 0; x < 512; x++) {
+            if (!pixels[(y * 512 + x) * 4 + 3]) continue;
+            const sx = x - 256 - sprite.x0;
+            const sy = y - 256 - sprite.y0;
+            const covered = sx >= 0 && sx < sprite.width && sy >= 0 && sy < sprite.height &&
+              (sprite.sprite[sy * (sprite.spriteWidth / 32) + (sx >>> 5)] & (1 << (31 - (sx & 31))));
+            assert.ok(covered, `${text}, rotation ${rotate}, padding ${padding}: missing pixel ${x - 256},${y - 256}`);
+          }
+        }
+      }
+    }
+  }
+});
+
+test("ratio-three text readback preserves tail pixels without spilling between rows", () => {
+  for (const measuredWidth of [20, 31]) {
+    const context = createFakeCanvas().getContext("2d");
+    context.measureText = () => ({ width: measuredWidth });
+    let physicalWidth;
+    context.getImageData = (_x, _y, width, height) => {
+      physicalWidth = width * 3;
+      const data = new Uint8ClampedArray(physicalWidth * height * 3 * 4);
+      data[((physicalWidth - 1) * 4) + 3] = 255;
+      data[(physicalWidth * 4) + 3] = 255;
+      return { data };
+    };
+    const sprite = new CloudSprite({ text: "test", size: 20, padding: 0 });
+    sprite.rasterize({ context, ratio: 3, pixelWidth: 2048, clearWidth: 0, clearHeight: 0 });
+    const stride = Math.ceil(physicalWidth / 32);
+    const expected = new Uint32Array(stride * 2);
+    expected[(physicalWidth - 1) >>> 5] = (1 << (31 - ((physicalWidth - 1) & 31))) >>> 0;
+    expected[stride] = 0x80000000;
+    assert.equal(sprite.spriteWidth, stride * 32);
+    assert.deepEqual(sprite.sprite, expected);
+  }
+});
+
+test("strategy names do not resolve inherited object properties", () => {
+  const layout = new CloudLayout();
+  for (const name of ["toString", "constructor", "__proto__"]) {
+    assert.throws(() => layout.strategy(name), /strategy/);
+  }
+});
+
+test("custom strategies terminate when repeating or moving along only one axis", () => {
+  for (const move of [false, true]) {
+    const layout = new CloudLayout().canvas(createFakeCanvas).size(0);
+    assert.ok(layout.place(layout.getSprite("first", { size: 20 })));
+    let attempts = 0;
+    const strategy = () => () => {
+      assert.ok(attempts < 100000, "candidate budget was exceeded");
+      attempts++;
+      return { x: move ? attempts * 100 : 0, y: 0 };
+    };
+    assert.equal(layout.place(layout.getSprite("second", { size: 20 }), { strategy }), null);
+    assert.equal(attempts, 100000);
+  }
+});
+
 test("layout can resize image sprites with explicit width and height", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas());
@@ -588,16 +680,9 @@ test("default placement produces a collision-free layout", () => {
   assertCollisionFree(placedWords);
 });
 
-test("node-canvas rendering stays overlap-free across seeded layouts", (t) => {
+test("node-canvas rendering stays overlap-free across seeded layouts", () => {
   const nodeCanvas = loadNodeCanvas();
-  if (!nodeCanvas) {
-    t.skip("optional canvas module is not installed");
-    return;
-  }
-  if (!nodeCanvasSupportsBinaryText(nodeCanvas.createCanvas)) {
-    t.skip("canvas build does not expose antialias control");
-    return;
-  }
+  assert.ok(nodeCanvasSupportsBinaryText(nodeCanvas.createCanvas), "canvas must support antialias control");
 
   const words = createNodeCanvasStressWords(256);
   const maxSingleWordAlpha = measureNodeCanvasSingleWordAlpha(nodeCanvas.createCanvas, words);
@@ -635,16 +720,9 @@ test("node-canvas rendering stays overlap-free across seeded layouts", (t) => {
   }
 });
 
-test("node-canvas rendered text keeps padded words from touching in seeded seed-523 layout", (t) => {
+test("node-canvas rendered text keeps padded words from touching in seeded seed-523 layout", () => {
   const nodeCanvas = loadNodeCanvas();
-  if (!nodeCanvas) {
-    t.skip("optional canvas module is not installed");
-    return;
-  }
-  if (!nodeCanvasSupportsBinaryText(nodeCanvas.createCanvas)) {
-    t.skip("canvas build does not expose antialias control");
-    return;
-  }
+  assert.ok(nodeCanvasSupportsBinaryText(nodeCanvas.createCanvas), "canvas must support antialias control");
 
   const words = createNodeCanvasTouchWords();
   const { placedWords, bounds } = runLayout(
@@ -671,16 +749,9 @@ test("node-canvas rendered text keeps padded words from touching in seeded seed-
   );
 });
 
-test("node-canvas rendered text keeps padded words from touching in seeded seed-20 five-orientation layout", (t) => {
+test("node-canvas rendered text keeps padded words from touching in seeded seed-20 five-orientation layout", () => {
   const nodeCanvas = loadNodeCanvas();
-  if (!nodeCanvas) {
-    t.skip("optional canvas module is not installed");
-    return;
-  }
-  if (!nodeCanvasSupportsBinaryText(nodeCanvas.createCanvas)) {
-    t.skip("canvas build does not expose antialias control");
-    return;
-  }
+  assert.ok(nodeCanvasSupportsBinaryText(nodeCanvas.createCanvas), "canvas must support antialias control");
 
   const words = createNodeCanvasSeed20TouchWords();
   const { placedWords, bounds } = runLayout(
@@ -750,7 +821,7 @@ test("layout places a simple word and reports bounds", () => {
   assert.ok(bounds[0].y < bounds[1].y);
 });
 
-test("layout handles multiple sprite batches and cleans up sprite data", () => {
+test("layout places many large sprites without leaking raster data into results", () => {
   const words = Array.from({ length: 40 }, (_, index) => ({
     text: `batch-${String(index).padStart(2, "0")}-xxxxxxxxxxxxxxxxxxxxxxxxxx`,
     size: 160,
@@ -765,9 +836,10 @@ test("layout handles multiple sprite batches and cleans up sprite data", () => {
 
   const { placedWords } = runLayout(layout, words);
 
-  assert.ok(placedWords.length > 0);
-  for (const word of words) {
-    assert.equal(word.sprite, undefined);
+  assert.equal(placedWords.length, words.length);
+  assertCollisionFree(placedWords);
+  for (const word of placedWords) {
+    assert.equal("sprite" in word, false);
   }
 });
 
@@ -1160,14 +1232,7 @@ function createFakeImage(width, height, opaquePixels) {
 }
 
 function loadNodeCanvas() {
-  try {
-    return require("canvas");
-  } catch (error) {
-    if (error && error.code === "MODULE_NOT_FOUND") {
-      return null;
-    }
-    throw error;
-  }
+  return require("canvas");
 }
 
 function createNodeCanvasStressWords(count) {
