@@ -34,6 +34,7 @@ export default class CloudSprite {
     this.width = 0;
     this.height = 0;
     this.spriteWidth = 0;
+    this._rasterWidth = null;
     this.trimX = 0;
     this.trimY = 0;
     this.trimWidth = 0;
@@ -104,6 +105,7 @@ function resetSprite(sprite) {
   sprite.width = 0;
   sprite.height = 0;
   sprite.spriteWidth = 0;
+  sprite._rasterWidth = null;
   sprite.trimX = 0;
   sprite.trimY = 0;
   sprite.trimWidth = 0;
@@ -184,35 +186,10 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     return sprite;
   }
 
-  const packedWidth = Math.ceil(rasterWidth / 32) * 32;
-  const wordsPerRow = packedWidth >>> 5;
-  const originY = -(rasterHeight >> 1);
-
-  sprite.width = rasterWidth;
-  sprite.height = alphaBounds.height;
-  sprite.spriteWidth = packedWidth;
-  sprite.trimX = alphaBounds.x0;
-  sprite.trimY = alphaBounds.y0;
-  sprite.trimWidth = alphaBounds.width;
-  sprite.trimHeight = alphaBounds.height;
-  sprite.x0 = -(rasterWidth >> 1);
-  sprite.y0 = originY + alphaBounds.y0;
-  sprite.x1 = sprite.x0 + rasterWidth;
-  sprite.y1 = sprite.y0 + sprite.height;
-  sprite.hasPixels = true;
-  sprite.sprite = new Uint32Array(wordsPerRow * sprite.height);
-
-  for (let row = 0; row < sprite.height; row += 1) {
-    const sourceRow = alphaBounds.y0 + row;
-    const rowOffset = row * wordsPerRow;
-    for (let column = 0; column < rasterWidth; column += 1) {
-      if (pixels[((sourceRow * rasterWidth + column) << 2) + 3]) {
-        sprite.sprite[rowOffset + (column >>> 5)] |= 1 << (31 - (column & 31));
-      }
-    }
-  }
-
-  return sprite;
+  // Retain the original horizontal search envelope independently of the
+  // pixel-tight public geometry and the packed row stride.
+  sprite._rasterWidth = rasterWidth;
+  return extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBounds);
 }
 
 function rasterizeImageSprite(sprite, contextAndRatio) {
@@ -262,6 +239,12 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
     return sprite;
   }
 
+  sprite.imageWidth = drawWidth;
+  sprite.imageHeight = drawHeight;
+  return extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBounds);
+}
+
+function extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBounds) {
   const packedWidth = ((alphaBounds.width + 31) >>> 5) << 5;
   const wordsPerRow = packedWidth >>> 5;
   const originX = -(rasterWidth >> 1);
@@ -270,8 +253,6 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   sprite.width = alphaBounds.width;
   sprite.height = alphaBounds.height;
   sprite.spriteWidth = packedWidth;
-  sprite.imageWidth = drawWidth;
-  sprite.imageHeight = drawHeight;
   sprite.trimX = alphaBounds.x0;
   sprite.trimY = alphaBounds.y0;
   sprite.trimWidth = alphaBounds.width;

@@ -17,6 +17,7 @@ For a browser-loadable SVG example, run `npm run build`, serve the repository
 root with any static file server, and open `examples/`.
 
 This package is ESM-only.
+Node.js usage requires Node 20 or newer, matching the minimum CI version.
 
 See [RELEASING.md](./RELEASING.md) for the manual release checklist.
 
@@ -212,8 +213,9 @@ Built-in sprite fields are reserved and take precedence over custom metadata:
 `sprite`. Avoid method names such as `rasterize` and internal names beginning
 with `_` as well. Use a nested `datum` object to carry arbitrary input fields.
 
-Text bounds include horizontal raster slack; image bounds are trimmed to
-nontransparent pixels. Thus text bounds and bounded placement are conservative.
+Text and image bounds are trimmed to nontransparent pixels, including text
+padding. Packed rows are aligned internally without adding empty space to
+reported bounds or bounded placement checks.
 `null` can indicate empty text, an unloaded or empty image, or a raster exceeding
 the 2048-pixel scratch dimensions. Load images and fonts before preparing sprites.
 
@@ -303,3 +305,10 @@ function() { return document.createElement("canvas"); }
 
 When using Node.js, you will almost definitely override this default, e.g.
 using the [canvas module](https://www.npmjs.com/package/canvas).
+
+## Benchmarks
+
+See [BENCHMARKS.md](./BENCHMARKS.md) for reproducible v1/v2 comparisons,
+placement counts, and limitations. Run `node benchmark.js --compare-v1`
+after installing development dependencies. The v1 alias is a development
+dependency and is not shipped as a runtime dependency.

@@ -12,6 +12,7 @@ Dependencies constrained to 1.x continue to use the old API.
 
 ### Breaking
 
+- Set the minimum Node.js version to 20, matching the CI test matrix.
 - Switched the package to ESM-only publishing and removed the old Browserify /
   CommonJS distribution shape.
 - Removed the UMD/script-tag build, the `d3.layout.cloud` global, and the
@@ -45,6 +46,12 @@ Dependencies constrained to 1.x continue to use the old API.
 
 ### Changed
 
+- Limited bounded placement searches to the fixed box and initial coordinates,
+  avoiding expansion-distance searches after the box fills up.
+- Trimmed text and image geometry to occupied pixels, independently of packed
+  row alignment, so bounded layouts do not reject words due to raster slack.
+- Replaced string block keys and temporary range objects with numeric map
+  lookups in collision checks.
 - Optimized sprite extraction to use partial canvas readback and `Uint32Array`
   mask storage.
 - Documented the rendering anchor contract: image sprite coordinates mark the

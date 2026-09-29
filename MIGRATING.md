@@ -212,6 +212,8 @@ run on the client or supply a suitable canvas implementation. See the
 
 ## Node.js and TypeScript
 
+V2 requires Node.js 20 or newer, matching the minimum tested CI version.
+
 Node.js still needs a canvas implementation:
 
 ```js

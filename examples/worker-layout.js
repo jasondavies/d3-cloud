@@ -1,3 +1,4 @@
+import { createRandom, placeAll } from "./shared.js";
 import CloudLayout from "../build/d3-cloud.js";
 
 const wordQualifiers = [
@@ -30,14 +31,7 @@ self.addEventListener("message", event => {
       .random(random)
       .canvas(() => new OffscreenCanvas(1, 1));
 
-    const placedSprites = [];
-
-    for (const sprite of createSprites(layout, createWords(sizeRandom), rotateRandom)) {
-      const placed = layout.place(sprite);
-      if (placed) {
-        placedSprites.push(placed);
-      }
-    }
+    const placedSprites = placeAll(layout, createSprites(layout, createWords(sizeRandom), rotateRandom));
 
     self.postMessage({
       type: "result",
@@ -74,15 +68,4 @@ function createSprites(layout, words, rotateRandom) {
       rotate: rotateRandom() < 0.18 ? 90 : 0
     }))
     .filter(Boolean);
-}
-
-function createRandom(seed) {
-  let state = seed >>> 0;
-  return function() {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
 }

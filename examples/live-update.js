@@ -1,6 +1,6 @@
+import { createRandom, SVG_NS, measureBounds, setViewBox, placeAll } from "./shared.js";
 import CloudLayout from "../build/d3-cloud.js";
 
-const SVG_NS = "http://www.w3.org/2000/svg";
 const width = 720;
 const height = 480;
 const animationMs = 280;
@@ -67,14 +67,7 @@ function showNextRevision() {
       rotate: word.rotate
     }))
     .filter(Boolean);
-  const placedSprites = [];
-
-  for (const sprite of sprites) {
-    const placed = layout.place(sprite);
-    if (placed) {
-      placedSprites.push(placed);
-    }
-  }
+  const placedSprites = placeAll(layout, sprites);
 
   reconcile(placedSprites, layout.bounds());
   status.textContent = `${revision.label} · ${placedSprites.length} sprites`;
@@ -127,7 +120,7 @@ function reconcile(placedSprites, bounds) {
     animateEntry(entry, target);
   }
 
-  updateViewBox(bounds || measureBounds(placedSprites));
+  setViewBox(displaySvg, bounds || measureBounds(placedSprites, [width, height]));
 }
 
 function animateEntry(entry, target, onDone = undefined) {
@@ -176,39 +169,6 @@ function applyNode(node, sprite, state) {
   node.style.opacity = String(state.opacity);
 }
 
-function updateViewBox(bounds) {
-  const padding = 28;
-  const widthExtent = Math.max(1, bounds[1].x - bounds[0].x);
-  const heightExtent = Math.max(1, bounds[1].y - bounds[0].y);
-  displaySvg.setAttribute(
-    "viewBox",
-    `${bounds[0].x - padding} ${bounds[0].y - padding} ${widthExtent + padding * 2} ${heightExtent + padding * 2}`
-  );
-}
-
-function measureBounds(sprites) {
-  if (!sprites.length) {
-    return [
-      { x: -width / 2, y: -height / 2 },
-      { x: width / 2, y: height / 2 }
-    ];
-  }
-
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-
-  for (const sprite of sprites) {
-    x0 = Math.min(x0, sprite.x + sprite.x0);
-    y0 = Math.min(y0, sprite.y + sprite.y0);
-    x1 = Math.max(x1, sprite.x + sprite.x1);
-    y1 = Math.max(y1, sprite.y + sprite.y1);
-  }
-
-  return [{ x: x0, y: y0 }, { x: x1, y: y1 }];
-}
-
 function createRevision(label, counts) {
   const mergedCounts = { ...counts };
 
@@ -235,17 +195,6 @@ function createRevision(label, counts) {
 function pickColor(sprite) {
   const palette = ["#111111", "#6b3fa0", "#1d4e89", "#8c2f39", "#2f6b3b"];
   return palette[sprite.text.length % palette.length];
-}
-
-function createRandom(seed) {
-  let state = seed >>> 0;
-  return function() {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 function hashString(value) {

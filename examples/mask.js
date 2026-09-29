@@ -1,6 +1,6 @@
+import { createRandom, placeAll, drawText } from "./shared.js";
 import CloudLayout from "../build/d3-cloud.js";
 
-const SVG_NS = "http://www.w3.org/2000/svg";
 const width = 1024;
 const height = 1024;
 const HEART_PATH = "M512 903C475 873 350 759 232 640C140 548 90 470 90 384C90 256 184 162 313 162C394 162 466 204 512 276C558 204 630 162 711 162C840 162 934 256 934 384C934 470 884 548 792 640C674 759 549 873 512 903Z";
@@ -49,7 +49,7 @@ async function render() {
 
     const maskPlacement = placeMask(layout, maskImage);
     const sprites = createSprites(layout, createWords(sizeRandom), rotateRandom);
-    const placedWords = placeSprites(layout, sprites);
+    const placedWords = placeAll(layout, sprites);
     draw(placedWords, layout.bounds());
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : String(error);
@@ -93,46 +93,9 @@ function createSprites(layout, words, rotateRandom) {
     .filter(Boolean);
 }
 
-function placeSprites(layout, sprites) {
-  const placedWords = [];
-
-  for (const sprite of sprites) {
-    const word = layout.place(sprite);
-    if (word) {
-      placedWords.push(word);
-    }
-  }
-
-  return placedWords;
-}
-
 function draw(words, bounds) {
-  const extent = bounds || [{ x: -width / 2, y: -height / 2 }, { x: width / 2, y: height / 2 }];
-  const padding = 28;
-  const extentWidth = Math.max(1, extent[1].x - extent[0].x);
-  const extentHeight = Math.max(1, extent[1].y - extent[0].y);
-  const viewBoxX = extent[0].x - padding;
-  const viewBoxY = extent[0].y - padding;
-  const viewBoxWidth = extentWidth + padding * 2;
-  const viewBoxHeight = extentHeight + padding * 2;
-  const fragment = document.createDocumentFragment();
-
-  for (const word of words) {
-    const textNode = document.createElementNS(SVG_NS, "text");
-    textNode.setAttribute("transform", `translate(${word.x} ${word.y}) rotate(${word.rotate})`);
-    textNode.setAttribute("text-anchor", "middle");
-    textNode.setAttribute("font-family", word.font);
-    textNode.setAttribute("font-size", `${Math.max(1, Math.ceil(word.size))}px`);
-    textNode.setAttribute("font-style", word.style);
-    textNode.setAttribute("font-weight", word.weight);
-    textNode.setAttribute("fill", pickColor(word));
-    textNode.textContent = word.text;
-    fragment.append(textNode);
-  }
-
-  displaySvg.setAttribute("viewBox", `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
-  displaySvg.replaceChildren(fragment);
-  status.textContent = `Placed ${words.length} words around the mask · extent ${Math.round(extentWidth)} × ${Math.round(extentHeight)}`;
+  const extent = drawText(displaySvg, words, { bounds, size: [width, height], color: pickColor });
+  status.textContent = `Placed ${words.length} words around the mask · extent ${Math.round(extent.width)} × ${Math.round(extent.height)}`;
 }
 
 function loadMaskImage() {
@@ -155,15 +118,4 @@ function createMaskDataUrl() {
 function pickColor(word) {
   const palette = ["#111111", "#8c2f39", "#1d4e89", "#8f5b00", "#2f6b3b"];
   return palette[word.text.length % palette.length];
-}
-
-function createRandom(seed) {
-  let state = seed >>> 0;
-  return function() {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }

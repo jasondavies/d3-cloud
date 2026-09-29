@@ -1,6 +1,6 @@
+import { createRandom, placeAll, SVG_NS, measureBounds, setViewBox } from "./shared.js";
 import CloudLayout from "../build/d3-cloud.js";
 
-const SVG_NS = "http://www.w3.org/2000/svg";
 const XLINK_NS = "http://www.w3.org/1999/xlink";
 const MONOCHROME = {
   fill: "#ffffff",
@@ -39,7 +39,7 @@ async function render() {
     .random(layoutRandom);
   const descriptors = createIconDescriptors(sizeRandom);
   const sprites = await createSprites(layout, descriptors);
-  const placedWords = placeSprites(layout, sprites);
+  const placedWords = placeAll(layout, sprites);
 
   draw(placedWords, layout.bounds());
 }
@@ -84,28 +84,8 @@ async function createSprites(layout, descriptors) {
   return sprites.filter(Boolean);
 }
 
-function placeSprites(layout, sprites) {
-  const placedWords = [];
-
-  for (const sprite of sprites) {
-    const word = layout.place(sprite);
-    if (word) {
-      placedWords.push(word);
-    }
-  }
-
-  return placedWords;
-}
-
 function draw(words, bounds) {
-  const extent = bounds || [{ x: -width / 2, y: -height / 2 }, { x: width / 2, y: height / 2 }];
-  const padding = 32;
-  const extentWidth = Math.max(1, extent[1].x - extent[0].x);
-  const extentHeight = Math.max(1, extent[1].y - extent[0].y);
-  const viewBoxX = extent[0].x - padding;
-  const viewBoxY = extent[0].y - padding;
-  const viewBoxWidth = extentWidth + padding * 2;
-  const viewBoxHeight = extentHeight + padding * 2;
+  const extent = setViewBox(displaySvg, bounds || measureBounds(words, [width, height]), 32);
   const fragment = document.createDocumentFragment();
 
   for (const word of words) {
@@ -127,9 +107,8 @@ function draw(words, bounds) {
     fragment.append(imageNode);
   }
 
-  displaySvg.setAttribute("viewBox", `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
   displaySvg.replaceChildren(fragment);
-  status.textContent = `Placed ${words.length} image sprites · extent ${Math.round(extentWidth)} × ${Math.round(extentHeight)}`;
+  status.textContent = `Placed ${words.length} image sprites · extent ${Math.round(extent.width)} × ${Math.round(extent.height)}`;
 }
 
 function buildIconDataUrl(descriptor) {
@@ -212,17 +191,6 @@ function loadImage(src) {
 
   imageCache.set(src, imagePromise);
   return imagePromise;
-}
-
-function createRandom(seed) {
-  let state = seed >>> 0;
-  return function() {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 function titleCase(value) {

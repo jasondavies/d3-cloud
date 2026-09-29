@@ -1,4 +1,4 @@
-const SVG_NS = "http://www.w3.org/2000/svg";
+import { drawText } from "./shared.js";
 const width = 720;
 const height = 480;
 const displaySvg = document.querySelector("[data-cloud]");
@@ -63,59 +63,12 @@ function onWorkerError() {
 }
 
 function draw(sprites, bounds) {
-  const extent = bounds || measureBounds(sprites);
-  const padding = 28;
-  const extentWidth = Math.max(1, extent[1].x - extent[0].x);
-  const extentHeight = Math.max(1, extent[1].y - extent[0].y);
-  const viewBoxX = extent[0].x - padding;
-  const viewBoxY = extent[0].y - padding;
-  const viewBoxWidth = extentWidth + padding * 2;
-  const viewBoxHeight = extentHeight + padding * 2;
-  const fragment = document.createDocumentFragment();
-
-  for (const sprite of sprites) {
-    const textNode = document.createElementNS(SVG_NS, "text");
-    textNode.setAttribute("transform", `translate(${sprite.x} ${sprite.y}) rotate(${sprite.rotate})`);
-    textNode.setAttribute("text-anchor", "middle");
-    textNode.setAttribute("font-family", sprite.font);
-    textNode.setAttribute("font-size", `${Math.max(1, Math.ceil(sprite.size))}px`);
-    textNode.setAttribute("font-style", sprite.style);
-    textNode.setAttribute("font-weight", sprite.weight);
-    textNode.setAttribute("fill", pickColor(sprite));
-    textNode.textContent = sprite.text;
-    fragment.append(textNode);
-  }
-
-  displaySvg.setAttribute("viewBox", `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
-  displaySvg.replaceChildren(fragment);
+  drawText(displaySvg, sprites, { bounds, size: [width, height], color: pickColor });
 }
 
 function pickColor(sprite) {
   const palette = ["#111111", "#1d4e89", "#8c2f39", "#2f6b3b", "#8f5b00"];
   return palette[sprite.text.length % palette.length];
-}
-
-function measureBounds(sprites) {
-  if (!sprites.length) {
-    return [
-      { x: -width / 2, y: -height / 2 },
-      { x: width / 2, y: height / 2 }
-    ];
-  }
-
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-
-  for (const sprite of sprites) {
-    x0 = Math.min(x0, sprite.x + sprite.x0);
-    y0 = Math.min(y0, sprite.y + sprite.y0);
-    x1 = Math.max(x1, sprite.x + sprite.x1);
-    y1 = Math.max(y1, sprite.y + sprite.y1);
-  }
-
-  return [{ x: x0, y: y0 }, { x: x1, y: y1 }];
 }
 
 function nextSeed() {

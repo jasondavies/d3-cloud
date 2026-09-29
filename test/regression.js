@@ -182,6 +182,38 @@ test("layout can build a CloudSprite from image alpha", () => {
   assert.ok(sprite.sprite instanceof Uint32Array);
 });
 
+test("text geometry is trimmed to ink while the packed stride stays word-aligned", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size([50, 40]).overflow(false).strategy("none");
+  const sprite = layout.getSprite("hello", { size: 20, padding: 0 });
+  assert.equal(sprite.width, 50);
+  assert.equal(sprite.height, 40);
+  assert.equal(sprite.spriteWidth, 64);
+  const word = layout.place(sprite, { x: -25 - sprite.x0, y: -20 - sprite.y0 });
+  assert.ok(word, "a word fits when its pixels, but not its scratch raster, fit the box");
+  assert.deepEqual(layout.bounds(), [{ x: -25, y: -20 }, { x: 25, y: 20 }]);
+  assert.equal("_rasterWidth" in word, false);
+  layout.eraseSprite(sprite);
+  assert.equal(layout.bounds(), null);
+});
+
+test("occupancy insertion and erasure work across positive and negative block boundaries", () => {
+  const image = createFakeImage(4, 4, Array.from({ length: 16 }, (_, i) => [i % 4, i >>> 2]));
+  for (const blockSize of [32, 64, 512]) {
+    const layout = new CloudLayout().canvas(createFakeCanvas).size(0).blockSize(blockSize).strategy("none");
+    for (const edge of [-blockSize, 0, blockSize]) {
+      const first = layout.getSprite(image);
+      const second = layout.getSprite(image);
+      const position = { x: edge, y: edge };
+      assert.ok(layout.place(first, position));
+      assert.equal(layout.place(second, position), null);
+      layout.eraseSprite(first);
+      assert.equal(layout.bounds(), null);
+      assert.ok(layout.place(second, position));
+      layout.eraseSprite(second);
+    }
+  }
+});
+
 test("image masks ignore the text-only padding option", () => {
   const layout = new CloudLayout().canvas(createFakeCanvas);
   const image = createFakeImage(4, 4, [[1, 1], [2, 2]]);
@@ -944,6 +976,65 @@ test("overflow false constrains placement to the layout size", () => {
 
   assert.equal(layout.place(sprite), null);
 });
+
+for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+  test(`${strategy.name} stops searching a full fixed box promptly`, () => {
+    const width = 64;
+    const height = 48;
+    const image = createFakeImage(width, height,
+      Array.from({ length: width * height }, (_, i) => [i % width, Math.floor(i / width)]));
+
+    for (const overflow of [false, true]) {
+      const layout = new CloudLayout().canvas(createFakeCanvas)
+        .size([width, height]).overflow(overflow).random(() => 0.5);
+      assert.ok(layout.place(layout.getSprite(image), { x: 0, y: 0 }));
+      let attempts = 0;
+      const countedStrategy = (initial, context) => {
+        const next = strategy(initial, context);
+        return () => { attempts++; return next(); };
+      };
+      const probe = layout.getSprite(createFakeImage(2, 2, [[0, 0], [1, 0], [0, 1], [1, 1]]));
+      assert.equal(layout.place(probe, { x: 0, y: 0, strategy: countedStrategy }), null);
+      if (overflow) assert.ok(attempts > 2000, "unbounded search retains its expansion distance");
+      else assert.ok(attempts < 2000, `wasted ${attempts} candidates on a full fixed box`);
+    }
+  });
+
+  test(`${strategy.name} reaches open space near fixed-box edges`, () => {
+    for (const [width, height] of [[64, 48], [48, 64]]) {
+      for (const direction of [0.25, 0.75]) {
+        for (const [holeX, holeY] of [[0, 0], [width - 16, 0], [0, height - 16], [width - 16, height - 16]]) {
+          const pixels = Array.from({ length: width * height }, (_, i) => [i % width, Math.floor(i / width)])
+            .filter(([x, y]) => x < holeX || x >= holeX + 16 || y < holeY || y >= holeY + 16);
+          const layout = new CloudLayout().canvas(createFakeCanvas)
+            .size([width, height]).overflow(false).random(() => direction).strategy(strategy);
+          assert.ok(layout.place(layout.getSprite(createFakeImage(width, height, pixels)), { x: 0, y: 0 }));
+          const probe = layout.getSprite(createFakeImage(2, 2, [[0, 0], [1, 0], [0, 1], [1, 1]]));
+          const placed = layout.place(probe);
+          assert.ok(placed, `missed hole at ${holeX},${holeY} in ${width}×${height}, direction ${direction}`);
+          assert.ok(placed.x + placed.x0 >= holeX - width / 2);
+          assert.ok(placed.x + placed.x1 <= holeX + 16 - width / 2);
+          assert.ok(placed.y + placed.y0 >= holeY - height / 2);
+          assert.ok(placed.y + placed.y1 <= holeY + 16 - height / 2);
+        }
+      }
+    }
+  });
+
+  test(`${strategy.name} can enter a fixed box from explicit outside coordinates`, () => {
+    for (const x of [-128, 128]) {
+      for (const y of [-128, 128]) {
+        const layout = new CloudLayout().canvas(createFakeCanvas)
+          .size([64, 48]).overflow(false).random(() => 0.5).strategy(strategy);
+        const sprite = layout.getSprite(createFakeImage(2, 2, [[0, 0], [1, 0], [0, 1], [1, 1]]));
+        const placed = layout.place(sprite, { x, y });
+        assert.ok(placed, `could not reach box from ${x},${y}`);
+        assert.ok(placed.x + placed.x0 >= -32 && placed.x + placed.x1 <= 32);
+        assert.ok(placed.y + placed.y0 >= -24 && placed.y + placed.y1 <= 24);
+      }
+    }
+  });
+}
 
 function createFakeCanvas() {
   const boxes = [];
