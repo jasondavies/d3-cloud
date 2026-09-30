@@ -61,3 +61,24 @@ const reservedHref: string = reserved.href;
 const stringX: string = reserved.x;
 // @ts-expect-error width is raster geometry, not the metadata string
 const stringWidth: string = layout.place(reserved)!.width;
+
+interface WordMetadata {
+  id: string;
+  datum: { count: number };
+}
+const metadata: WordMetadata = { id: "interface", datum: { count: 7 } };
+const fromInterface = layout.getSprite("hello", metadata)!;
+const explicitInterface: CloudSprite<WordMetadata> = layout.getSprite<WordMetadata>("hello", metadata)!;
+const interfaceId: string = fromInterface.id;
+const interfaceCount: number = layout.place(fromInterface)!.datum.count;
+const interfaceSnapshot: PlacedSprite<WordMetadata> = layout.place(explicitInterface)!;
+const interfaceImage = layout.getSprite(document.createElement("canvas"), metadata)!;
+const interfaceImageId: string = interfaceImage.id;
+const constructedInterface = new CloudSprite<WordMetadata>(metadata);
+const interfaceSprites: CloudSprite[] = [constructedInterface];
+class InterfaceSprite extends CloudSprite<WordMetadata> {}
+const subclassId: string = layout.place(new InterfaceSprite(metadata))!.id;
+// @ts-expect-error interface fields keep their declared types
+const interfaceStringCount: string = fromInterface.datum.count;
+// @ts-expect-error metadata options must be objects
+layout.getSprite("hello", 123);

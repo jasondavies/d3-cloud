@@ -46,6 +46,11 @@ Dependencies constrained to 1.x continue to use the old API.
 
 ### Changed
 
+- Sized text rasters to measured ink bounds, including overhang, accents, and
+  stroke joins; cleared the full scratch canvas for width-only adapters to
+  prevent pixels from leaking into subsequent sprites.
+- Allowed ordinary TypeScript interfaces as sprite metadata without requiring
+  an index signature.
 - Preserved image edge pixels for odd dimensions, rotation, and resizing, and
   allowed opaque image sprites to pack beside each other.
 - Preserved custom metadata types on prepared sprites as well as placed

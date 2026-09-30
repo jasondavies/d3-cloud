@@ -347,6 +347,72 @@ test("text masks retain all padded pixels at the alphabetic rendering origin", (
   }
 });
 
+test("large italic and accented text masks cover their full rendered ink", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const layout = new CloudLayout().canvas(() => createCanvas(1, 1));
+  const fixtures = [
+    { text: "f", size: 256, style: "italic", padding: 0 },
+    { text: "j", size: 512, style: "italic", padding: 5 },
+    { text: "A\u0301\u0302\u0303", size: 128, style: "normal", padding: 0 },
+    { text: "AV", size: 128, style: "normal", padding: 24 }
+  ];
+  for (const options of fixtures) {
+    for (const rotate of [0, 30, 90, -45]) {
+      const sprite = layout.getSprite(options.text, { ...options, font: "serif", rotate });
+      assert.ok(sprite);
+      const context = createCanvas(1536, 1536).getContext("2d");
+      context.font = `${options.style} normal ${options.size}px serif`;
+      const anchor = -context.measureText(options.text).width / 2;
+      context.translate(768, 768);
+      context.rotate(rotate * Math.PI / 180);
+      context.fillText(options.text, anchor, 0);
+      if (options.padding) {
+        context.lineWidth = 2 * options.padding;
+        context.strokeText(options.text, anchor, 0);
+      }
+      const pixels = context.getImageData(0, 0, 1536, 1536).data;
+      for (let y = 0; y < 1536; y++) {
+        for (let x = 0; x < 1536; x++) {
+          if (!pixels[(y * 1536 + x) * 4 + 3]) continue;
+          const sx = x - 768 - sprite.x0;
+          const sy = y - 768 - sprite.y0;
+          const covered = sx >= 0 && sx < sprite.width && sy >= 0 && sy < sprite.height &&
+            (sprite.sprite[sy * (sprite.spriteWidth / 32) + (sx >>> 5)] & (1 << (31 - (sx & 31))));
+          assert.ok(covered, `${options.text}, ${rotate}°: missing pixel ${x - 768},${y - 768}`);
+        }
+      }
+    }
+  }
+});
+
+test("text overhang cannot contaminate subsequent text or image sprites", () => {
+  const { createCanvas } = loadNodeCanvas();
+  // Exercise both complete TextMetrics and canvas adapters exposing only width.
+  for (const widthOnly of [false, true]) {
+    const factory = () => {
+      const canvas = createCanvas(1, 1);
+      if (widthOnly) {
+        const context = canvas.getContext("2d");
+        const measure = context.measureText.bind(context);
+        context.measureText = text => ({ width: measure(text).width });
+      }
+      return canvas;
+    };
+    const layout = new CloudLayout().canvas(factory);
+    const prepareOverhang = () => layout.getSprite("f", { font: "serif", style: "italic", size: 256, padding: 0 });
+    assert.ok(prepareOverhang());
+    assert.equal(layout.getSprite("          ", { font: "serif", size: 256, padding: 0 }), null);
+    assert.ok(prepareOverhang());
+    assert.equal(layout.getSprite(createCanvas(600, 600)), null);
+    assert.ok(prepareOverhang());
+    const options = { font: "serif", size: 256, padding: 0 };
+    const reused = layout.getSprite("hello", options);
+    const fresh = new CloudLayout().canvas(factory).getSprite("hello", options);
+    assert.deepEqual(reused.sprite, fresh.sprite);
+    assert.deepEqual([reused.x0, reused.y0, reused.x1, reused.y1], [fresh.x0, fresh.y0, fresh.x1, fresh.y1]);
+  }
+});
+
 test("ratio-three text readback preserves tail pixels without spilling between rows", () => {
   for (const measuredWidth of [20, 31]) {
     const context = createFakeCanvas().getContext("2d");

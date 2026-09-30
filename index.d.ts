@@ -68,15 +68,15 @@ export interface BaseSpriteOptions {
 
 export type SpriteMetadata = Record<string, unknown>;
 
-export type TextSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & BaseSpriteOptions;
+export type TextSpriteOptions<T extends object = SpriteMetadata> = T & BaseSpriteOptions;
 
-export type ImageSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & BaseSpriteOptions & {
+export type ImageSpriteOptions<T extends object = SpriteMetadata> = T & BaseSpriteOptions & {
   text?: string;
   width?: number;
   height?: number;
 };
 
-export type CloudSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & {
+export type CloudSpriteOptions<T extends object = SpriteMetadata> = T & {
   text?: string;
   image?: ImageLike | null;
   imageWidth?: number | null;
@@ -89,7 +89,7 @@ export type CloudSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & 
   padding?: number;
 };
 
-export type PlacedSprite<T extends SpriteMetadata = SpriteMetadata> = Omit<T, keyof CloudSpriteBase<T>> & {
+export type PlacedSprite<T extends object = SpriteMetadata> = Omit<T, keyof CloudSpriteBase<T>> & {
   text: string;
   image: ImageLike | null;
   imageWidth: number | null;
@@ -114,7 +114,7 @@ export type PlacedSprite<T extends SpriteMetadata = SpriteMetadata> = Omit<T, ke
   y1: number;
 };
 
-declare class CloudSpriteBase<T extends SpriteMetadata = SpriteMetadata> {
+declare class CloudSpriteBase<T extends object = SpriteMetadata> {
   constructor(options?: CloudSpriteOptions<T>);
   // Type-only marker retains metadata inference through subclasses.
   private readonly _metadata: T;
@@ -149,12 +149,12 @@ declare class CloudSpriteBase<T extends SpriteMetadata = SpriteMetadata> {
 }
 
 // Built-in fields override metadata at runtime, including raster geometry.
-type CloudSprite<T extends SpriteMetadata = {}> =
+type CloudSprite<T extends object = {}> =
   CloudSpriteBase<T> & Omit<T, keyof CloudSpriteBase<T>>;
 
 declare const CloudSprite: {
-  new<T extends SpriteMetadata = SpriteMetadata>(options?: CloudSpriteOptions<T>): CloudSprite<T>;
-  readonly prototype: CloudSpriteBase;
+  new<T extends object = SpriteMetadata>(options?: CloudSpriteOptions<T>): CloudSprite<T>;
+  readonly prototype: CloudSpriteBase<object>;
 };
 
 declare class CloudLayout {
@@ -165,7 +165,7 @@ declare class CloudLayout {
 
   clear(): this;
   bounds(): Bounds | null;
-  eraseSprite<T extends SpriteMetadata = SpriteMetadata>(sprite: CloudSprite<T>): void;
+  eraseSprite<T extends object = SpriteMetadata>(sprite: CloudSprite<T>): void;
 
   size(): [number, number];
   size(value: [number, number] | number): this;
@@ -182,10 +182,10 @@ declare class CloudLayout {
   blockSize(): number;
   blockSize(value: number): this;
 
-  getSprite<T extends SpriteMetadata = SpriteMetadata>(source: TextSource, options?: TextSpriteOptions<T>): CloudSprite<T> | null;
-  getSprite<T extends SpriteMetadata = SpriteMetadata>(source: ImageLike, options?: ImageSpriteOptions<T>): CloudSprite<T> | null;
+  getSprite<T extends object = SpriteMetadata>(source: TextSource, options?: TextSpriteOptions<T>): CloudSprite<T> | null;
+  getSprite<T extends object = SpriteMetadata>(source: ImageLike, options?: ImageSpriteOptions<T>): CloudSprite<T> | null;
 
-  place<T extends SpriteMetadata = SpriteMetadata>(sprite: CloudSprite<T>, options?: PlaceOptions): PlacedSprite<T> | null;
+  place<T extends object = SpriteMetadata>(sprite: CloudSprite<T>, options?: PlaceOptions): PlacedSprite<T> | null;
 }
 
 export default CloudLayout;

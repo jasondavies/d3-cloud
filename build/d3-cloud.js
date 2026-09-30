@@ -163,7 +163,19 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   const metrics = context.measureText(sprite.text);
   const anchor = -metrics.width / 2;
   let width = (metrics.width + 1) * ratio;
-  let height = sprite.size << 1;
+  let height = sprite.size * 2;
+  const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) && Number.isFinite(metrics.actualBoundingBoxRight) && Number.isFinite(metrics.actualBoundingBoxAscent) && Number.isFinite(metrics.actualBoundingBoxDescent);
+  if (hasInkBounds) {
+    const strokeExtent = Math.abs(sprite.padding) * (context.lineJoin === "miter" ? context.miterLimit : 1);
+    width = Math.max(width, 2 * ratio * (strokeExtent + Math.max(
+      Math.abs(anchor - metrics.actualBoundingBoxLeft),
+      Math.abs(anchor + metrics.actualBoundingBoxRight)
+    )));
+    height = Math.max(height, 2 * ratio * (strokeExtent + Math.max(
+      Math.abs(metrics.actualBoundingBoxAscent),
+      Math.abs(metrics.actualBoundingBoxDescent)
+    )));
+  }
   if (sprite.rotate) {
     const sine = Math.sin(sprite.rotate * RADIANS);
     const cosine = Math.cos(sprite.rotate * RADIANS);
@@ -195,8 +207,8 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     context.strokeText(sprite.text, anchor, 0);
   }
   context.restore();
-  contextAndRatio.clearWidth = rasterWidth;
-  contextAndRatio.clearHeight = rasterHeight;
+  contextAndRatio.clearWidth = hasInkBounds ? rasterWidth : pixelWidth;
+  contextAndRatio.clearHeight = hasInkBounds ? rasterHeight : SCRATCH_HEIGHT;
   const pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
   const alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
   if (!alphaBounds) {

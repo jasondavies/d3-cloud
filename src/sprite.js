@@ -139,7 +139,27 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   const metrics = context.measureText(sprite.text);
   const anchor = -metrics.width / 2;
   let width = (metrics.width + 1) * ratio;
-  let height = sprite.size << 1;
+  let height = sprite.size * 2;
+  const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) &&
+    Number.isFinite(metrics.actualBoundingBoxRight) &&
+    Number.isFinite(metrics.actualBoundingBoxAscent) &&
+    Number.isFinite(metrics.actualBoundingBoxDescent);
+
+  if (hasInkBounds) {
+    // Advance width and font size do not bound italic overhang or accents.
+    // Enclose the ink symmetrically around the rendering origin before
+    // rotation, allowing for the longest possible padded stroke join.
+    const strokeExtent = Math.abs(sprite.padding) *
+      (context.lineJoin === "miter" ? context.miterLimit : 1);
+    width = Math.max(width, 2 * ratio * (strokeExtent + Math.max(
+      Math.abs(anchor - metrics.actualBoundingBoxLeft),
+      Math.abs(anchor + metrics.actualBoundingBoxRight)
+    )));
+    height = Math.max(height, 2 * ratio * (strokeExtent + Math.max(
+      Math.abs(metrics.actualBoundingBoxAscent),
+      Math.abs(metrics.actualBoundingBoxDescent)
+    )));
+  }
 
   if (sprite.rotate) {
     const sine = Math.sin(sprite.rotate * RADIANS);
@@ -176,8 +196,10 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   }
   context.restore();
 
-  contextAndRatio.clearWidth = rasterWidth;
-  contextAndRatio.clearHeight = rasterHeight;
+  // Width-only canvas adapters cannot tell us how far glyphs actually drew.
+  // Clear their entire scratch surface before the next sprite instead.
+  contextAndRatio.clearWidth = hasInkBounds ? rasterWidth : pixelWidth;
+  contextAndRatio.clearHeight = hasInkBounds ? rasterHeight : SCRATCH_HEIGHT;
 
   const pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
   const alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);

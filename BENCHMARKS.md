@@ -32,20 +32,21 @@ do not imply identical positions or placement counts. V1 and v2 may also
 consume random values differently. Fonts and canvas implementations vary by
 platform; these are reproducible workloads, not a promise of identical numbers.
 
-## Local comparison, 2026-09-29
+## Local comparison, 2026-09-30
 
 Measured on an Apple M5 Pro, macOS arm64, Node 24.21.0, node-canvas 3.2.3,
 Cairo 1.18.4, and Pango 1.57.1. V2 includes the pixel-tight text geometry and
-numeric occupancy-map changes following commit `fef6d45`, plus the bounded
-search correction described below. This comparison uses ten measured runs
-per version (`node benchmark.js --compare-v1 --runs=10`).
+numeric occupancy-map changes following commit `fef6d45`, the bounded search
+correction described below, and the measured text-ink bounds and cleanup fix.
+This comparison uses five measured runs per version
+(`node benchmark.js --compare-v1 --runs=5`).
 
 | Scenario | Version | Mean time | Min–max time | Mean placed | Placement range | Mean bounds area (px²) |
 | --- | --- | ---: | --- | ---: | --- | ---: |
-| 220 words, 2048 × 1536 | v1.2.9 | 130.05 ms | 125.44–140.57 ms | 220 | 220–220 | 2,906,854 |
-| 220 words, 2048 × 1536 | v2 | 128.56 ms | 125.35–132.58 ms | 220 | 220–220 | 2,808,196 |
-| 320 words, 512 × 384 | v1.2.9 | 203.56 ms | 199.93–207.71 ms | 31.0 | 27–35 | 195,520 |
-| 320 words, 512 × 384 | v2 | 203.08 ms | 197.87–210.88 ms | 29.4 | 26–33 | 195,623 |
+| 220 words, 2048 × 1536 | v1.2.9 | 125.61 ms | 124.35–128.80 ms | 220 | 220–220 | 2,915,899 |
+| 220 words, 2048 × 1536 | v2 | 127.87 ms | 125.44–129.60 ms | 220 | 220–220 | 2,756,819 |
+| 320 words, 512 × 384 | v1.2.9 | 198.54 ms | 194.65–204.60 ms | 30.8 | 29–33 | 195,994 |
+| 320 words, 512 × 384 | v2 | 199.52 ms | 198.19–202.00 ms | 30.0 | 26–33 | 195,483 |
 
 V2's timings were similar to v1 in both scenarios on this machine, with
 overlapping timing ranges. Placement counts still differ in the crowded box.
