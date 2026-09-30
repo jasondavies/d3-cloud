@@ -89,7 +89,7 @@ export type CloudSpriteOptions<T extends SpriteMetadata = SpriteMetadata> = T & 
   padding?: number;
 };
 
-export type PlacedSprite<T extends SpriteMetadata = SpriteMetadata> = T & {
+export type PlacedSprite<T extends SpriteMetadata = SpriteMetadata> = Omit<T, keyof CloudSpriteBase<T>> & {
   text: string;
   image: ImageLike | null;
   imageWidth: number | null;
@@ -114,8 +114,10 @@ export type PlacedSprite<T extends SpriteMetadata = SpriteMetadata> = T & {
   y1: number;
 };
 
-declare class CloudSprite<T extends SpriteMetadata = SpriteMetadata> {
+declare class CloudSpriteBase<T extends SpriteMetadata = SpriteMetadata> {
   constructor(options?: CloudSpriteOptions<T>);
+  // Type-only marker retains metadata inference through subclasses.
+  private readonly _metadata: T;
 
   text: string;
   image: ImageLike | null;
@@ -145,6 +147,15 @@ declare class CloudSprite<T extends SpriteMetadata = SpriteMetadata> {
 
   rasterize(contextAndRatio: unknown): this;
 }
+
+// Built-in fields override metadata at runtime, including raster geometry.
+type CloudSprite<T extends SpriteMetadata = {}> =
+  CloudSpriteBase<T> & Omit<T, keyof CloudSpriteBase<T>>;
+
+declare const CloudSprite: {
+  new<T extends SpriteMetadata = SpriteMetadata>(options?: CloudSpriteOptions<T>): CloudSprite<T>;
+  readonly prototype: CloudSpriteBase;
+};
 
 declare class CloudLayout {
   constructor();

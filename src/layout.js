@@ -194,8 +194,10 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
       dx,
       dy;
 
+  // Text uses rectangle overlap to keep the cloud compact. Image masks may
+  // be fully opaque rectangles, so they must also be allowed beside it.
   if ((!clipBounds || withinBounds(sprite, clipBounds)) &&
-      (!bounds || collideRects(sprite, bounds)) &&
+      (!bounds || sprite.image || collideRects(sprite, bounds)) &&
       !blocks.collides(sprite)) {
     blocks.insert(sprite);
     return true;
@@ -230,7 +232,7 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
 
     if (clipBounds && !withinBounds(sprite, clipBounds)) continue;
 
-    if (!bounds || collideRects(sprite, bounds)) {
+    if (!bounds || sprite.image || collideRects(sprite, bounds)) {
       if (!blocks.collides(sprite)) {
         blocks.insert(sprite);
         return true;

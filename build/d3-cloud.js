@@ -217,8 +217,8 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   }
   const { drawWidth, drawHeight } = imageSize;
   const bounds = rotatedBounds(drawWidth, drawHeight, sprite.rotate);
-  const rasterWidth = bounds.width;
-  const rasterHeight = bounds.height;
+  const rasterWidth = ceilToRatio(bounds.width + 2 * ratio, ratio);
+  const rasterHeight = ceilToRatio(bounds.height + 2 * ratio, ratio);
   if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
     contextAndRatio.clearWidth = 0;
     contextAndRatio.clearHeight = 0;
@@ -509,7 +509,7 @@ function createCloudSprite(source, options) {
 }
 function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random) {
   var startX = sprite.x, startY = sprite.y, deltaLimit = resolveMaxDelta(sprite, bounds, size, overflow), clipBounds = overflow ? null : sizeBounds(size), next, candidate, dx, dy;
-  if ((!clipBounds || withinBounds(sprite, clipBounds)) && (!bounds || collideRects(sprite, bounds)) && !blocks.collides(sprite)) {
+  if ((!clipBounds || withinBounds(sprite, clipBounds)) && (!bounds || sprite.image || collideRects(sprite, bounds)) && !blocks.collides(sprite)) {
     blocks.insert(sprite);
     return true;
   }
@@ -534,7 +534,7 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
     sprite.x = candidate.x;
     sprite.y = candidate.y;
     if (clipBounds && !withinBounds(sprite, clipBounds)) continue;
-    if (!bounds || collideRects(sprite, bounds)) {
+    if (!bounds || sprite.image || collideRects(sprite, bounds)) {
       if (!blocks.collides(sprite)) {
         blocks.insert(sprite);
         return true;

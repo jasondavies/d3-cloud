@@ -171,8 +171,8 @@ test("layout can build a CloudSprite from image alpha", () => {
   assert.equal(sprite.imageHeight, 4);
   assert.equal(sprite.width, 2);
   assert.equal(sprite.height, 2);
-  assert.equal(sprite.trimX, 1);
-  assert.equal(sprite.trimY, 1);
+  assert.equal(sprite.trimX, 2);
+  assert.equal(sprite.trimY, 2);
   assert.equal(sprite.trimWidth, 2);
   assert.equal(sprite.trimHeight, 2);
   assert.equal(sprite.x0, -1);
@@ -223,6 +223,92 @@ test("image masks ignore the text-only padding option", () => {
   assert.equal(padded.width, plain.width);
   assert.equal(padded.height, plain.height);
 });
+
+test("image masks cover rendered pixels for odd sizes, resizing, and rotation", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const layout = new CloudLayout().canvas(() => createCanvas(1, 1));
+  for (const [width, height] of [[1, 1], [3, 3], [5, 4], [4, 4], [31, 19]]) {
+    const image = createCanvas(width, height);
+    image.getContext("2d").fillRect(0, 0, width, height);
+    for (const rotate of [0, 15, 30, 45, 90, -30]) {
+      for (const dimensions of [{}, { width: 7, height: 9 }]) {
+        const sprite = layout.getSprite(image, { rotate, ...dimensions });
+        assert.ok(sprite);
+        const canvas = createCanvas(128, 128);
+        const context = canvas.getContext("2d");
+        context.translate(64, 64);
+        context.rotate(rotate * Math.PI / 180);
+        context.drawImage(image, -sprite.imageWidth / 2, -sprite.imageHeight / 2,
+          sprite.imageWidth, sprite.imageHeight);
+        const pixels = context.getImageData(0, 0, 128, 128).data;
+        for (let y = 0; y < 128; y++) {
+          for (let x = 0; x < 128; x++) {
+            if (!pixels[(y * 128 + x) * 4 + 3]) continue;
+            const sx = x - 64 - sprite.x0;
+            const sy = y - 64 - sprite.y0;
+            const covered = sx >= 0 && sx < sprite.width && sy >= 0 && sy < sprite.height &&
+              (sprite.sprite[sy * (sprite.spriteWidth / 32) + (sx >>> 5)] & (1 << (31 - (sx & 31))));
+            assert.ok(covered, `${width}×${height}, ${rotate}°, ${JSON.stringify(dimensions)}: missing pixel ${x - 64},${y - 64}`);
+          }
+        }
+      }
+    }
+  }
+});
+
+test("odd image dimensions cannot escape a bounded layout through clipped mask edges", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const image = createCanvas(3, 3);
+  image.getContext("2d").fillRect(0, 0, 3, 3);
+  const layout = new CloudLayout().canvas(() => createCanvas(1, 1))
+    .size([4, 4]).overflow(false).strategy("none");
+  const sprite = layout.getSprite(image);
+  assert.equal(layout.place(sprite, { x: -1, y: -1 }), null);
+  assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+  assert.deepEqual(layout.bounds(), [{ x: -2, y: -2 }, { x: 2, y: 2 }]);
+});
+
+test("opaque image sprites support explicit adjacent placement and erasure", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const image = createCanvas(10, 10);
+  image.getContext("2d").fillRect(0, 0, 10, 10);
+  const layout = new CloudLayout().canvas(() => createCanvas(1, 1)).size(0).strategy("none");
+  const first = layout.getSprite(image);
+  const second = layout.getSprite(image);
+  const probe = layout.getSprite(image);
+  assert.ok(layout.place(first, { x: 0, y: 0 }));
+  assert.ok(layout.place(second, { x: 10, y: 0 }));
+  assert.equal(layout.place(probe, { x: 9, y: 0 }), null);
+  layout.eraseSprite(second);
+  assert.equal(layout.place(probe, { x: 9, y: 0 }), null);
+  assert.ok(layout.place(probe, { x: 10, y: 0 }));
+});
+
+for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+  test(`${strategy.name} packs multiple opaque images without overlapping`, () => {
+    const { createCanvas } = loadNodeCanvas();
+    const image = createCanvas(10, 10);
+    image.getContext("2d").fillRect(0, 0, 10, 10);
+    for (const overflow of [false, true]) {
+      const layout = new CloudLayout().canvas(() => createCanvas(1, 1))
+        .size([64, 64]).overflow(overflow).random(() => 0.5).strategy(strategy);
+      const placed = [];
+      for (let i = 0; i < 6; i++) {
+        const word = layout.place(layout.getSprite(image));
+        assert.ok(word, `image ${i} failed with overflow ${overflow}`);
+        for (const other of placed) {
+          assert.ok(word.x + word.x1 <= other.x + other.x0 || word.x + word.x0 >= other.x + other.x1 ||
+            word.y + word.y1 <= other.y + other.y0 || word.y + word.y0 >= other.y + other.y1);
+        }
+        if (!overflow) {
+          assert.ok(word.x + word.x0 >= -32 && word.x + word.x1 <= 32);
+          assert.ok(word.y + word.y0 >= -32 && word.y + word.y1 <= 32);
+        }
+        placed.push(word);
+      }
+    }
+  });
+}
 
 test("text masks retain all padded pixels at the alphabetic rendering origin", () => {
   const { createCanvas } = loadNodeCanvas();
@@ -994,9 +1080,15 @@ for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
         return () => { attempts++; return next(); };
       };
       const probe = layout.getSprite(createFakeImage(2, 2, [[0, 0], [1, 0], [0, 1], [1, 1]]));
-      assert.equal(layout.place(probe, { x: 0, y: 0, strategy: countedStrategy }), null);
-      if (overflow) assert.ok(attempts > 2000, "unbounded search retains its expansion distance");
-      else assert.ok(attempts < 2000, `wasted ${attempts} candidates on a full fixed box`);
+      const placed = layout.place(probe, { x: 0, y: 0, strategy: countedStrategy });
+      if (overflow) {
+        assert.ok(placed, "unbounded image placement can expand beyond the full box");
+        assert.ok(placed.x + placed.x1 <= -width / 2 || placed.x + placed.x0 >= width / 2 ||
+          placed.y + placed.y1 <= -height / 2 || placed.y + placed.y0 >= height / 2);
+      } else {
+        assert.equal(placed, null);
+        assert.ok(attempts < 2000, `wasted ${attempts} candidates on a full fixed box`);
+      }
     }
   });
 

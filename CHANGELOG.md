@@ -46,6 +46,10 @@ Dependencies constrained to 1.x continue to use the old API.
 
 ### Changed
 
+- Preserved image edge pixels for odd dimensions, rotation, and resizing, and
+  allowed opaque image sprites to pack beside each other.
+- Preserved custom metadata types on prepared sprites as well as placed
+  snapshots, with built-in field types taking precedence over metadata.
 - Limited bounded placement searches to the fixed box and initial coordinates,
   avoiding expansion-distance searches after the box fills up.
 - Trimmed text and image geometry to occupied pixels, independently of packed

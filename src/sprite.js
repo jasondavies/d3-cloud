@@ -206,8 +206,10 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
 
   const { drawWidth, drawHeight } = imageSize;
   const bounds = rotatedBounds(drawWidth, drawHeight, sprite.rotate);
-  const rasterWidth = bounds.width;
-  const rasterHeight = bounds.height;
+  // Leave room on both sides of the integer raster origin for half-pixel
+  // image edges and antialiasing after rotation or resizing.
+  const rasterWidth = ceilToRatio(bounds.width + 2 * ratio, ratio);
+  const rasterHeight = ceilToRatio(bounds.height + 2 * ratio, ratio);
 
   if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
     contextAndRatio.clearWidth = 0;
