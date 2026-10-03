@@ -1,7 +1,6 @@
 const RADIANS = Math.PI / 180;
 const SCRATCH_WIDTH = 1 << 11;
 const SCRATCH_HEIGHT = 1 << 11;
-const SCRATCH_WORDS = SCRATCH_WIDTH >>> 5;
 
 export default class CloudSprite {
   constructor({
@@ -30,20 +29,7 @@ export default class CloudSprite {
     this.padding = normalizeNumber(padding);
     this.x = 0;
     this.y = 0;
-    this.hasPixels = false;
-    this.width = 0;
-    this.height = 0;
-    this.spriteWidth = 0;
-    this._rasterWidth = null;
-    this.trimX = 0;
-    this.trimY = 0;
-    this.trimWidth = 0;
-    this.trimHeight = 0;
-    this.x0 = 0;
-    this.y0 = 0;
-    this.x1 = 0;
-    this.y1 = 0;
-    this.sprite = undefined;
+    resetSprite(this);
   }
 
   rasterize(contextAndRatio) {
@@ -73,8 +59,7 @@ export function createSpriteContext(canvas) {
     ratio,
     pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
-    clearHeight: 0,
-    sprite: new Uint32Array(SCRATCH_WORDS * SCRATCH_HEIGHT)
+    clearHeight: 0
   };
 }
 

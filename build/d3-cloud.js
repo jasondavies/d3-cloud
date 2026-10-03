@@ -34,7 +34,6 @@ var __objRest = (source, exclude) => {
 var RADIANS = Math.PI / 180;
 var SCRATCH_WIDTH = 1 << 11;
 var SCRATCH_HEIGHT = 1 << 11;
-var SCRATCH_WORDS = SCRATCH_WIDTH >>> 5;
 var CloudSprite = class {
   constructor(_a = {}) {
     var _b = _a, {
@@ -73,20 +72,7 @@ var CloudSprite = class {
     this.padding = normalizeNumber(padding);
     this.x = 0;
     this.y = 0;
-    this.hasPixels = false;
-    this.width = 0;
-    this.height = 0;
-    this.spriteWidth = 0;
-    this._rasterWidth = null;
-    this.trimX = 0;
-    this.trimY = 0;
-    this.trimWidth = 0;
-    this.trimHeight = 0;
-    this.x0 = 0;
-    this.y0 = 0;
-    this.x1 = 0;
-    this.y1 = 0;
-    this.sprite = void 0;
+    resetSprite(this);
   }
   rasterize(contextAndRatio) {
     if (this.sprite) {
@@ -108,8 +94,7 @@ function createSpriteContext(canvas) {
     ratio,
     pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
-    clearHeight: 0,
-    sprite: new Uint32Array(SCRATCH_WORDS * SCRATCH_HEIGHT)
+    clearHeight: 0
   };
 }
 function normalizeInteger(value) {

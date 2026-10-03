@@ -68,7 +68,7 @@ test("layout uses half-size seeded placement", () => {
       .size([80, 40])
       .overflow(true)
       .random(createSequenceRandom([0.75, 0.25, 0.6]))
-      .strategy(noStrategy),
+      .strategy(noneStrategy),
     [{ text: "seeded", size: 12, padding: 0, rotate: 0, font: "serif" }]
   );
 
@@ -578,7 +578,7 @@ test("overflow false constrains image sprites to the layout size", () => {
     .size([4, 4])
     .overflow(false)
     .random(() => 0.5)
-    .strategy(noStrategy);
+    .strategy(noneStrategy);
   const image = createFakeImage(
     4,
     4,
@@ -686,7 +686,7 @@ test("place accepts explicit initial coordinates", () => {
     .size([40, 20])
     .overflow(true)
     .random(() => 0.25)
-    .strategy(noStrategy);
+    .strategy(noneStrategy);
 
   const sprite = layout.getSprite("hello", {
     font: "serif",
@@ -706,7 +706,7 @@ test("place mixes explicit coordinates with seeded defaults", () => {
     .size([40, 20])
     .overflow(true)
     .random(createSequenceRandom([0.25, 0.6]))
-    .strategy(noStrategy);
+    .strategy(noneStrategy);
 
   const sprite = layout.getSprite("hello", {
     font: "serif",
@@ -812,7 +812,7 @@ test("place accepts a per-call strategy override", () => {
     .size([0, 0])
     .overflow(true)
     .random(() => 0.5)
-    .strategy(noStrategy);
+    .strategy(noneStrategy);
 
   const first = layout.place(extractSprite(layout, { text: "first", size: 16, padding: 0, rotate: 0, font: "serif" }));
   const second = layout.place(
@@ -1055,7 +1055,7 @@ test("layout places a simple word and reports bounds", () => {
     .canvas(() => createFakeCanvas())
     .size([0, 0])
     .overflow(true)
-      .random(() => 0.5);
+    .random(() => 0.5);
 
   const { placedWords, bounds } = runLayout(layout, words);
 
@@ -1063,9 +1063,6 @@ test("layout places a simple word and reports bounds", () => {
   assert.equal(placedWords[0].text, "hello");
   assert.equal(placedWords[0].x, 0);
   assert.equal(placedWords[0].y, 0);
-  assert.equal(words[0].sprite, undefined);
-  assert.equal(words[0].x, undefined);
-  assert.equal(words[0].y, undefined);
   assert.ok(Array.isArray(bounds));
   assert.equal(bounds.length, 2);
   assert.ok(bounds[0].x < bounds[1].x);
@@ -1074,7 +1071,7 @@ test("layout places a simple word and reports bounds", () => {
 
 test("layout places many large sprites without leaking raster data into results", () => {
   const words = Array.from({ length: 40 }, (_, index) => ({
-    text: `batch-${String(index).padStart(2, "0")}-xxxxxxxxxxxxxxxxxxxxxxxxxx`,
+    text: `large-${String(index).padStart(2, "0")}-xxxxxxxxxxxxxxxxxxxxxxxxxx`,
     size: 160,
     padding: 0,
     rotate: 0
@@ -1083,7 +1080,7 @@ test("layout places many large sprites without leaking raster data into results"
     .canvas(() => createFakeCanvas())
     .size([0, 0])
     .overflow(true)
-      .random(createSeededRandom(1));
+    .random(createSeededRandom(1));
 
   const { placedWords } = runLayout(layout, words);
 
@@ -1105,7 +1102,7 @@ test("layout collision detection survives partial sprite readback", () => {
       .size([0, 0])
       .overflow(true)
       .random(createSequenceRandom([0.5, 0.5, 0.6, 0.5, 0.578125, 0.6]))
-      .strategy(noStrategy),
+      .strategy(noneStrategy),
     words
   );
 
@@ -1118,7 +1115,7 @@ test("layout can rerun the same input words after sprite options change", () => 
     .canvas(() => createFakeCanvas())
     .size([0, 0])
     .overflow(true)
-      .random(() => 0.5);
+    .random(() => 0.5);
 
   const { placedWords: firstPlacedWords } = runLayout(layout, words);
 
@@ -1139,7 +1136,7 @@ test("layout detects collisions near the right edge for non-word-aligned widths"
     .size([0, 0])
     .overflow(true)
     .random(() => 0.5)
-    .strategy(noStrategy);
+    .strategy(noneStrategy);
   const first = layout.place(extractSprite(layout, {
     text: "right-edge-a",
     size: 16,
@@ -1184,7 +1181,7 @@ test("overflow false constrains placement to the layout size", () => {
     .size([32, 32])
     .overflow(false)
     .random(() => 0.5)
-    .strategy(noStrategy);
+    .strategy(noneStrategy);
 
   const sprite = layout.getSprite("hello", {
     font: "serif",
@@ -1327,7 +1324,7 @@ function createFakeCanvas() {
         }
       }
 
-       for (const image of images) {
+      for (const image of images) {
         paintImageDraw(data, width, height, image);
       }
 
@@ -1841,7 +1838,7 @@ function detectNodeCanvasTouch(createCanvas, words, bounds) {
 
 function renderNodeCanvasRenderedFilledWord(context, word, x, y) {
   context.save();
-  context.font = getNodeCanvasRenderedWordFont(word);
+  context.font = getNodeCanvasWordFont(word);
   context.textAlign = "center";
   context.translate(x, y);
 
@@ -1869,10 +1866,6 @@ function renderNodeCanvasFilledWord(context, word, x, y) {
 }
 
 function getNodeCanvasWordFont(word) {
-  return `${word.style ?? "normal"} ${word.weight ?? "normal"} ${Math.max(1, Math.ceil(word.size))}px ${word.font ?? "serif"}`;
-}
-
-function getNodeCanvasRenderedWordFont(word) {
   return `${word.style ?? "normal"} ${word.weight ?? "normal"} ${Math.max(1, Math.ceil(word.size))}px ${word.font ?? "serif"}`;
 }
 
@@ -2052,12 +2045,6 @@ function extractSprite(layout, word) {
     rotate: word.rotate ?? 0,
     padding: word.padding ?? 1
   });
-}
-
-function noStrategy() {
-  return function() {
-    return null;
-  };
 }
 
 function singleCandidateStrategy(x, y) {

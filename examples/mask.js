@@ -47,7 +47,7 @@ async function render() {
       .overflow(false)
       .random(layoutRandom);
 
-    const maskPlacement = placeMask(layout, maskImage);
+    placeMask(layout, maskImage);
     const sprites = createSprites(layout, createWords(sizeRandom), rotateRandom);
     const placedWords = placeAll(layout, sprites);
     draw(placedWords, layout.bounds());
@@ -66,11 +66,9 @@ function placeMask(layout, maskImage) {
     throw new Error("Mask image could not be rasterized.");
   }
 
-  const maskPlacement = layout.place(maskSprite, { x: 0, y: 0 });
-  if (!maskPlacement) {
+  if (!layout.place(maskSprite, { x: 0, y: 0 })) {
     throw new Error("Mask image could not be placed.");
   }
-  return maskPlacement;
 }
 
 function createWords(random) {
