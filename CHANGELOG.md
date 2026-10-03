@@ -46,6 +46,11 @@ Dependencies constrained to 1.x continue to use the old API.
 
 ### Changed
 
+- Restored the scratch context after failed image draws and rejected unavailable
+  image/video sources even when they have explicit display dimensions.
+- Used intrinsic video dimensions to preserve aspect ratio when resizing sprites.
+- Accepted node-canvas factories in TypeScript alongside browser and offscreen
+  canvases.
 - Sized text rasters to measured ink bounds, including overhang, accents, and
   stroke joins; cleared the full scratch canvas for width-only adapters to
   prevent pixels from leaking into subsequent sprites.

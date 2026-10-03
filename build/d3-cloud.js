@@ -237,20 +237,23 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
     return sprite;
   }
   context.save();
-  context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
-  if (sprite.rotate) {
-    context.rotate(sprite.rotate * RADIANS);
+  try {
+    context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
+    if (sprite.rotate) {
+      context.rotate(sprite.rotate * RADIANS);
+    }
+    context.drawImage(
+      sprite.image,
+      -drawWidth / (2 * ratio),
+      -drawHeight / (2 * ratio),
+      drawWidth / ratio,
+      drawHeight / ratio
+    );
+  } finally {
+    context.restore();
+    contextAndRatio.clearWidth = rasterWidth;
+    contextAndRatio.clearHeight = rasterHeight;
   }
-  context.drawImage(
-    sprite.image,
-    -drawWidth / (2 * ratio),
-    -drawHeight / (2 * ratio),
-    drawWidth / ratio,
-    drawHeight / ratio
-  );
-  context.restore();
-  contextAndRatio.clearWidth = rasterWidth;
-  contextAndRatio.clearHeight = rasterHeight;
   const pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
   const alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
   if (!alphaBounds) {
@@ -291,8 +294,8 @@ function extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBou
   return sprite;
 }
 function resolveImageSize(image, imageWidth, imageHeight) {
-  const sourceWidth = resolveImageDimension(image, "naturalWidth", "width", "videoWidth");
-  const sourceHeight = resolveImageDimension(image, "naturalHeight", "height", "videoHeight");
+  const sourceWidth = resolveImageDimension(image, "naturalWidth", "videoWidth", "width");
+  const sourceHeight = resolveImageDimension(image, "naturalHeight", "videoHeight", "height");
   if (!(sourceWidth > 0) || !(sourceHeight > 0)) {
     return null;
   }
@@ -314,8 +317,8 @@ function resolveImageSize(image, imageWidth, imageHeight) {
 function resolveImageDimension(image, ...keys) {
   for (const key of keys) {
     const value = image == null ? void 0 : image[key];
-    if (typeof value === "number" && value > 0 && Number.isFinite(value)) {
-      return Math.trunc(value);
+    if (typeof value === "number") {
+      return value > 0 && Number.isFinite(value) ? Math.trunc(value) : 0;
     }
   }
   return 0;

@@ -24,7 +24,8 @@ export type RandomSource = () => number;
 export interface CanvasLike {
   width: number;
   height: number;
-  getContext(contextId: "2d", options?: { willReadFrequently?: boolean }): unknown;
+  // Canvas implementations may accept different optional context settings.
+  getContext(contextId: "2d"): unknown;
 }
 
 export type CanvasFactory = () => CanvasLike;

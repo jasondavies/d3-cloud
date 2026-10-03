@@ -182,6 +182,73 @@ test("layout can build a CloudSprite from image alpha", () => {
   assert.ok(sprite.sprite instanceof Uint32Array);
 });
 
+test("unavailable image and video sources ignore explicit display dimensions", () => {
+  const canvas = createFakeCanvas();
+  canvas.getContext("2d").drawImage = () => assert.fail("unavailable sources must not be drawn");
+  const layout = new CloudLayout().canvas(() => canvas);
+  for (const source of [
+    { width: 100, height: 100, naturalWidth: 0, naturalHeight: 0, complete: false },
+    { width: 100, height: 100, naturalWidth: 0, naturalHeight: 0, complete: true },
+    { width: 100, height: 100, videoWidth: 0, videoHeight: 0 }
+  ]) {
+    assert.equal(layout.getSprite(source), null);
+    assert.equal(layout.getSprite(source, { width: 80, height: 80 }), null);
+  }
+});
+
+test("failed image draws restore the context and clear any partial drawing", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const canvas = createCanvas(1, 1);
+  const context = canvas.getContext("2d");
+  const drawImage = context.drawImage.bind(context);
+  const brokenSource = createCanvas(400, 200);
+  const failure = new Error("image draw failed");
+  context.drawImage = (image, ...args) => {
+    if (image === brokenSource) {
+      context.fillRect(-200, -100, 400, 200);
+      throw failure;
+    }
+    drawImage(image, ...args);
+  };
+  const layout = new CloudLayout().canvas(() => canvas);
+  assert.ok(layout.getSprite("small", { size: 20 }));
+  assert.throws(() => layout.getSprite(brokenSource, { rotate: 30 }), error => error === failure);
+  assert.ok(context.getTransform().isIdentity);
+  assert.equal(layout.getSprite(createCanvas(600, 600)), null);
+  const options = { size: 40, padding: 0 };
+  const recovered = layout.getSprite("hello", options);
+  const fresh = new CloudLayout().canvas(() => createCanvas(1, 1)).getSprite("hello", options);
+  assert.deepEqual(recovered.sprite, fresh.sprite);
+  assert.deepEqual([recovered.x0, recovered.y0, recovered.x1, recovered.y1],
+    [fresh.x0, fresh.y0, fresh.x1, fresh.y1]);
+});
+
+test("image and video sprites use intrinsic dimensions when resizing", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas);
+  for (const dimensions of [
+    { naturalWidth: 160, naturalHeight: 90 },
+    { videoWidth: 160, videoHeight: 90 }
+  ]) {
+    const source = {
+      width: 100,
+      height: 100,
+      data: createFakeImage(160, 90,
+        Array.from({ length: 160 * 90 }, (_, i) => [i % 160, Math.floor(i / 160)])).data,
+      ...dimensions
+    };
+    for (const [options, expected] of [
+      [{}, [160, 90]],
+      [{ width: 80 }, [80, 45]],
+      [{ height: 45 }, [80, 45]],
+      [{ width: 80, height: 80 }, [80, 80]]
+    ]) {
+      const sprite = layout.getSprite(source, options);
+      assert.ok(sprite);
+      assert.deepEqual([sprite.imageWidth, sprite.imageHeight], expected);
+    }
+  }
+});
+
 test("text geometry is trimmed to ink while the packed stride stays word-aligned", () => {
   const layout = new CloudLayout().canvas(createFakeCanvas).size([50, 40]).overflow(false).strategy("none");
   const sprite = layout.getSprite("hello", { size: 20, padding: 0 });
@@ -1438,8 +1505,8 @@ function createImageDraw(context, image, x, y, width, height) {
 }
 
 function paintImageDraw(data, width, height, draw) {
-  const sourceWidth = draw.image.naturalWidth ?? draw.image.width;
-  const sourceHeight = draw.image.naturalHeight ?? draw.image.height;
+  const sourceWidth = draw.image.naturalWidth ?? draw.image.videoWidth ?? draw.image.width;
+  const sourceHeight = draw.image.naturalHeight ?? draw.image.videoHeight ?? draw.image.height;
   const sourceData = draw.image.data;
   const x0 = Math.max(0, Math.floor(draw.x0));
   const y0 = Math.max(0, Math.floor(draw.y0));

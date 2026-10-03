@@ -202,6 +202,7 @@ Image sprites are extracted from the source alpha channel, so transparent
 pixels are ignored automatically. For image sources, `options.width` and
 `options.height` may be used to resize the image before extraction; if only one
 dimension is provided, the other is derived from the source aspect ratio.
+Images and videos use their intrinsic dimensions rather than their display size.
 
 `padding` applies only to text. Image masks use the source alpha unchanged;
 adding transparent margins does not create occupied padding pixels.
