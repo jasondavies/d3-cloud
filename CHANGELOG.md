@@ -30,6 +30,10 @@ Dependencies constrained to 1.x continue to use the old API.
 - Changed placement configuration so `size([width, height])` defines the
   centered layout box, while `overflow(true | false)` controls whether
   placement may extend beyond that box.
+- Text padding now uses round stroke joins instead of the canvas default miter
+  joins, so padding extends exactly `padding` pixels from the glyph outline
+  rather than up to ten times that at sharp corners. Padded masks, and layouts
+  that depend on them, differ from 1.x.
 
 ### Added
 
@@ -55,15 +59,11 @@ Dependencies constrained to 1.x continue to use the old API.
   and redrew text into a larger raster, after clearing the scratch canvas,
   when its ink reached the raster edge, as some canvas implementations
   under-report ink bounds. Restored the scratch context after failed text
-  draws. Cleared an extra margin
-  of the scratch canvas for width-only adapters to prevent pixels from leaking
-  into subsequent sprites.
+  draws. Cleared an extra margin of the scratch canvas for width-only adapters
+  to prevent pixels from leaking into subsequent sprites.
 - Rasterized text with `textAlign = "center"`, matching the documented
   rendering contract, since some canvases position centered glyphs differently
   from a manually offset left-aligned run.
-- Text padding strokes now use round joins, so padding extends exactly
-  `padding` pixels from the glyph outline rather than up to ten times that at
-  sharp miter corners.
 - Allowed ordinary TypeScript interfaces as sprite metadata without requiring
   an index signature.
 - Preserved image edge pixels for odd dimensions, rotation, and resizing, and
@@ -95,3 +95,15 @@ Dependencies constrained to 1.x continue to use the old API.
   the current sprite, bounds, and layout size.
 - Simplified the public examples and aligned the browser demo with the modern
   ESM build.
+
+### Known limitations
+
+- The built-in strategies sample sparsely at extreme aspect ratios (around
+  20:1 and beyond), where the rectangular strategy's horizontal step grows to
+  four pixels times the aspect ratio. Fixed boxes at these ratios, and the
+  rectangular strategy from around 40:1, place fewer words than at moderate
+  ratios.
+- The archimedean strategy samples points about a tenth of the radius apart,
+  so from a seed far from the cloud along one axis it can step over a small
+  cloud and return `null`. Seed near the cloud, or use the rectangular
+  strategy, when placing far from existing words.
