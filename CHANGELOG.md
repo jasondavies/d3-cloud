@@ -52,8 +52,10 @@ Dependencies constrained to 1.x continue to use the old API.
 - Accepted node-canvas factories in TypeScript alongside browser and offscreen
   canvases.
 - Sized text rasters to measured ink bounds, including overhang and accents,
-  and redrew text into a larger raster when its ink reached the raster edge, as
-  some canvas implementations under-report ink bounds. Cleared an extra margin
+  and redrew text into a larger raster, after clearing the scratch canvas,
+  when its ink reached the raster edge, as some canvas implementations
+  under-report ink bounds. Restored the scratch context after failed text
+  draws. Cleared an extra margin
   of the scratch canvas for width-only adapters to prevent pixels from leaking
   into subsequent sprites.
 - Rasterized text with `textAlign = "center"`, matching the documented
@@ -74,8 +76,8 @@ Dependencies constrained to 1.x continue to use the old API.
 - Extended unbounded search limits to reach the existing cloud from distant
   seeds.
 - Applied the same search limits to built-in and custom strategies, so wrapped
-  built-ins behave identically and extreme aspect ratios cannot search for
-  minutes.
+  built-ins behave identically, and stopped generators that repeat points or
+  move along one axis after 100,000 candidates without progress.
 - Copying a placed sprite's fields into a new sprite no longer marks the copy
   as placed, and layouts no longer retain references to placed sprites.
 - Trimmed text and image geometry to occupied pixels, independently of packed

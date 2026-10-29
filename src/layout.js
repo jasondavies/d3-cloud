@@ -4,7 +4,6 @@
 import CloudSprite, { createSpriteContext } from "./sprite.js";
 
 const IMAGE_SLACK = 4;
-const FAR_LIMIT_SCALE = 8;
 const STALL_LIMIT = 100000;
 
 const STRATEGIES = {
@@ -192,11 +191,12 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
       limitX = deltaLimit[0],
       limitY = deltaLimit[1],
       clipBounds = overflow ? null : sizeBounds(size),
+      aspectRatio = sizeAspectRatio(size),
       next,
       candidate,
       dx,
       dy,
-      distance;
+      progress;
 
   if ((!clipBounds || withinBounds(sprite, clipBounds)) &&
       (!bounds || collideRects(sprite, bounds)) &&
@@ -209,7 +209,7 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
     { x: startX, y: startY },
     {
       size: size.slice(),
-      aspectRatio: sizeAspectRatio(size),
+      aspectRatio,
       bounds: cloneBounds(bounds),
       overflow,
       random
@@ -219,22 +219,19 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
     throw new TypeError("strategy factories must return a candidate generator");
   }
 
-  // Stop once a candidate is beyond the limits on both axes, or far beyond
-  // either, so narrow spirals and single-axis generators terminate. Stop
-  // generators that repeat points once they stop moving away from the seed.
-  var farX = limitX * FAR_LIMIT_SCALE,
-      farY = limitY * FAR_LIMIT_SCALE,
-      reach = 0,
+  // Stop once a candidate is beyond the limits on both axes. Progress is
+  // measured on the axis furthest from its limit, so generators that repeat
+  // points or move along only one axis stop after a run without progress.
+  var reach = 0,
       stalled = 0;
   while ((candidate = normalizeStrategyCandidate(next()))) {
     dx = Math.abs(candidate.x - startX);
     dy = Math.abs(candidate.y - startY);
 
-    distance = Math.max(dx, dy);
-
-    if ((dx >= limitX && dy >= limitY) || dx >= farX || dy >= farY) break;
-    if (distance > reach) {
-      reach = distance;
+    if (dx >= limitX && dy >= limitY) break;
+    progress = Math.min(dx / limitX, dy / limitY);
+    if (progress > reach) {
+      reach = progress;
       stalled = 0;
     } else if (++stalled >= STALL_LIMIT) {
       break;
@@ -544,8 +541,10 @@ function expandBounds(bounds, d) {
 function collideRects(a, b) {
   // Rectangle overlap keeps the cloud compact, but tight or opaque masks
   // must be allowed beside it without their pixels overlapping. Text keeps
-  // its horizontal raster slack; image masks get an envelope at least as
-  // wide as the rectangular spiral's step so some candidate can touch.
+  // the horizontal slack of its measured raster, centered on the origin.
+  // Image masks get a small envelope on every side. The rectangular spiral
+  // always steps 4px vertically, so it can land beside the cloud on that
+  // axis even when wide layouts stretch its horizontal step past the slack.
   var x0, x1, y0, y1;
   if (a._rasterWidth == null) {
     x0 = a.x0 - IMAGE_SLACK;
@@ -553,8 +552,9 @@ function collideRects(a, b) {
     y0 = a.y0 - IMAGE_SLACK;
     y1 = a.y1 + IMAGE_SLACK;
   } else {
-    x0 = a.x0 - a.trimX;
-    x1 = x0 + a._rasterWidth;
+    x0 = -(a._rasterWidth >> 1);
+    x1 = Math.max(a.x1, x0 + a._rasterWidth);
+    x0 = Math.min(a.x0, x0);
     y0 = a.y0;
     y1 = a.y1;
   }

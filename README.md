@@ -265,9 +265,9 @@ The `initial` argument is the initial `{x, y}` seed for this placement.
 Each generated candidate must be returned as `{x, y}`. Candidate coordinates
 are rounded down to integer pixels. Returning `null` stops the search.
 Built-in and custom strategies follow the same search limits. A search stops
-once a candidate is beyond the layout's search distance on both axes, or eight
-times that distance on either axis, and after 100,000 consecutive candidates
-that get no farther from the seed; stopping returns `null`. This limits
+once a candidate is beyond the layout's search distance on both axes, or after
+100,000 consecutive candidates that make no progress on the axis furthest from
+that distance; stopping returns `null`. This limits
 repeated or one-axis searches, but cannot interrupt a generator that never
 returns from an individual call.
 

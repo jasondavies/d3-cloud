@@ -118,10 +118,21 @@ function clearContext(contextAndRatio) {
 
 function rasterizeTextSprite(sprite, contextAndRatio) {
   const context = clearContext(contextAndRatio);
+
+  context.save();
+  try {
+    return drawTextSprite(sprite, contextAndRatio, context);
+  } finally {
+    // A failed measure or draw must not affect the font, alignment, or
+    // transform of the next sprite.
+    context.restore();
+  }
+}
+
+function drawTextSprite(sprite, contextAndRatio, context) {
   const ratio = contextAndRatio.ratio;
   const pixelWidth = contextAndRatio.pixelWidth;
 
-  context.save();
   context.font = `${sprite.style} ${sprite.weight} ${Math.max(1, Math.ceil(sprite.size / ratio))}px ${sprite.font}`;
   // Match the documented rendering contract exactly: some canvases position
   // centered glyphs differently from a manually offset left-aligned run.
@@ -167,47 +178,63 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   // Width-only canvas adapters cannot tell us how far glyphs actually drew,
   // so clear two extra ems past the raster before the next sprite.
   const overhang = hasInkBounds ? 0 : 2 * sprite.size;
-  let rasterWidth = ceilToRatio(width + overscan * 2, ratio);
+  // The horizontal search envelope keeps the measured raster width, even if
+  // under-reported metrics force the ink into a larger raster.
+  const envelopeWidth = ceilToRatio(width + overscan * 2, ratio);
+  let rasterWidth = envelopeWidth;
   let rasterHeight = ceilToRatio(height + overscan * 2, ratio);
+  let redrawn = false;
   let pixels;
   let alphaBounds;
 
   for (;;) {
     if (rasterWidth > maxWidth || rasterHeight > maxHeight) {
-      context.restore();
       contextAndRatio.clearWidth = 0;
       contextAndRatio.clearHeight = 0;
       return sprite;
     }
 
     context.save();
-    context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
-    if (sprite.rotate) {
-      context.rotate(sprite.rotate * RADIANS);
+    try {
+      context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
+      if (sprite.rotate) {
+        context.rotate(sprite.rotate * RADIANS);
+      }
+      context.fillText(sprite.text, 0, 0);
+      if (sprite.padding) {
+        context.lineWidth = 2 * sprite.padding;
+        context.lineJoin = "round";
+        context.strokeText(sprite.text, 0, 0);
+      }
+    } finally {
+      context.restore();
+      // Clear any partial drawing before the next sprite, even after failure.
+      contextAndRatio.clearWidth = Math.min(pixelWidth, rasterWidth + overhang);
+      contextAndRatio.clearHeight = Math.min(SCRATCH_HEIGHT, rasterHeight + overhang);
     }
-    context.fillText(sprite.text, 0, 0);
-    if (sprite.padding) {
-      context.lineWidth = 2 * sprite.padding;
-      context.lineJoin = "round";
-      context.strokeText(sprite.text, 0, 0);
-    }
-    context.restore();
-
-    contextAndRatio.clearWidth = Math.min(pixelWidth, rasterWidth + overhang);
-    contextAndRatio.clearHeight = Math.min(SCRATCH_HEIGHT, rasterHeight + overhang);
 
     pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
     alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
 
-    if (!alphaBounds || !touchesEdge(alphaBounds, rasterWidth, rasterHeight)) {
+    if (!alphaBounds) {
+      break;
+    }
+    const growWidth = alphaBounds.x0 === 0 || alphaBounds.x0 + alphaBounds.width === rasterWidth;
+    const growHeight = alphaBounds.y0 === 0 || alphaBounds.y0 + alphaBounds.height === rasterHeight;
+    if (!growWidth && !growHeight) {
       break;
     }
 
     // Ink reaching the raster edge may have been clipped because the font
-    // metrics underestimated it, so redraw into a larger raster.
+    // metrics underestimated it. Clipped ink may have landed anywhere on the
+    // scratch canvas, so clear all of it, then redraw larger along each axis
+    // the ink reached.
+    redrawn = true;
+    contextAndRatio.clearWidth = pixelWidth;
+    contextAndRatio.clearHeight = SCRATCH_HEIGHT;
     clearContext(contextAndRatio);
-    const nextWidth = Math.min(maxWidth, rasterWidth * 2);
-    const nextHeight = Math.min(maxHeight, rasterHeight * 2);
+    const nextWidth = growWidth ? Math.min(maxWidth, rasterWidth * 2) : rasterWidth;
+    const nextHeight = growHeight ? Math.min(maxHeight, rasterHeight * 2) : rasterHeight;
     if (nextWidth === rasterWidth && nextHeight === rasterHeight) {
       alphaBounds = null;
       break;
@@ -215,15 +242,18 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     rasterWidth = nextWidth;
     rasterHeight = nextHeight;
   }
-  context.restore();
+
+  if (redrawn) {
+    // Metrics that under-reported once cannot bound where this ink went.
+    contextAndRatio.clearWidth = pixelWidth;
+    contextAndRatio.clearHeight = SCRATCH_HEIGHT;
+  }
 
   if (!alphaBounds) {
     return sprite;
   }
 
-  // Retain the original horizontal search envelope independently of the
-  // pixel-tight public geometry and the packed row stride.
-  sprite._rasterWidth = rasterWidth;
+  sprite._rasterWidth = envelopeWidth;
   return extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBounds);
 }
 
@@ -372,11 +402,6 @@ function rotatedBounds(width, height, rotate) {
     width: Math.max(1, Math.ceil(Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine)))),
     height: Math.max(1, Math.ceil(Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine))))
   };
-}
-
-function touchesEdge(bounds, width, height) {
-  return bounds.x0 === 0 || bounds.y0 === 0 ||
-    bounds.x0 + bounds.width === width || bounds.y0 + bounds.height === height;
 }
 
 function findAlphaBounds(pixels, width, height) {

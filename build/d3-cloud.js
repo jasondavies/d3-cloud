@@ -143,9 +143,16 @@ function clearContext(contextAndRatio) {
 }
 function rasterizeTextSprite(sprite, contextAndRatio) {
   const context = clearContext(contextAndRatio);
+  context.save();
+  try {
+    return drawTextSprite(sprite, contextAndRatio, context);
+  } finally {
+    context.restore();
+  }
+}
+function drawTextSprite(sprite, contextAndRatio, context) {
   const ratio = contextAndRatio.ratio;
   const pixelWidth = contextAndRatio.pixelWidth;
-  context.save();
   context.font = `${sprite.style} ${sprite.weight} ${Math.max(1, Math.ceil(sprite.size / ratio))}px ${sprite.font}`;
   context.textAlign = "center";
   const metrics = context.measureText(sprite.text);
@@ -177,39 +184,51 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   const maxWidth = Math.floor(pixelWidth / ratio) * ratio;
   const maxHeight = Math.floor(SCRATCH_HEIGHT / ratio) * ratio;
   const overhang = hasInkBounds ? 0 : 2 * sprite.size;
-  let rasterWidth = ceilToRatio(width + overscan * 2, ratio);
+  const envelopeWidth = ceilToRatio(width + overscan * 2, ratio);
+  let rasterWidth = envelopeWidth;
   let rasterHeight = ceilToRatio(height + overscan * 2, ratio);
+  let redrawn = false;
   let pixels;
   let alphaBounds;
   for (; ; ) {
     if (rasterWidth > maxWidth || rasterHeight > maxHeight) {
-      context.restore();
       contextAndRatio.clearWidth = 0;
       contextAndRatio.clearHeight = 0;
       return sprite;
     }
     context.save();
-    context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
-    if (sprite.rotate) {
-      context.rotate(sprite.rotate * RADIANS);
+    try {
+      context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
+      if (sprite.rotate) {
+        context.rotate(sprite.rotate * RADIANS);
+      }
+      context.fillText(sprite.text, 0, 0);
+      if (sprite.padding) {
+        context.lineWidth = 2 * sprite.padding;
+        context.lineJoin = "round";
+        context.strokeText(sprite.text, 0, 0);
+      }
+    } finally {
+      context.restore();
+      contextAndRatio.clearWidth = Math.min(pixelWidth, rasterWidth + overhang);
+      contextAndRatio.clearHeight = Math.min(SCRATCH_HEIGHT, rasterHeight + overhang);
     }
-    context.fillText(sprite.text, 0, 0);
-    if (sprite.padding) {
-      context.lineWidth = 2 * sprite.padding;
-      context.lineJoin = "round";
-      context.strokeText(sprite.text, 0, 0);
-    }
-    context.restore();
-    contextAndRatio.clearWidth = Math.min(pixelWidth, rasterWidth + overhang);
-    contextAndRatio.clearHeight = Math.min(SCRATCH_HEIGHT, rasterHeight + overhang);
     pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
     alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
-    if (!alphaBounds || !touchesEdge(alphaBounds, rasterWidth, rasterHeight)) {
+    if (!alphaBounds) {
       break;
     }
+    const growWidth = alphaBounds.x0 === 0 || alphaBounds.x0 + alphaBounds.width === rasterWidth;
+    const growHeight = alphaBounds.y0 === 0 || alphaBounds.y0 + alphaBounds.height === rasterHeight;
+    if (!growWidth && !growHeight) {
+      break;
+    }
+    redrawn = true;
+    contextAndRatio.clearWidth = pixelWidth;
+    contextAndRatio.clearHeight = SCRATCH_HEIGHT;
     clearContext(contextAndRatio);
-    const nextWidth = Math.min(maxWidth, rasterWidth * 2);
-    const nextHeight = Math.min(maxHeight, rasterHeight * 2);
+    const nextWidth = growWidth ? Math.min(maxWidth, rasterWidth * 2) : rasterWidth;
+    const nextHeight = growHeight ? Math.min(maxHeight, rasterHeight * 2) : rasterHeight;
     if (nextWidth === rasterWidth && nextHeight === rasterHeight) {
       alphaBounds = null;
       break;
@@ -217,11 +236,14 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     rasterWidth = nextWidth;
     rasterHeight = nextHeight;
   }
-  context.restore();
+  if (redrawn) {
+    contextAndRatio.clearWidth = pixelWidth;
+    contextAndRatio.clearHeight = SCRATCH_HEIGHT;
+  }
   if (!alphaBounds) {
     return sprite;
   }
-  sprite._rasterWidth = rasterWidth;
+  sprite._rasterWidth = envelopeWidth;
   return extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBounds);
 }
 function rasterizeImageSprite(sprite, contextAndRatio) {
@@ -345,9 +367,6 @@ function rotatedBounds(width, height, rotate) {
     height: Math.max(1, Math.ceil(Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine))))
   };
 }
-function touchesEdge(bounds, width, height) {
-  return bounds.x0 === 0 || bounds.y0 === 0 || bounds.x0 + bounds.width === width || bounds.y0 + bounds.height === height;
-}
 function findAlphaBounds(pixels, width, height) {
   let minX = width;
   let minY = height;
@@ -377,7 +396,6 @@ function findAlphaBounds(pixels, width, height) {
 
 // src/layout.js
 var IMAGE_SLACK = 4;
-var FAR_LIMIT_SCALE = 8;
 var STALL_LIMIT = 1e5;
 var STRATEGIES = {
   archimedean: archimedeanStrategy,
@@ -532,7 +550,7 @@ function createCloudSprite(source, options) {
   throw new TypeError("getSprite() expects text or an image-like source");
 }
 function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random) {
-  var startX = sprite.x, startY = sprite.y, deltaLimit = resolveMaxDelta(sprite, bounds, size, overflow), limitX = deltaLimit[0], limitY = deltaLimit[1], clipBounds = overflow ? null : sizeBounds(size), next, candidate, dx, dy, distance;
+  var startX = sprite.x, startY = sprite.y, deltaLimit = resolveMaxDelta(sprite, bounds, size, overflow), limitX = deltaLimit[0], limitY = deltaLimit[1], clipBounds = overflow ? null : sizeBounds(size), aspectRatio = sizeAspectRatio(size), next, candidate, dx, dy, progress;
   if ((!clipBounds || withinBounds(sprite, clipBounds)) && (!bounds || collideRects(sprite, bounds)) && !blocks.collides(sprite)) {
     blocks.insert(sprite);
     return true;
@@ -541,7 +559,7 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
     { x: startX, y: startY },
     {
       size: size.slice(),
-      aspectRatio: sizeAspectRatio(size),
+      aspectRatio,
       bounds: cloneBounds(bounds),
       overflow,
       random
@@ -550,14 +568,14 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
   if (typeof next !== "function") {
     throw new TypeError("strategy factories must return a candidate generator");
   }
-  var farX = limitX * FAR_LIMIT_SCALE, farY = limitY * FAR_LIMIT_SCALE, reach = 0, stalled = 0;
+  var reach = 0, stalled = 0;
   while (candidate = normalizeStrategyCandidate(next())) {
     dx = Math.abs(candidate.x - startX);
     dy = Math.abs(candidate.y - startY);
-    distance = Math.max(dx, dy);
-    if (dx >= limitX && dy >= limitY || dx >= farX || dy >= farY) break;
-    if (distance > reach) {
-      reach = distance;
+    if (dx >= limitX && dy >= limitY) break;
+    progress = Math.min(dx / limitX, dy / limitY);
+    if (progress > reach) {
+      reach = progress;
       stalled = 0;
     } else if (++stalled >= STALL_LIMIT) {
       break;
@@ -780,8 +798,9 @@ function collideRects(a, b) {
     y0 = a.y0 - IMAGE_SLACK;
     y1 = a.y1 + IMAGE_SLACK;
   } else {
-    x0 = a.x0 - a.trimX;
-    x1 = x0 + a._rasterWidth;
+    x0 = -(a._rasterWidth >> 1);
+    x1 = Math.max(a.x1, x0 + a._rasterWidth);
+    x0 = Math.min(a.x0, x0);
     y0 = a.y0;
     y1 = a.y1;
   }

@@ -488,6 +488,59 @@ test("text masks cover antialiased centered rendering, as documented", () => {
   }
 });
 
+test("under-reported ink metrics redraw text without stale pixels or a wider envelope", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const underReporting = () => {
+    const canvas = createCanvas(1, 1);
+    const context = canvas.getContext("2d");
+    const measure = context.measureText.bind(context);
+    context.measureText = text => {
+      const metrics = measure(text);
+      return {
+        width: metrics.width * 0.3,
+        actualBoundingBoxLeft: metrics.actualBoundingBoxLeft * 0.3,
+        actualBoundingBoxRight: metrics.actualBoundingBoxRight * 0.3,
+        actualBoundingBoxAscent: metrics.actualBoundingBoxAscent * 0.3,
+        actualBoundingBoxDescent: metrics.actualBoundingBoxDescent * 0.3
+      };
+    };
+    return canvas;
+  };
+  const layout = new CloudLayout().canvas(underReporting);
+  const reference = new CloudLayout().canvas(() => createCanvas(1, 1));
+  for (const options of [{ size: 60 }, { size: 60, rotate: 30 }, { size: 40, padding: 3 }]) {
+    const redrawn = layout.getSprite("WWWWWWWW", options);
+    const expected = reference.getSprite("WWWWWWWW", options);
+    assert.deepEqual([redrawn.width, redrawn.height], [expected.width, expected.height]);
+    assert.deepEqual(redrawn.sprite, expected.sprite);
+    // The search envelope stays at the measured raster width.
+    assert.ok(redrawn._rasterWidth <= expected._rasterWidth);
+    const next = layout.getSprite("hi", { size: 20, padding: 0 });
+    assert.deepEqual(next.sprite, reference.getSprite("hi", { size: 20, padding: 0 }).sprite);
+  }
+});
+
+test("failed text draws restore the context and clear any partial drawing", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const canvas = createCanvas(1, 1);
+  const context = canvas.getContext("2d");
+  const fillText = context.fillText.bind(context);
+  const failure = new Error("text draw failed");
+  context.fillText = (text, ...args) => {
+    fillText(text, ...args);
+    if (text === "broken") throw failure;
+  };
+  const layout = new CloudLayout().canvas(() => canvas);
+  assert.ok(layout.getSprite("small", { size: 20 }));
+  assert.throws(() => layout.getSprite("broken", { size: 80, rotate: 30 }), error => error === failure);
+  assert.ok(context.getTransform().isIdentity);
+  assert.equal(context.textAlign, "start");
+  const options = { size: 40, padding: 0 };
+  const recovered = layout.getSprite("hello", options);
+  const fresh = new CloudLayout().canvas(() => createCanvas(1, 1)).getSprite("hello", options);
+  assert.deepEqual(recovered.sprite, fresh.sprite);
+});
+
 test("text overhang cannot contaminate subsequent text or image sprites", () => {
   const { createCanvas } = loadNodeCanvas();
   // Exercise both complete TextMetrics and canvas adapters exposing only width.
@@ -560,11 +613,7 @@ test("custom strategies terminate when repeating or moving along only one axis",
       return { x: move ? attempts * 100 : 0, y: 0 };
     };
     assert.equal(layout.place(layout.getSprite("second", { size: 20 }), { strategy }), null);
-    if (move) {
-      assert.ok(attempts < 100, `single-axis search ran for ${attempts} candidates`);
-    } else {
-      assert.equal(attempts, 100000);
-    }
+    assert.equal(attempts, 100000);
   }
 });
 
@@ -594,6 +643,13 @@ test("overflow searches reach the cloud from distant seeds", () => {
     assert.ok(layout.place(layout.getSprite("first", { size: 20 }), { x: -256, y: -256 }));
     assert.ok(layout.place(layout.getSprite("second", { size: 20 }), { x: 255, y: 255 }),
       `${strategy.name} gave up before reaching the cloud`);
+  }
+  // Sparse archimedean turns can miss a small cloud from far away, but the
+  // search must not stop before the rectangular spiral reaches it.
+  for (const seed of [{ x: 5000, y: 0 }, { x: 0, y: -5000 }]) {
+    const layout = new CloudLayout().canvas(createFakeCanvas).strategy(rectangularStrategy);
+    assert.ok(layout.place(layout.getSprite("first", { size: 20 }), { x: 0, y: 0 }));
+    assert.ok(layout.place(layout.getSprite("second", { size: 20 }), seed), `gave up from ${seed.x},${seed.y}`);
   }
 });
 
@@ -1009,6 +1065,28 @@ test("image sprites stay attached to the cloud rather than forming islands", () 
     assert.ok(word);
     const gap = Math.max(word.x + word.x0 - 5, -5 - (word.x + word.x1), word.y + word.y0 - 5, -5 - (word.y + word.y1));
     assert.ok(gap >= 0 && gap <= 4, `${strategy.name} left a ${gap}px gap`);
+  }
+});
+
+test("opaque images pack beside each other in wide layouts", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const image = createCanvas(10, 10);
+  image.getContext("2d").fillRect(0, 0, 10, 10);
+  for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+    for (const size of [[1600, 900], [3200, 400]]) {
+      const layout = new CloudLayout().canvas(() => createCanvas(1, 1))
+        .size(size).random(createSeededRandom(3)).strategy(strategy);
+      for (let i = 0; i < 30; i++) {
+        const before = layout.bounds();
+        const word = layout.place(layout.getSprite(image));
+        assert.ok(word, `${strategy.name} ${size}: image ${i} was not placed`);
+        if (before) {
+          const gapX = Math.max(word.x + word.x0 - before[1].x, before[0].x - (word.x + word.x1));
+          const gapY = Math.max(word.y + word.y0 - before[1].y, before[0].y - (word.y + word.y1));
+          assert.ok(gapX <= 4 && gapY <= 4, `${strategy.name} ${size}: image ${i} detached by ${gapX},${gapY}`);
+        }
+      }
+    }
   }
 });
 
