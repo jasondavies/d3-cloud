@@ -264,9 +264,12 @@ The `initial` argument is the initial `{x, y}` seed for this placement.
 
 Each generated candidate must be returned as `{x, y}`. Candidate coordinates
 are rounded down to integer pixels. Returning `null` stops the search.
-Custom strategies are limited to 100,000 candidates per placement; exhausting
-the budget returns `null`. This limits repeated or one-axis searches, but cannot
-interrupt a generator that never returns from an individual call.
+Built-in and custom strategies follow the same search limits. A search stops
+once a candidate is beyond the layout's search distance on both axes, or eight
+times that distance on either axis, and after 100,000 consecutive candidates
+that get no farther from the seed; stopping returns `null`. This limits
+repeated or one-axis searches, but cannot interrupt a generator that never
+returns from an individual call.
 
 The built-in strategies are also exported as `archimedeanStrategy`,
 `rectangularStrategy`, and `noneStrategy`, so callers do not need to use string

@@ -150,6 +150,9 @@ declare class CloudSpriteBase<T extends object = SpriteMetadata> {
 }
 
 // Built-in fields override metadata at runtime, including raster geometry.
+// A bare CloudSprite accepts sprites with any metadata, including interface
+// types that lack an index signature, so it defaults to {} rather than
+// SpriteMetadata; annotate CloudSprite<T> to keep metadata fields.
 type CloudSprite<T extends object = {}> =
   CloudSpriteBase<T> & Omit<T, keyof CloudSpriteBase<T>>;
 

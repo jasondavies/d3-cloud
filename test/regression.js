@@ -396,6 +396,7 @@ test("text masks retain all padded pixels at the alphabetic rendering origin", (
         context.fillText(text, anchor, 0);
         if (padding) {
           context.lineWidth = 2 * padding;
+          context.lineJoin = "round";
           context.strokeText(text, anchor, 0);
         }
         const pixels = context.getImageData(0, 0, 512, 512).data;
@@ -435,6 +436,7 @@ test("large italic and accented text masks cover their full rendered ink", () =>
       context.fillText(options.text, anchor, 0);
       if (options.padding) {
         context.lineWidth = 2 * options.padding;
+        context.lineJoin = "round";
         context.strokeText(options.text, anchor, 0);
       }
       const pixels = context.getImageData(0, 0, 1536, 1536).data;
@@ -485,18 +487,21 @@ test("ratio-three text readback preserves tail pixels without spilling between r
     const context = createFakeCanvas().getContext("2d");
     context.measureText = () => ({ width: measuredWidth });
     let physicalWidth;
+    // Keep the ink one pixel inside the raster, as ink touching the edge is
+    // treated as clipped and redrawn larger.
     context.getImageData = (_x, _y, width, height) => {
       physicalWidth = width * 3;
       const data = new Uint8ClampedArray(physicalWidth * height * 3 * 4);
-      data[((physicalWidth - 1) * 4) + 3] = 255;
-      data[(physicalWidth * 4) + 3] = 255;
+      data[((physicalWidth * 2 - 2) * 4) + 3] = 255;
+      data[((physicalWidth * 2 + 1) * 4) + 3] = 255;
       return { data };
     };
     const sprite = new CloudSprite({ text: "test", size: 20, padding: 0 });
     sprite.rasterize({ context, ratio: 3, pixelWidth: 2048, clearWidth: 0, clearHeight: 0 });
-    const stride = Math.ceil(physicalWidth / 32);
+    const trimmedWidth = physicalWidth - 2;
+    const stride = Math.ceil(trimmedWidth / 32);
     const expected = new Uint32Array(stride * 2);
-    expected[(physicalWidth - 1) >>> 5] = (1 << (31 - ((physicalWidth - 1) & 31))) >>> 0;
+    expected[(trimmedWidth - 1) >>> 5] = (1 << (31 - ((trimmedWidth - 1) & 31))) >>> 0;
     expected[stride] = 0x80000000;
     assert.equal(sprite.spriteWidth, stride * 32);
     assert.deepEqual(sprite.sprite, expected);
@@ -521,7 +526,43 @@ test("custom strategies terminate when repeating or moving along only one axis",
       return { x: move ? attempts * 100 : 0, y: 0 };
     };
     assert.equal(layout.place(layout.getSprite("second", { size: 20 }), { strategy }), null);
-    assert.equal(attempts, 100000);
+    if (move) {
+      assert.ok(attempts < 100, `single-axis search ran for ${attempts} candidates`);
+    } else {
+      assert.equal(attempts, 100000);
+    }
+  }
+});
+
+test("built-in spirals give up promptly in full boxes with extreme aspect ratios", () => {
+  for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+    for (const [width, height] of [[4, 1000], [1000, 4]]) {
+      const layout = new CloudLayout().canvas(createFakeCanvas)
+        .size([width, height]).overflow(false).random(() => 0.5);
+      const full = createFakeImage(width, height,
+        Array.from({ length: width * height }, (_, i) => [i % width, Math.floor(i / width)]));
+      assert.ok(layout.place(layout.getSprite(full), { x: 0, y: 0 }));
+      let attempts = 0;
+      const counted = (initial, context) => {
+        const next = strategy(initial, context);
+        return () => { attempts++; return next(); };
+      };
+      const probe = layout.getSprite(createFakeImage(2, 2, [[0, 0], [1, 0], [0, 1], [1, 1]]));
+      assert.equal(layout.place(probe, { x: 0, y: 0, strategy: counted }), null);
+      assert.ok(attempts < 1000000, `${strategy.name} ${width}×${height}: ${attempts} candidates`);
+    }
+  }
+});
+
+test("wrapped built-in strategies search exactly like the built-ins", () => {
+  for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+    const run = s => {
+      const layout = new CloudLayout().canvas(createFakeCanvas).size([128, 96]).random(createSeededRandom(7));
+      return Array.from({ length: 30 }, (_, i) =>
+        layout.place(layout.getSprite(`w${i}`, { size: 10 + (i % 5) * 4 }), { strategy: s }))
+        .map(word => word && [word.x, word.y]);
+    };
+    assert.deepEqual(run((initial, context) => strategy(initial, context)), run(strategy));
   }
 });
 
@@ -895,7 +936,69 @@ test("clear releases placed sprites for reuse", () => {
 
   assert.ok(layout.place(sprite, { x: 0, y: 0 }));
   layout.clear();
+  assert.throws(() => layout.eraseSprite(sprite), /placed in this layout/);
   assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+});
+
+test("sprites built from a placed sprite's fields start unplaced", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size(0).strategy("none");
+  const placed = layout.getSprite("hello", { size: 20, padding: 0 });
+  assert.ok(layout.place(placed, { x: 0, y: 0 }));
+  for (const copy of [
+    layout.getSprite(placed.text, { ...placed, size: 20 }),
+    new CloudSprite({ ...placed })
+  ]) {
+    assert.throws(() => layout.eraseSprite(copy), /placed in this layout/);
+    assert.equal(layout.place(copy, { x: 0, y: 0 }), null, "the original still occupies its pixels");
+  }
+  layout.eraseSprite(placed);
+  assert.equal(layout.bounds(), null);
+});
+
+test("image sprites stay attached to the cloud rather than forming islands", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const image = createCanvas(10, 10);
+  image.getContext("2d").fillRect(0, 0, 10, 10);
+  for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+    const layout = new CloudLayout().canvas(() => createCanvas(1, 1)).size(0).strategy(strategy);
+    assert.ok(layout.place(layout.getSprite(image), { x: 0, y: 0 }));
+    const word = layout.place(layout.getSprite(image), { x: 150, y: 150 });
+    assert.ok(word);
+    const gap = Math.max(word.x + word.x0 - 5, -5 - (word.x + word.x1), word.y + word.y0 - 5, -5 - (word.y + word.y1));
+    assert.ok(gap >= 0 && gap <= 4, `${strategy.name} left a ${gap}px gap`);
+  }
+});
+
+test("width-only canvas adapters clear a bounded region between sprites", () => {
+  const canvas = createFakeCanvas();
+  const context = canvas.getContext("2d");
+  const clearRect = context.clearRect;
+  const cleared = [];
+  context.clearRect = (x, y, width, height) => {
+    cleared.push(width * height);
+    clearRect.call(context, x, y, width, height);
+  };
+  const layout = new CloudLayout().canvas(() => canvas);
+  for (const text of ["one", "two", "three"]) {
+    assert.ok(layout.getSprite(text, { size: 20 }));
+  }
+  assert.ok(cleared.length > 0);
+  assert.ok(Math.max(...cleared) < 256 * 256, `cleared ${Math.max(...cleared)} pixels`);
+});
+
+test("padded text rasters are not inflated by the stroke miter limit", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const layout = new CloudLayout().canvas(() => createCanvas(1, 1));
+  // The raster origin is centered, so its size follows from the trim offset.
+  const rasterSize = padding => {
+    const sprite = layout.getSprite("hello", { size: 40, font: "serif", padding });
+    return [2 * (sprite.trimX - sprite.x0), 2 * (sprite.trimY - sprite.y0)];
+  };
+  const [plainWidth, plainHeight] = rasterSize(0);
+  const [paddedWidth, paddedHeight] = rasterSize(4);
+  // Padding 4 adds 8px of stroke and 16px of extra overscan per axis.
+  assert.ok(paddedWidth - plainWidth <= 28, `width grew by ${paddedWidth - plainWidth}px`);
+  assert.ok(paddedHeight - plainHeight <= 28, `height grew by ${paddedHeight - plainHeight}px`);
 });
 
 test("place handles one word at a time", () => {

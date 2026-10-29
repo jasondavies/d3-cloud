@@ -3,6 +3,10 @@
 
 import CloudSprite, { createSpriteContext } from "./sprite.js";
 
+const IMAGE_SLACK = 4;
+const FAR_LIMIT_SCALE = 8;
+const STALL_LIMIT = 100000;
+
 const STRATEGIES = {
   archimedean: archimedeanStrategy,
   rectangular: rectangularStrategy,
@@ -20,7 +24,7 @@ export default class CloudLayout {
     this._spriteContext = null;
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
-    this._placedSprites = new Set();
+    this._generation = 0;
   }
 
   canvas(_) {
@@ -36,10 +40,8 @@ export default class CloudLayout {
   }
 
   clear() {
-    for (const sprite of this._placedSprites) {
-      markSpriteUnplaced(sprite);
-    }
-    this._placedSprites.clear();
+    // Invalidate every placement without retaining the placed sprites.
+    this._generation++;
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
     return this;
@@ -111,13 +113,12 @@ export default class CloudLayout {
     if (!(sprite instanceof CloudSprite)) {
       throw new TypeError("eraseSprite() expects a CloudSprite");
     }
-    if (sprite._placedLayout !== this) {
+    if (!isPlacedIn(sprite, this)) {
       throw new Error("eraseSprite() expects a sprite placed in this layout");
     }
 
     this._blocks.remove(sprite);
-    this._placedSprites.delete(sprite);
-    markSpriteUnplaced(sprite);
+    sprite._placedLayout = null;
     if (this._blocks.isEmpty()) {
       this._bounds = null;
     }
@@ -130,7 +131,7 @@ export default class CloudLayout {
     if (options != null && (!options || typeof options !== "object" || Array.isArray(options))) {
       throw new TypeError("place() expects an options object");
     }
-    if (sprite._placedLayout) {
+    if (sprite._placedLayout && isPlacedIn(sprite, sprite._placedLayout)) {
       throw new Error("Cannot place a CloudSprite that is already placed; call eraseSprite() first");
     }
 
@@ -148,7 +149,7 @@ export default class CloudLayout {
 
     extendBounds(this, sprite);
     sprite._placedLayout = this;
-    this._placedSprites.add(sprite);
+    sprite._placedGeneration = this._generation;
 
     return snapshotPlacedSprite(sprite);
   }
@@ -188,16 +189,17 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
   var startX = sprite.x,
       startY = sprite.y,
       deltaLimit = resolveMaxDelta(sprite, bounds, size, overflow),
+      limitX = deltaLimit[0],
+      limitY = deltaLimit[1],
       clipBounds = overflow ? null : sizeBounds(size),
       next,
       candidate,
       dx,
-      dy;
+      dy,
+      distance;
 
-  // Text uses rectangle overlap to keep the cloud compact. Image masks may
-  // be fully opaque rectangles, so they must also be allowed beside it.
   if ((!clipBounds || withinBounds(sprite, clipBounds)) &&
-      (!bounds || sprite.image || collideRects(sprite, bounds)) &&
+      (!bounds || collideRects(sprite, bounds)) &&
       !blocks.collides(sprite)) {
     blocks.insert(sprite);
     return true;
@@ -217,22 +219,33 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
     throw new TypeError("strategy factories must return a candidate generator");
   }
 
-  // Built-in spirals terminate by distance. User generators need a budget
-  // because they may repeat a point or never move on both axes.
-  const candidateLimit = strategy === archimedeanStrategy || strategy === rectangularStrategy
-    ? Infinity : 100000;
-  for (let attempt = 0; attempt < candidateLimit && (candidate = normalizeStrategyCandidate(next())); attempt++) {
-    dx = candidate.x - startX;
-    dy = candidate.y - startY;
+  // Stop once a candidate is beyond the limits on both axes, or far beyond
+  // either, so narrow spirals and single-axis generators terminate. Stop
+  // generators that repeat points once they stop moving away from the seed.
+  var farX = limitX * FAR_LIMIT_SCALE,
+      farY = limitY * FAR_LIMIT_SCALE,
+      reach = 0,
+      stalled = 0;
+  while ((candidate = normalizeStrategyCandidate(next()))) {
+    dx = Math.abs(candidate.x - startX);
+    dy = Math.abs(candidate.y - startY);
 
-    if (Math.min(Math.abs(dx), Math.abs(dy)) >= deltaLimit) break;
+    distance = Math.max(dx, dy);
+
+    if ((dx >= limitX && dy >= limitY) || dx >= farX || dy >= farY) break;
+    if (distance > reach) {
+      reach = distance;
+      stalled = 0;
+    } else if (++stalled >= STALL_LIMIT) {
+      break;
+    }
 
     sprite.x = candidate.x;
     sprite.y = candidate.y;
 
     if (clipBounds && !withinBounds(sprite, clipBounds)) continue;
 
-    if (!bounds || sprite.image || collideRects(sprite, bounds)) {
+    if (!bounds || collideRects(sprite, bounds)) {
       if (!blocks.collides(sprite)) {
         blocks.insert(sprite);
         return true;
@@ -247,142 +260,79 @@ function createOccupancyBlocks(cellSize) {
   const blockSize = normalizeBlockSize(cellSize);
   const blockWords = blockSize >>> 5;
 
+  // Applies visit to each block region the sprite overlaps, stopping early
+  // if it returns true. Missing blocks are created when inserting, and
+  // emptied blocks are pruned when removing.
+  function visitBlocks(sprite, visit, create, prune) {
+    var data = sprite.sprite,
+        words = spriteWords(sprite),
+        left = sprite.x + sprite.x0,
+        top = sprite.y + sprite.y0,
+        right = sprite.x + sprite.x1,
+        bottom = sprite.y + sprite.y1,
+        firstX = Math.floor(left / blockSize),
+        lastX = Math.floor((right - 1) / blockSize),
+        firstY = Math.floor(top / blockSize),
+        lastY = Math.floor((bottom - 1) / blockSize);
+
+    for (var blockY = firstY; blockY <= lastY; blockY++) {
+      var blockRow = blocks.get(blockY);
+      if (!blockRow) {
+        if (!create) continue;
+        blockRow = new Map();
+        blocks.set(blockY, blockRow);
+      }
+      var blockTop = blockY * blockSize,
+          overlapTop = Math.max(top, blockTop),
+          overlapBottom = Math.min(bottom, blockTop + blockSize);
+      for (var blockX = firstX; blockX <= lastX; blockX++) {
+        var blockLeft = blockX * blockSize,
+            overlapLeft = Math.max(left, blockLeft),
+            overlapRight = Math.min(right, blockLeft + blockSize);
+        if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
+        var block = blockRow.get(blockX);
+        if (!block) {
+          if (!create) continue;
+          block = new Uint32Array(blockWords * blockSize);
+          blockRow.set(blockX, block);
+        }
+        if (visit(
+          data,
+          words,
+          left,
+          top,
+          block,
+          blockWords,
+          blockLeft,
+          blockTop,
+          overlapLeft,
+          overlapTop,
+          overlapRight,
+          overlapBottom
+        )) {
+          return true;
+        }
+        if (prune && isZeroBlock(block)) {
+          blockRow.delete(blockX);
+        }
+      }
+      if (prune && blockRow.size === 0) blocks.delete(blockY);
+    }
+    return false;
+  }
+
   return {
     isEmpty() {
       return blocks.size === 0;
     },
     collides(sprite) {
-      var left = sprite.x + sprite.x0,
-          top = sprite.y + sprite.y0,
-          right = sprite.x + sprite.x1,
-          bottom = sprite.y + sprite.y1,
-          firstX = Math.floor(left / blockSize),
-          lastX = Math.floor((right - 1) / blockSize),
-          firstY = Math.floor(top / blockSize),
-          lastY = Math.floor((bottom - 1) / blockSize);
-
-      for (var blockY = firstY; blockY <= lastY; blockY++) {
-        var blockRow = blocks.get(blockY);
-        if (!blockRow) continue;
-        var blockTop = blockY * blockSize,
-            overlapTop = Math.max(top, blockTop),
-            overlapBottom = Math.min(bottom, blockTop + blockSize);
-        for (var blockX = firstX; blockX <= lastX; blockX++) {
-          var block = blockRow.get(blockX);
-          if (!block) continue;
-          var blockLeft = blockX * blockSize,
-              overlapLeft = Math.max(left, blockLeft),
-              overlapRight = Math.min(right, blockLeft + blockSize);
-          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
-          if (packedRegionCollides(
-            sprite.sprite,
-            spriteWords(sprite),
-            left,
-            top,
-            block,
-            blockWords,
-            blockLeft,
-            blockTop,
-            overlapLeft,
-            overlapTop,
-            overlapRight,
-            overlapBottom
-          )) {
-            return true;
-          }
-        }
-      }
-      return false;
+      return visitBlocks(sprite, packedRegionCollides, false, false);
     },
     insert(sprite) {
-      var left = sprite.x + sprite.x0,
-          top = sprite.y + sprite.y0,
-          right = sprite.x + sprite.x1,
-          bottom = sprite.y + sprite.y1,
-          firstX = Math.floor(left / blockSize),
-          lastX = Math.floor((right - 1) / blockSize),
-          firstY = Math.floor(top / blockSize),
-          lastY = Math.floor((bottom - 1) / blockSize);
-
-      for (var blockY = firstY; blockY <= lastY; blockY++) {
-        var blockRow = blocks.get(blockY);
-        if (!blockRow) {
-          blockRow = new Map();
-          blocks.set(blockY, blockRow);
-        }
-        var blockTop = blockY * blockSize,
-            overlapTop = Math.max(top, blockTop),
-            overlapBottom = Math.min(bottom, blockTop + blockSize);
-        for (var blockX = firstX; blockX <= lastX; blockX++) {
-          var blockLeft = blockX * blockSize,
-              overlapLeft = Math.max(left, blockLeft),
-              overlapRight = Math.min(right, blockLeft + blockSize);
-          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
-          var block = blockRow.get(blockX);
-          if (!block) {
-            block = new Uint32Array(blockWords * blockSize);
-            blockRow.set(blockX, block);
-          }
-          stampPackedRegion(
-            sprite.sprite,
-            spriteWords(sprite),
-            left,
-            top,
-            block,
-            blockWords,
-            blockLeft,
-            blockTop,
-            overlapLeft,
-            overlapTop,
-            overlapRight,
-            overlapBottom
-          );
-        }
-      }
+      visitBlocks(sprite, stampPackedRegion, true, false);
     },
     remove(sprite) {
-      var left = sprite.x + sprite.x0,
-          top = sprite.y + sprite.y0,
-          right = sprite.x + sprite.x1,
-          bottom = sprite.y + sprite.y1,
-          firstX = Math.floor(left / blockSize),
-          lastX = Math.floor((right - 1) / blockSize),
-          firstY = Math.floor(top / blockSize),
-          lastY = Math.floor((bottom - 1) / blockSize);
-
-      for (var blockY = firstY; blockY <= lastY; blockY++) {
-        var blockRow = blocks.get(blockY);
-        if (!blockRow) continue;
-        var blockTop = blockY * blockSize,
-            overlapTop = Math.max(top, blockTop),
-            overlapBottom = Math.min(bottom, blockTop + blockSize);
-        for (var blockX = firstX; blockX <= lastX; blockX++) {
-          var block = blockRow.get(blockX);
-          if (!block) continue;
-          var blockLeft = blockX * blockSize,
-              overlapLeft = Math.max(left, blockLeft),
-              overlapRight = Math.min(right, blockLeft + blockSize);
-          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
-          clearPackedRegion(
-            sprite.sprite,
-            spriteWords(sprite),
-            left,
-            top,
-            block,
-            blockWords,
-            blockLeft,
-            blockTop,
-            overlapLeft,
-            overlapTop,
-            overlapRight,
-            overlapBottom
-          );
-          if (isZeroBlock(block)) {
-            blockRow.delete(blockX);
-          }
-        }
-        if (blockRow.size === 0) blocks.delete(blockY);
-      }
+      visitBlocks(sprite, clearPackedRegion, false, true);
     }
   };
 }
@@ -509,32 +459,39 @@ function isZeroBlock(block) {
 
 function resolveMaxDelta(sprite, bounds, size, overflow) {
   if (!overflow) {
-    // A fixed box cannot benefit from searching farther as the cloud grows.
+    // A fixed box cannot benefit from searching farther as the cloud grows,
+    // and no anchor farther along either axis than the box allows can fit.
     // Include the distance to fitting anchors for explicit seeds outside it;
     // the extra pixel keeps anchors on the limit eligible for placement.
-    return Math.max(
-      Math.hypot(size[0], size[1]),
-      Math.abs(sprite.x + sprite.x0 + size[0] / 2) + 1,
-      Math.abs(sprite.x + sprite.x1 - size[0] / 2) + 1,
-      Math.abs(sprite.y + sprite.y0 + size[1] / 2) + 1,
-      Math.abs(sprite.y + sprite.y1 - size[1] / 2) + 1
-    );
+    return [
+      Math.max(
+        size[0],
+        Math.abs(sprite.x + sprite.x0 + size[0] / 2) + 1,
+        Math.abs(sprite.x + sprite.x1 - size[0] / 2) + 1
+      ),
+      Math.max(
+        size[1],
+        Math.abs(sprite.y + sprite.y0 + size[1] / 2) + 1,
+        Math.abs(sprite.y + sprite.y1 - size[1] / 2) + 1
+      )
+    ];
   }
 
   var wordExtent = Math.max(sprite.width || 0, sprite.height || 0),
       boundsExtent = bounds
         ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y)
-        : 0;
-  return Math.max(256, wordExtent * 4, boundsExtent * 2);
+        : 0,
+      limit = Math.max(256, wordExtent * 4, boundsExtent * 2);
+  return [limit, limit];
 }
 
 function snapshotPlacedSprite(d) {
-  const { hasPixels, sprite, spriteWidth, _rasterWidth, _placedLayout, ...word } = d;
+  const { hasPixels, sprite, spriteWidth, _rasterWidth, _placedLayout, _placedGeneration, ...word } = d;
   return word;
 }
 
-function markSpriteUnplaced(sprite) {
-  sprite._placedLayout = null;
+function isPlacedIn(sprite, layout) {
+  return sprite._placedLayout === layout && sprite._placedGeneration === layout._generation;
 }
 
 function extendBounds(layout, sprite) {
@@ -568,11 +525,23 @@ function expandBounds(bounds, d) {
 }
 
 function collideRects(a, b) {
-  // Text retains horizontal search slack so tight or rectangular masks can
-  // be placed next to the cloud without requiring their pixels to overlap.
-  const x0 = a._rasterWidth == null ? a.x0 : a.x0 - a.trimX;
-  const x1 = a._rasterWidth == null ? a.x1 : x0 + a._rasterWidth;
-  return a.x + x1 > b[0].x && a.x + x0 < b[1].x && a.y + a.y1 > b[0].y && a.y + a.y0 < b[1].y;
+  // Rectangle overlap keeps the cloud compact, but tight or opaque masks
+  // must be allowed beside it without their pixels overlapping. Text keeps
+  // its horizontal raster slack; image masks get an envelope at least as
+  // wide as the rectangular spiral's step so some candidate can touch.
+  var x0, x1, y0, y1;
+  if (a._rasterWidth == null) {
+    x0 = a.x0 - IMAGE_SLACK;
+    x1 = a.x1 + IMAGE_SLACK;
+    y0 = a.y0 - IMAGE_SLACK;
+    y1 = a.y1 + IMAGE_SLACK;
+  } else {
+    x0 = a.x0 - a.trimX;
+    x1 = x0 + a._rasterWidth;
+    y0 = a.y0;
+    y1 = a.y1;
+  }
+  return a.x + x1 > b[0].x && a.x + x0 < b[1].x && a.y + y1 > b[0].y && a.y + y0 < b[1].y;
 }
 
 function withinBounds(a, b) {

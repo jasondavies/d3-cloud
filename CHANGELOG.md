@@ -51,17 +51,28 @@ Dependencies constrained to 1.x continue to use the old API.
 - Used intrinsic video dimensions to preserve aspect ratio when resizing sprites.
 - Accepted node-canvas factories in TypeScript alongside browser and offscreen
   canvases.
-- Sized text rasters to measured ink bounds, including overhang, accents, and
-  stroke joins; cleared the full scratch canvas for width-only adapters to
-  prevent pixels from leaking into subsequent sprites.
+- Sized text rasters to measured ink bounds, including overhang and accents,
+  and redrew text into a larger raster when its ink reached the raster edge, as
+  some canvas implementations under-report ink bounds. Cleared an extra margin
+  of the scratch canvas for width-only adapters to prevent pixels from leaking
+  into subsequent sprites.
+- Text padding strokes now use round joins, so padding extends exactly
+  `padding` pixels from the glyph outline rather than up to ten times that at
+  sharp miter corners.
 - Allowed ordinary TypeScript interfaces as sprite metadata without requiring
   an index signature.
 - Preserved image edge pixels for odd dimensions, rotation, and resizing, and
-  allowed opaque image sprites to pack beside each other.
+  allowed opaque image sprites to pack beside each other while still touching
+  the existing cloud.
 - Preserved custom metadata types on prepared sprites as well as placed
   snapshots, with built-in field types taking precedence over metadata.
-- Limited bounded placement searches to the fixed box and initial coordinates,
-  avoiding expansion-distance searches after the box fills up.
+- Limited bounded placement searches per axis to the fixed box and initial
+  coordinates, avoiding expansion-distance searches after the box fills up.
+- Applied the same search limits to built-in and custom strategies, so wrapped
+  built-ins behave identically and extreme aspect ratios cannot search for
+  minutes.
+- Copying a placed sprite's fields into a new sprite no longer marks the copy
+  as placed, and layouts no longer retain references to placed sprites.
 - Trimmed text and image geometry to occupied pixels, independently of packed
   row alignment, so bounded layouts do not reject words due to raster slack.
 - Replaced string block keys and temporary range objects with numeric map

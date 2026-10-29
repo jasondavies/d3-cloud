@@ -29,6 +29,9 @@ export default class CloudSprite {
     this.padding = normalizeNumber(padding);
     this.x = 0;
     this.y = 0;
+    // Metadata copied from a placed sprite must not carry its placement.
+    this._placedLayout = null;
+    this._placedGeneration = 0;
     resetSprite(this);
   }
 
@@ -133,9 +136,8 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   if (hasInkBounds) {
     // Advance width and font size do not bound italic overhang or accents.
     // Enclose the ink symmetrically around the rendering origin before
-    // rotation, allowing for the longest possible padded stroke join.
-    const strokeExtent = Math.abs(sprite.padding) *
-      (context.lineJoin === "miter" ? context.miterLimit : 1);
+    // rotation; round stroke joins extend at most padding beyond the ink.
+    const strokeExtent = Math.abs(sprite.padding);
     width = Math.max(width, 2 * ratio * (strokeExtent + Math.max(
       Math.abs(anchor - metrics.actualBoundingBoxLeft),
       Math.abs(anchor + metrics.actualBoundingBoxRight)
@@ -153,41 +155,65 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     const widthSine = width * sine;
     const heightCosine = height * cosine;
     const heightSine = height * sine;
-    width = (Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine)) + 0x1f) >>> 5 << 5;
+    width = Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine));
     height = Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine));
-  } else {
-    width = (width + 0x1f) >>> 5 << 5;
   }
 
   const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * ratio * 2));
-  const rasterWidth = ceilToRatio(Math.ceil((width + overscan * 2) / 32) * 32, ratio);
-  const rasterHeight = ceilToRatio(height + overscan * 2, ratio);
+  const maxWidth = Math.floor(pixelWidth / ratio) * ratio;
+  const maxHeight = Math.floor(SCRATCH_HEIGHT / ratio) * ratio;
+  // Width-only canvas adapters cannot tell us how far glyphs actually drew,
+  // so clear two extra ems past the raster before the next sprite.
+  const overhang = hasInkBounds ? 0 : 2 * sprite.size;
+  let rasterWidth = ceilToRatio(width + overscan * 2, ratio);
+  let rasterHeight = ceilToRatio(height + overscan * 2, ratio);
+  let pixels;
+  let alphaBounds;
 
-  if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
+  for (;;) {
+    if (rasterWidth > maxWidth || rasterHeight > maxHeight) {
+      context.restore();
+      contextAndRatio.clearWidth = 0;
+      contextAndRatio.clearHeight = 0;
+      return sprite;
+    }
+
+    context.save();
+    context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
+    if (sprite.rotate) {
+      context.rotate(sprite.rotate * RADIANS);
+    }
+    context.fillText(sprite.text, anchor, 0);
+    if (sprite.padding) {
+      context.lineWidth = 2 * sprite.padding;
+      context.lineJoin = "round";
+      context.strokeText(sprite.text, anchor, 0);
+    }
     context.restore();
-    contextAndRatio.clearWidth = 0;
-    contextAndRatio.clearHeight = 0;
-    return sprite;
-  }
 
-  context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
-  if (sprite.rotate) {
-    context.rotate(sprite.rotate * RADIANS);
-  }
-  context.fillText(sprite.text, anchor, 0);
-  if (sprite.padding) {
-    context.lineWidth = 2 * sprite.padding;
-    context.strokeText(sprite.text, anchor, 0);
+    contextAndRatio.clearWidth = Math.min(pixelWidth, rasterWidth + overhang);
+    contextAndRatio.clearHeight = Math.min(SCRATCH_HEIGHT, rasterHeight + overhang);
+
+    pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
+    alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
+
+    if (!alphaBounds || !touchesEdge(alphaBounds, rasterWidth, rasterHeight)) {
+      break;
+    }
+
+    // Ink reaching the raster edge may have been clipped because the font
+    // metrics underestimated it, so redraw into a larger raster.
+    clearContext(contextAndRatio);
+    const nextWidth = Math.min(maxWidth, rasterWidth * 2);
+    const nextHeight = Math.min(maxHeight, rasterHeight * 2);
+    if (nextWidth === rasterWidth && nextHeight === rasterHeight) {
+      alphaBounds = null;
+      break;
+    }
+    rasterWidth = nextWidth;
+    rasterHeight = nextHeight;
   }
   context.restore();
-
-  // Width-only canvas adapters cannot tell us how far glyphs actually drew.
-  // Clear their entire scratch surface before the next sprite instead.
-  contextAndRatio.clearWidth = hasInkBounds ? rasterWidth : pixelWidth;
-  contextAndRatio.clearHeight = hasInkBounds ? rasterHeight : SCRATCH_HEIGHT;
-
-  const pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
-  const alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
 
   if (!alphaBounds) {
     return sprite;
@@ -344,6 +370,11 @@ function rotatedBounds(width, height, rotate) {
     width: Math.max(1, Math.ceil(Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine)))),
     height: Math.max(1, Math.ceil(Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine))))
   };
+}
+
+function touchesEdge(bounds, width, height) {
+  return bounds.x0 === 0 || bounds.y0 === 0 ||
+    bounds.x0 + bounds.width === width || bounds.y0 + bounds.height === height;
 }
 
 function findAlphaBounds(pixels, width, height) {

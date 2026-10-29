@@ -72,6 +72,8 @@ var CloudSprite = class {
     this.padding = normalizeNumber(padding);
     this.x = 0;
     this.y = 0;
+    this._placedLayout = null;
+    this._placedGeneration = 0;
     resetSprite(this);
   }
   rasterize(contextAndRatio) {
@@ -151,7 +153,7 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   let height = sprite.size * 2;
   const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) && Number.isFinite(metrics.actualBoundingBoxRight) && Number.isFinite(metrics.actualBoundingBoxAscent) && Number.isFinite(metrics.actualBoundingBoxDescent);
   if (hasInkBounds) {
-    const strokeExtent = Math.abs(sprite.padding) * (context.lineJoin === "miter" ? context.miterLimit : 1);
+    const strokeExtent = Math.abs(sprite.padding);
     width = Math.max(width, 2 * ratio * (strokeExtent + Math.max(
       Math.abs(anchor - metrics.actualBoundingBoxLeft),
       Math.abs(anchor + metrics.actualBoundingBoxRight)
@@ -168,34 +170,54 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     const widthSine = width * sine;
     const heightCosine = height * cosine;
     const heightSine = height * sine;
-    width = Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine)) + 31 >>> 5 << 5;
+    width = Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine));
     height = Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine));
-  } else {
-    width = width + 31 >>> 5 << 5;
   }
   const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * ratio * 2));
-  const rasterWidth = ceilToRatio(Math.ceil((width + overscan * 2) / 32) * 32, ratio);
-  const rasterHeight = ceilToRatio(height + overscan * 2, ratio);
-  if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
+  const maxWidth = Math.floor(pixelWidth / ratio) * ratio;
+  const maxHeight = Math.floor(SCRATCH_HEIGHT / ratio) * ratio;
+  const overhang = hasInkBounds ? 0 : 2 * sprite.size;
+  let rasterWidth = ceilToRatio(width + overscan * 2, ratio);
+  let rasterHeight = ceilToRatio(height + overscan * 2, ratio);
+  let pixels;
+  let alphaBounds;
+  for (; ; ) {
+    if (rasterWidth > maxWidth || rasterHeight > maxHeight) {
+      context.restore();
+      contextAndRatio.clearWidth = 0;
+      contextAndRatio.clearHeight = 0;
+      return sprite;
+    }
+    context.save();
+    context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
+    if (sprite.rotate) {
+      context.rotate(sprite.rotate * RADIANS);
+    }
+    context.fillText(sprite.text, anchor, 0);
+    if (sprite.padding) {
+      context.lineWidth = 2 * sprite.padding;
+      context.lineJoin = "round";
+      context.strokeText(sprite.text, anchor, 0);
+    }
     context.restore();
-    contextAndRatio.clearWidth = 0;
-    contextAndRatio.clearHeight = 0;
-    return sprite;
-  }
-  context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
-  if (sprite.rotate) {
-    context.rotate(sprite.rotate * RADIANS);
-  }
-  context.fillText(sprite.text, anchor, 0);
-  if (sprite.padding) {
-    context.lineWidth = 2 * sprite.padding;
-    context.strokeText(sprite.text, anchor, 0);
+    contextAndRatio.clearWidth = Math.min(pixelWidth, rasterWidth + overhang);
+    contextAndRatio.clearHeight = Math.min(SCRATCH_HEIGHT, rasterHeight + overhang);
+    pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
+    alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
+    if (!alphaBounds || !touchesEdge(alphaBounds, rasterWidth, rasterHeight)) {
+      break;
+    }
+    clearContext(contextAndRatio);
+    const nextWidth = Math.min(maxWidth, rasterWidth * 2);
+    const nextHeight = Math.min(maxHeight, rasterHeight * 2);
+    if (nextWidth === rasterWidth && nextHeight === rasterHeight) {
+      alphaBounds = null;
+      break;
+    }
+    rasterWidth = nextWidth;
+    rasterHeight = nextHeight;
   }
   context.restore();
-  contextAndRatio.clearWidth = hasInkBounds ? rasterWidth : pixelWidth;
-  contextAndRatio.clearHeight = hasInkBounds ? rasterHeight : SCRATCH_HEIGHT;
-  const pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
-  const alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
   if (!alphaBounds) {
     return sprite;
   }
@@ -323,6 +345,9 @@ function rotatedBounds(width, height, rotate) {
     height: Math.max(1, Math.ceil(Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine))))
   };
 }
+function touchesEdge(bounds, width, height) {
+  return bounds.x0 === 0 || bounds.y0 === 0 || bounds.x0 + bounds.width === width || bounds.y0 + bounds.height === height;
+}
 function findAlphaBounds(pixels, width, height) {
   let minX = width;
   let minY = height;
@@ -351,6 +376,9 @@ function findAlphaBounds(pixels, width, height) {
 }
 
 // src/layout.js
+var IMAGE_SLACK = 4;
+var FAR_LIMIT_SCALE = 8;
+var STALL_LIMIT = 1e5;
 var STRATEGIES = {
   archimedean: archimedeanStrategy,
   rectangular: rectangularStrategy,
@@ -367,7 +395,7 @@ var CloudLayout = class {
     this._spriteContext = null;
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
-    this._placedSprites = /* @__PURE__ */ new Set();
+    this._generation = 0;
   }
   canvas(_) {
     if (!arguments.length) {
@@ -381,10 +409,7 @@ var CloudLayout = class {
     return this;
   }
   clear() {
-    for (const sprite of this._placedSprites) {
-      markSpriteUnplaced(sprite);
-    }
-    this._placedSprites.clear();
+    this._generation++;
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
     return this;
@@ -447,12 +472,11 @@ var CloudLayout = class {
     if (!(sprite instanceof CloudSprite)) {
       throw new TypeError("eraseSprite() expects a CloudSprite");
     }
-    if (sprite._placedLayout !== this) {
+    if (!isPlacedIn(sprite, this)) {
       throw new Error("eraseSprite() expects a sprite placed in this layout");
     }
     this._blocks.remove(sprite);
-    this._placedSprites.delete(sprite);
-    markSpriteUnplaced(sprite);
+    sprite._placedLayout = null;
     if (this._blocks.isEmpty()) {
       this._bounds = null;
     }
@@ -464,7 +488,7 @@ var CloudLayout = class {
     if (options != null && (!options || typeof options !== "object" || Array.isArray(options))) {
       throw new TypeError("place() expects an options object");
     }
-    if (sprite._placedLayout) {
+    if (sprite._placedLayout && isPlacedIn(sprite, sprite._placedLayout)) {
       throw new Error("Cannot place a CloudSprite that is already placed; call eraseSprite() first");
     }
     const strategy = (options == null ? void 0 : options.strategy) == null ? this._strategy : resolveStrategy(options.strategy);
@@ -479,7 +503,7 @@ var CloudLayout = class {
     }
     extendBounds(this, sprite);
     sprite._placedLayout = this;
-    this._placedSprites.add(sprite);
+    sprite._placedGeneration = this._generation;
     return snapshotPlacedSprite(sprite);
   }
   _getContext() {
@@ -508,8 +532,8 @@ function createCloudSprite(source, options) {
   throw new TypeError("getSprite() expects text or an image-like source");
 }
 function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random) {
-  var startX = sprite.x, startY = sprite.y, deltaLimit = resolveMaxDelta(sprite, bounds, size, overflow), clipBounds = overflow ? null : sizeBounds(size), next, candidate, dx, dy;
-  if ((!clipBounds || withinBounds(sprite, clipBounds)) && (!bounds || sprite.image || collideRects(sprite, bounds)) && !blocks.collides(sprite)) {
+  var startX = sprite.x, startY = sprite.y, deltaLimit = resolveMaxDelta(sprite, bounds, size, overflow), limitX = deltaLimit[0], limitY = deltaLimit[1], clipBounds = overflow ? null : sizeBounds(size), next, candidate, dx, dy, distance;
+  if ((!clipBounds || withinBounds(sprite, clipBounds)) && (!bounds || collideRects(sprite, bounds)) && !blocks.collides(sprite)) {
     blocks.insert(sprite);
     return true;
   }
@@ -526,15 +550,22 @@ function tryPlaceSprite(blocks, sprite, bounds, strategy, size, overflow, random
   if (typeof next !== "function") {
     throw new TypeError("strategy factories must return a candidate generator");
   }
-  const candidateLimit = strategy === archimedeanStrategy || strategy === rectangularStrategy ? Infinity : 1e5;
-  for (let attempt = 0; attempt < candidateLimit && (candidate = normalizeStrategyCandidate(next())); attempt++) {
-    dx = candidate.x - startX;
-    dy = candidate.y - startY;
-    if (Math.min(Math.abs(dx), Math.abs(dy)) >= deltaLimit) break;
+  var farX = limitX * FAR_LIMIT_SCALE, farY = limitY * FAR_LIMIT_SCALE, reach = 0, stalled = 0;
+  while (candidate = normalizeStrategyCandidate(next())) {
+    dx = Math.abs(candidate.x - startX);
+    dy = Math.abs(candidate.y - startY);
+    distance = Math.max(dx, dy);
+    if (dx >= limitX && dy >= limitY || dx >= farX || dy >= farY) break;
+    if (distance > reach) {
+      reach = distance;
+      stalled = 0;
+    } else if (++stalled >= STALL_LIMIT) {
+      break;
+    }
     sprite.x = candidate.x;
     sprite.y = candidate.y;
     if (clipBounds && !withinBounds(sprite, clipBounds)) continue;
-    if (!bounds || sprite.image || collideRects(sprite, bounds)) {
+    if (!bounds || collideRects(sprite, bounds)) {
       if (!blocks.collides(sprite)) {
         blocks.insert(sprite);
         return true;
@@ -547,106 +578,61 @@ function createOccupancyBlocks(cellSize) {
   const blocks = /* @__PURE__ */ new Map();
   const blockSize = normalizeBlockSize(cellSize);
   const blockWords = blockSize >>> 5;
+  function visitBlocks(sprite, visit, create, prune) {
+    var data = sprite.sprite, words = spriteWords(sprite), left = sprite.x + sprite.x0, top = sprite.y + sprite.y0, right = sprite.x + sprite.x1, bottom = sprite.y + sprite.y1, firstX = Math.floor(left / blockSize), lastX = Math.floor((right - 1) / blockSize), firstY = Math.floor(top / blockSize), lastY = Math.floor((bottom - 1) / blockSize);
+    for (var blockY = firstY; blockY <= lastY; blockY++) {
+      var blockRow = blocks.get(blockY);
+      if (!blockRow) {
+        if (!create) continue;
+        blockRow = /* @__PURE__ */ new Map();
+        blocks.set(blockY, blockRow);
+      }
+      var blockTop = blockY * blockSize, overlapTop = Math.max(top, blockTop), overlapBottom = Math.min(bottom, blockTop + blockSize);
+      for (var blockX = firstX; blockX <= lastX; blockX++) {
+        var blockLeft = blockX * blockSize, overlapLeft = Math.max(left, blockLeft), overlapRight = Math.min(right, blockLeft + blockSize);
+        if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
+        var block = blockRow.get(blockX);
+        if (!block) {
+          if (!create) continue;
+          block = new Uint32Array(blockWords * blockSize);
+          blockRow.set(blockX, block);
+        }
+        if (visit(
+          data,
+          words,
+          left,
+          top,
+          block,
+          blockWords,
+          blockLeft,
+          blockTop,
+          overlapLeft,
+          overlapTop,
+          overlapRight,
+          overlapBottom
+        )) {
+          return true;
+        }
+        if (prune && isZeroBlock(block)) {
+          blockRow.delete(blockX);
+        }
+      }
+      if (prune && blockRow.size === 0) blocks.delete(blockY);
+    }
+    return false;
+  }
   return {
     isEmpty() {
       return blocks.size === 0;
     },
     collides(sprite) {
-      var left = sprite.x + sprite.x0, top = sprite.y + sprite.y0, right = sprite.x + sprite.x1, bottom = sprite.y + sprite.y1, firstX = Math.floor(left / blockSize), lastX = Math.floor((right - 1) / blockSize), firstY = Math.floor(top / blockSize), lastY = Math.floor((bottom - 1) / blockSize);
-      for (var blockY = firstY; blockY <= lastY; blockY++) {
-        var blockRow = blocks.get(blockY);
-        if (!blockRow) continue;
-        var blockTop = blockY * blockSize, overlapTop = Math.max(top, blockTop), overlapBottom = Math.min(bottom, blockTop + blockSize);
-        for (var blockX = firstX; blockX <= lastX; blockX++) {
-          var block = blockRow.get(blockX);
-          if (!block) continue;
-          var blockLeft = blockX * blockSize, overlapLeft = Math.max(left, blockLeft), overlapRight = Math.min(right, blockLeft + blockSize);
-          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
-          if (packedRegionCollides(
-            sprite.sprite,
-            spriteWords(sprite),
-            left,
-            top,
-            block,
-            blockWords,
-            blockLeft,
-            blockTop,
-            overlapLeft,
-            overlapTop,
-            overlapRight,
-            overlapBottom
-          )) {
-            return true;
-          }
-        }
-      }
-      return false;
+      return visitBlocks(sprite, packedRegionCollides, false, false);
     },
     insert(sprite) {
-      var left = sprite.x + sprite.x0, top = sprite.y + sprite.y0, right = sprite.x + sprite.x1, bottom = sprite.y + sprite.y1, firstX = Math.floor(left / blockSize), lastX = Math.floor((right - 1) / blockSize), firstY = Math.floor(top / blockSize), lastY = Math.floor((bottom - 1) / blockSize);
-      for (var blockY = firstY; blockY <= lastY; blockY++) {
-        var blockRow = blocks.get(blockY);
-        if (!blockRow) {
-          blockRow = /* @__PURE__ */ new Map();
-          blocks.set(blockY, blockRow);
-        }
-        var blockTop = blockY * blockSize, overlapTop = Math.max(top, blockTop), overlapBottom = Math.min(bottom, blockTop + blockSize);
-        for (var blockX = firstX; blockX <= lastX; blockX++) {
-          var blockLeft = blockX * blockSize, overlapLeft = Math.max(left, blockLeft), overlapRight = Math.min(right, blockLeft + blockSize);
-          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
-          var block = blockRow.get(blockX);
-          if (!block) {
-            block = new Uint32Array(blockWords * blockSize);
-            blockRow.set(blockX, block);
-          }
-          stampPackedRegion(
-            sprite.sprite,
-            spriteWords(sprite),
-            left,
-            top,
-            block,
-            blockWords,
-            blockLeft,
-            blockTop,
-            overlapLeft,
-            overlapTop,
-            overlapRight,
-            overlapBottom
-          );
-        }
-      }
+      visitBlocks(sprite, stampPackedRegion, true, false);
     },
     remove(sprite) {
-      var left = sprite.x + sprite.x0, top = sprite.y + sprite.y0, right = sprite.x + sprite.x1, bottom = sprite.y + sprite.y1, firstX = Math.floor(left / blockSize), lastX = Math.floor((right - 1) / blockSize), firstY = Math.floor(top / blockSize), lastY = Math.floor((bottom - 1) / blockSize);
-      for (var blockY = firstY; blockY <= lastY; blockY++) {
-        var blockRow = blocks.get(blockY);
-        if (!blockRow) continue;
-        var blockTop = blockY * blockSize, overlapTop = Math.max(top, blockTop), overlapBottom = Math.min(bottom, blockTop + blockSize);
-        for (var blockX = firstX; blockX <= lastX; blockX++) {
-          var block = blockRow.get(blockX);
-          if (!block) continue;
-          var blockLeft = blockX * blockSize, overlapLeft = Math.max(left, blockLeft), overlapRight = Math.min(right, blockLeft + blockSize);
-          if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
-          clearPackedRegion(
-            sprite.sprite,
-            spriteWords(sprite),
-            left,
-            top,
-            block,
-            blockWords,
-            blockLeft,
-            blockTop,
-            overlapLeft,
-            overlapTop,
-            overlapRight,
-            overlapBottom
-          );
-          if (isZeroBlock(block)) {
-            blockRow.delete(blockX);
-          }
-        }
-        if (blockRow.size === 0) blocks.delete(blockY);
-      }
+      visitBlocks(sprite, clearPackedRegion, false, true);
     }
   };
 }
@@ -723,23 +709,28 @@ function isZeroBlock(block) {
 }
 function resolveMaxDelta(sprite, bounds, size, overflow) {
   if (!overflow) {
-    return Math.max(
-      Math.hypot(size[0], size[1]),
-      Math.abs(sprite.x + sprite.x0 + size[0] / 2) + 1,
-      Math.abs(sprite.x + sprite.x1 - size[0] / 2) + 1,
-      Math.abs(sprite.y + sprite.y0 + size[1] / 2) + 1,
-      Math.abs(sprite.y + sprite.y1 - size[1] / 2) + 1
-    );
+    return [
+      Math.max(
+        size[0],
+        Math.abs(sprite.x + sprite.x0 + size[0] / 2) + 1,
+        Math.abs(sprite.x + sprite.x1 - size[0] / 2) + 1
+      ),
+      Math.max(
+        size[1],
+        Math.abs(sprite.y + sprite.y0 + size[1] / 2) + 1,
+        Math.abs(sprite.y + sprite.y1 - size[1] / 2) + 1
+      )
+    ];
   }
-  var wordExtent = Math.max(sprite.width || 0, sprite.height || 0), boundsExtent = bounds ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y) : 0;
-  return Math.max(256, wordExtent * 4, boundsExtent * 2);
+  var wordExtent = Math.max(sprite.width || 0, sprite.height || 0), boundsExtent = bounds ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y) : 0, limit = Math.max(256, wordExtent * 4, boundsExtent * 2);
+  return [limit, limit];
 }
 function snapshotPlacedSprite(d) {
-  const _a = d, { hasPixels, sprite, spriteWidth, _rasterWidth, _placedLayout } = _a, word = __objRest(_a, ["hasPixels", "sprite", "spriteWidth", "_rasterWidth", "_placedLayout"]);
+  const _a = d, { hasPixels, sprite, spriteWidth, _rasterWidth, _placedLayout, _placedGeneration } = _a, word = __objRest(_a, ["hasPixels", "sprite", "spriteWidth", "_rasterWidth", "_placedLayout", "_placedGeneration"]);
   return word;
 }
-function markSpriteUnplaced(sprite) {
-  sprite._placedLayout = null;
+function isPlacedIn(sprite, layout) {
+  return sprite._placedLayout === layout && sprite._placedGeneration === layout._generation;
 }
 function extendBounds(layout, sprite) {
   if (layout._bounds) {
@@ -768,9 +759,19 @@ function expandBounds(bounds, d) {
   if (d.y + d.y1 > b1.y) b1.y = d.y + d.y1;
 }
 function collideRects(a, b) {
-  const x0 = a._rasterWidth == null ? a.x0 : a.x0 - a.trimX;
-  const x1 = a._rasterWidth == null ? a.x1 : x0 + a._rasterWidth;
-  return a.x + x1 > b[0].x && a.x + x0 < b[1].x && a.y + a.y1 > b[0].y && a.y + a.y0 < b[1].y;
+  var x0, x1, y0, y1;
+  if (a._rasterWidth == null) {
+    x0 = a.x0 - IMAGE_SLACK;
+    x1 = a.x1 + IMAGE_SLACK;
+    y0 = a.y0 - IMAGE_SLACK;
+    y1 = a.y1 + IMAGE_SLACK;
+  } else {
+    x0 = a.x0 - a.trimX;
+    x1 = x0 + a._rasterWidth;
+    y0 = a.y0;
+    y1 = a.y1;
+  }
+  return a.x + x1 > b[0].x && a.x + x0 < b[1].x && a.y + y1 > b[0].y && a.y + y0 < b[1].y;
 }
 function withinBounds(a, b) {
   return a.x + a.x0 >= b[0].x && a.x + a.x1 <= b[1].x && a.y + a.y0 >= b[0].y && a.y + a.y1 <= b[1].y;
