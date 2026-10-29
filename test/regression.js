@@ -390,14 +390,14 @@ test("text masks retain all padded pixels at the alphabetic rendering origin", (
         configureNodeCanvasTextContext(context);
         context.font = "italic normal 32px serif";
         context.textBaseline = "alphabetic";
-        const anchor = -context.measureText(text).width / 2;
+        context.textAlign = "center";
         context.translate(256, 256);
         context.rotate(rotate * Math.PI / 180);
-        context.fillText(text, anchor, 0);
+        context.fillText(text, 0, 0);
         if (padding) {
           context.lineWidth = 2 * padding;
           context.lineJoin = "round";
-          context.strokeText(text, anchor, 0);
+          context.strokeText(text, 0, 0);
         }
         const pixels = context.getImageData(0, 0, 512, 512).data;
         for (let y = 0; y < 512; y++) {
@@ -430,14 +430,14 @@ test("large italic and accented text masks cover their full rendered ink", () =>
       assert.ok(sprite);
       const context = createCanvas(1536, 1536).getContext("2d");
       context.font = `${options.style} normal ${options.size}px serif`;
-      const anchor = -context.measureText(options.text).width / 2;
+      context.textAlign = "center";
       context.translate(768, 768);
       context.rotate(rotate * Math.PI / 180);
-      context.fillText(options.text, anchor, 0);
+      context.fillText(options.text, 0, 0);
       if (options.padding) {
         context.lineWidth = 2 * options.padding;
         context.lineJoin = "round";
-        context.strokeText(options.text, anchor, 0);
+        context.strokeText(options.text, 0, 0);
       }
       const pixels = context.getImageData(0, 0, 1536, 1536).data;
       for (let y = 0; y < 1536; y++) {
@@ -449,6 +449,40 @@ test("large italic and accented text masks cover their full rendered ink", () =>
             (sprite.sprite[sy * (sprite.spriteWidth / 32) + (sx >>> 5)] & (1 << (31 - (sx & 31))));
           assert.ok(covered, `${options.text}, ${rotate}°: missing pixel ${x - 768},${y - 768}`);
         }
+      }
+    }
+  }
+});
+
+test("text masks cover antialiased centered rendering, as documented", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const layout = new CloudLayout().canvas(() => createCanvas(1, 1));
+  const fixtures = [
+    ["AV", 128, 0, 0],
+    ["AV", 128, 0, 30],
+    ["hello", 37, 0, 0],
+    ["Wave", 61, 1, 45],
+    ["fij", 33, 0, 90]
+  ];
+  for (const [text, size, padding, rotate] of fixtures) {
+    const sprite = layout.getSprite(text, { size, padding, rotate, font: "serif" });
+    assert.ok(sprite);
+    const context = createCanvas(512, 512).getContext("2d");
+    context.font = `normal normal ${size}px serif`;
+    context.textAlign = "center";
+    context.textBaseline = "alphabetic";
+    context.translate(256, 256);
+    context.rotate(rotate * Math.PI / 180);
+    context.fillText(text, 0, 0);
+    const pixels = context.getImageData(0, 0, 512, 512).data;
+    for (let y = 0; y < 512; y++) {
+      for (let x = 0; x < 512; x++) {
+        if (!pixels[(y * 512 + x) * 4 + 3]) continue;
+        const sx = x - 256 - sprite.x0;
+        const sy = y - 256 - sprite.y0;
+        const covered = sx >= 0 && sx < sprite.width && sy >= 0 && sy < sprite.height &&
+          (sprite.sprite[sy * (sprite.spriteWidth / 32) + (sx >>> 5)] & (1 << (31 - (sx & 31))));
+        assert.ok(covered, `${text} ${size}px, ${rotate}°: missing pixel ${x - 256},${y - 256}`);
       }
     }
   }
@@ -551,6 +585,15 @@ test("built-in spirals give up promptly in full boxes with extreme aspect ratios
       assert.equal(layout.place(probe, { x: 0, y: 0, strategy: counted }), null);
       assert.ok(attempts < 1000000, `${strategy.name} ${width}×${height}: ${attempts} candidates`);
     }
+  }
+});
+
+test("overflow searches reach the cloud from distant seeds", () => {
+  for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+    const layout = new CloudLayout().canvas(createFakeCanvas).size([1024, 1024]).strategy(strategy);
+    assert.ok(layout.place(layout.getSprite("first", { size: 20 }), { x: -256, y: -256 }));
+    assert.ok(layout.place(layout.getSprite("second", { size: 20 }), { x: 255, y: 255 }),
+      `${strategy.name} gave up before reaching the cloud`);
   }
 });
 
@@ -1371,6 +1414,7 @@ function createFakeCanvas() {
     fillStyle: "",
     strokeStyle: "",
     font: "10px sans-serif",
+    textAlign: "start",
     textBaseline: "alphabetic",
     lineWidth: 1,
     clearRect() {
@@ -1380,6 +1424,7 @@ function createFakeCanvas() {
     save() {
       stack.push({
         font: this.font,
+        textAlign: this.textAlign,
         textBaseline: this.textBaseline,
         lineWidth: this.lineWidth,
         tx: this._tx,
@@ -1389,6 +1434,7 @@ function createFakeCanvas() {
     restore() {
       const state = stack.pop();
       this.font = state.font;
+      this.textAlign = state.textAlign;
       this.textBaseline = state.textBaseline;
       this.lineWidth = state.lineWidth;
       this._tx = state.tx;
@@ -1455,6 +1501,7 @@ function createRightEdgeCanvas() {
     fillStyle: "",
     strokeStyle: "",
     font: "10px sans-serif",
+    textAlign: "start",
     textBaseline: "alphabetic",
     lineWidth: 1,
     clearRect() {
@@ -1464,6 +1511,7 @@ function createRightEdgeCanvas() {
     save() {
       stack.push({
         font: this.font,
+        textAlign: this.textAlign,
         textBaseline: this.textBaseline,
         lineWidth: this.lineWidth,
         tx: this._tx,
@@ -1473,6 +1521,7 @@ function createRightEdgeCanvas() {
     restore() {
       const state = stack.pop();
       this.font = state.font;
+      this.textAlign = state.textAlign;
       this.textBaseline = state.textBaseline;
       this.lineWidth = state.lineWidth;
       this._tx = state.tx;
@@ -1533,6 +1582,9 @@ function createBox(context, text, x, y, inflate) {
   const fontMatch = /(\d+)px/.exec(context.font);
   const fontSize = fontMatch ? Number(fontMatch[1]) : 10;
   const width = context.measureText(text).width;
+  if (context.textAlign === "center") {
+    x -= width / 2;
+  }
 
   return {
     x0: Math.floor(context._tx + x - inflate),
@@ -1547,6 +1599,7 @@ function createBaselineCanvas(onFillText) {
     fillStyle: "",
     strokeStyle: "",
     font: "10px sans-serif",
+    textAlign: "start",
     textBaseline: "alphabetic",
     lineWidth: 1,
     clearRect() {},
@@ -1894,7 +1947,7 @@ function detectNodeCanvasTouch(createCanvas, words, bounds) {
     context.clearRect(0, 0, wordWidth, wordHeight);
     context.fillStyle = "rgba(255, 255, 255, 1)";
     context.globalCompositeOperation = "source-over";
-    renderNodeCanvasRenderedFilledWord(context, word, word.x + offsetX - left, word.y + offsetY - top);
+    renderNodeCanvasFilledWord(context, word, word.x + offsetX - left, word.y + offsetY - top);
 
     const data = context.getImageData(0, 0, wordWidth, wordHeight).data;
 
@@ -1939,7 +1992,7 @@ function detectNodeCanvasTouch(createCanvas, words, bounds) {
   return null;
 }
 
-function renderNodeCanvasRenderedFilledWord(context, word, x, y) {
+function renderNodeCanvasFilledWord(context, word, x, y) {
   context.save();
   context.font = getNodeCanvasWordFont(word);
   context.textAlign = "center";
@@ -1950,21 +2003,6 @@ function renderNodeCanvasRenderedFilledWord(context, word, x, y) {
   }
 
   context.fillText(word.text, 0, 0);
-  context.restore();
-}
-
-function renderNodeCanvasFilledWord(context, word, x, y) {
-  context.save();
-  context.font = getNodeCanvasWordFont(word);
-  context.translate(x, y);
-
-  if (word.rotate) {
-    context.rotate(word.rotate * Math.PI / 180);
-  }
-
-  const anchor = -context.measureText(word.text).width / 2;
-
-  context.fillText(word.text, anchor, 0);
   context.restore();
 }
 

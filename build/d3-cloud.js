@@ -147,16 +147,16 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   const pixelWidth = contextAndRatio.pixelWidth;
   context.save();
   context.font = `${sprite.style} ${sprite.weight} ${Math.max(1, Math.ceil(sprite.size / ratio))}px ${sprite.font}`;
+  context.textAlign = "center";
   const metrics = context.measureText(sprite.text);
-  const anchor = -metrics.width / 2;
   let width = (metrics.width + 1) * ratio;
   let height = sprite.size * 2;
   const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) && Number.isFinite(metrics.actualBoundingBoxRight) && Number.isFinite(metrics.actualBoundingBoxAscent) && Number.isFinite(metrics.actualBoundingBoxDescent);
   if (hasInkBounds) {
     const strokeExtent = Math.abs(sprite.padding);
     width = Math.max(width, 2 * ratio * (strokeExtent + Math.max(
-      Math.abs(anchor - metrics.actualBoundingBoxLeft),
-      Math.abs(anchor + metrics.actualBoundingBoxRight)
+      Math.abs(metrics.actualBoundingBoxLeft),
+      Math.abs(metrics.actualBoundingBoxRight)
     )));
     height = Math.max(height, 2 * ratio * (strokeExtent + Math.max(
       Math.abs(metrics.actualBoundingBoxAscent),
@@ -193,11 +193,11 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     if (sprite.rotate) {
       context.rotate(sprite.rotate * RADIANS);
     }
-    context.fillText(sprite.text, anchor, 0);
+    context.fillText(sprite.text, 0, 0);
     if (sprite.padding) {
       context.lineWidth = 2 * sprite.padding;
       context.lineJoin = "round";
-      context.strokeText(sprite.text, anchor, 0);
+      context.strokeText(sprite.text, 0, 0);
     }
     context.restore();
     contextAndRatio.clearWidth = Math.min(pixelWidth, rasterWidth + overhang);
@@ -723,7 +723,21 @@ function resolveMaxDelta(sprite, bounds, size, overflow) {
     ];
   }
   var wordExtent = Math.max(sprite.width || 0, sprite.height || 0), boundsExtent = bounds ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y) : 0, limit = Math.max(256, wordExtent * 4, boundsExtent * 2);
-  return [limit, limit];
+  if (!bounds) {
+    return [limit, limit];
+  }
+  return [
+    Math.max(
+      limit,
+      Math.abs(sprite.x + sprite.x0 - bounds[1].x) + 1,
+      Math.abs(sprite.x + sprite.x1 - bounds[0].x) + 1
+    ),
+    Math.max(
+      limit,
+      Math.abs(sprite.y + sprite.y0 - bounds[1].y) + 1,
+      Math.abs(sprite.y + sprite.y1 - bounds[0].y) + 1
+    )
+  ];
 }
 function snapshotPlacedSprite(d) {
   const _a = d, { hasPixels, sprite, spriteWidth, _rasterWidth, _placedLayout, _placedGeneration } = _a, word = __objRest(_a, ["hasPixels", "sprite", "spriteWidth", "_rasterWidth", "_placedLayout", "_placedGeneration"]);

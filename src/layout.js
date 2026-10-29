@@ -482,7 +482,24 @@ function resolveMaxDelta(sprite, bounds, size, overflow) {
         ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y)
         : 0,
       limit = Math.max(256, wordExtent * 4, boundsExtent * 2);
-  return [limit, limit];
+  if (!bounds) {
+    return [limit, limit];
+  }
+
+  // Seeds may lie far from the cloud, so also reach every anchor at which
+  // the sprite still overlaps the current bounds.
+  return [
+    Math.max(
+      limit,
+      Math.abs(sprite.x + sprite.x0 - bounds[1].x) + 1,
+      Math.abs(sprite.x + sprite.x1 - bounds[0].x) + 1
+    ),
+    Math.max(
+      limit,
+      Math.abs(sprite.y + sprite.y0 - bounds[1].y) + 1,
+      Math.abs(sprite.y + sprite.y1 - bounds[0].y) + 1
+    )
+  ];
 }
 
 function snapshotPlacedSprite(d) {

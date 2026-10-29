@@ -123,9 +123,11 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
 
   context.save();
   context.font = `${sprite.style} ${sprite.weight} ${Math.max(1, Math.ceil(sprite.size / ratio))}px ${sprite.font}`;
+  // Match the documented rendering contract exactly: some canvases position
+  // centered glyphs differently from a manually offset left-aligned run.
+  context.textAlign = "center";
 
   const metrics = context.measureText(sprite.text);
-  const anchor = -metrics.width / 2;
   let width = (metrics.width + 1) * ratio;
   let height = sprite.size * 2;
   const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) &&
@@ -139,8 +141,8 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     // rotation; round stroke joins extend at most padding beyond the ink.
     const strokeExtent = Math.abs(sprite.padding);
     width = Math.max(width, 2 * ratio * (strokeExtent + Math.max(
-      Math.abs(anchor - metrics.actualBoundingBoxLeft),
-      Math.abs(anchor + metrics.actualBoundingBoxRight)
+      Math.abs(metrics.actualBoundingBoxLeft),
+      Math.abs(metrics.actualBoundingBoxRight)
     )));
     height = Math.max(height, 2 * ratio * (strokeExtent + Math.max(
       Math.abs(metrics.actualBoundingBoxAscent),
@@ -183,11 +185,11 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
     if (sprite.rotate) {
       context.rotate(sprite.rotate * RADIANS);
     }
-    context.fillText(sprite.text, anchor, 0);
+    context.fillText(sprite.text, 0, 0);
     if (sprite.padding) {
       context.lineWidth = 2 * sprite.padding;
       context.lineJoin = "round";
-      context.strokeText(sprite.text, anchor, 0);
+      context.strokeText(sprite.text, 0, 0);
     }
     context.restore();
 

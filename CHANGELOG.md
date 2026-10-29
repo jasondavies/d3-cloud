@@ -56,6 +56,9 @@ Dependencies constrained to 1.x continue to use the old API.
   some canvas implementations under-report ink bounds. Cleared an extra margin
   of the scratch canvas for width-only adapters to prevent pixels from leaking
   into subsequent sprites.
+- Rasterized text with `textAlign = "center"`, matching the documented
+  rendering contract, since some canvases position centered glyphs differently
+  from a manually offset left-aligned run.
 - Text padding strokes now use round joins, so padding extends exactly
   `padding` pixels from the glyph outline rather than up to ten times that at
   sharp miter corners.
@@ -68,6 +71,8 @@ Dependencies constrained to 1.x continue to use the old API.
   snapshots, with built-in field types taking precedence over metadata.
 - Limited bounded placement searches per axis to the fixed box and initial
   coordinates, avoiding expansion-distance searches after the box fills up.
+- Extended unbounded search limits to reach the existing cloud from distant
+  seeds.
 - Applied the same search limits to built-in and custom strategies, so wrapped
   built-ins behave identically and extreme aspect ratios cannot search for
   minutes.
