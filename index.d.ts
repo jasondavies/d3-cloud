@@ -54,7 +54,7 @@ export type StrategyGenerator = () => StrategyCandidate;
 export type StrategyFactory = (initial: StrategySeed, context: StrategyContext) => StrategyGenerator;
 export type StrategyName = "archimedean" | "rectangular" | "none";
 
-export interface BaseSpriteOptions {
+export interface SpriteOptions<D = undefined> {
   font?: string;
   fontStyle?: string;
   style?: string;
@@ -65,101 +65,77 @@ export interface BaseSpriteOptions {
   rotate?: number;
   /** Text only; image masks use the source alpha without padding. */
   padding?: number;
+  /** Carried by reference to the sprite and every word placed from it. */
+  datum?: D;
 }
 
-export type SpriteMetadata = Record<string, unknown>;
-
-export type TextSpriteOptions<T extends object = SpriteMetadata> = T & BaseSpriteOptions;
-
-export type ImageSpriteOptions<T extends object = SpriteMetadata> = T & BaseSpriteOptions & {
+export interface ImageSpriteOptions<D = undefined> extends SpriteOptions<D> {
   text?: string;
   width?: number;
   height?: number;
-};
-
-export type CloudSpriteOptions<T extends object = SpriteMetadata> = T & {
-  text?: string;
-  image?: ImageLike | null;
-  imageWidth?: number | null;
-  imageHeight?: number | null;
-  font?: string;
-  style?: string;
-  weight?: string | number;
-  rotate?: number;
-  size?: number;
-  padding?: number;
-};
-
-export type PlacedSprite<T extends object = SpriteMetadata> = Omit<T, keyof CloudSpriteBase<T>> & {
-  text: string;
-  image: ImageLike | null;
-  imageWidth: number | null;
-  imageHeight: number | null;
-  font: string;
-  style: string;
-  weight: string | number;
-  rotate: number;
-  size: number;
-  padding: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  trimX: number;
-  trimY: number;
-  trimWidth: number;
-  trimHeight: number;
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-};
-
-declare class CloudSpriteBase<T extends object = SpriteMetadata> {
-  constructor(options?: CloudSpriteOptions<T>);
-  // Type-only marker retains metadata inference through subclasses.
-  private readonly _metadata: T;
-
-  text: string;
-  image: ImageLike | null;
-  imageWidth: number | null;
-  imageHeight: number | null;
-  font: string;
-  style: string;
-  weight: string | number;
-  rotate: number;
-  size: number;
-  padding: number;
-  x: number;
-  y: number;
-  hasPixels: boolean;
-  width: number;
-  height: number;
-  spriteWidth: number;
-  trimX: number;
-  trimY: number;
-  trimWidth: number;
-  trimHeight: number;
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-  sprite?: Uint32Array;
-
-  rasterize(contextAndRatio: unknown): this;
 }
 
-// Built-in fields override metadata at runtime, including raster geometry.
-// A bare CloudSprite accepts sprites with any metadata, including interface
-// types that lack an index signature, so it defaults to {} rather than
-// SpriteMetadata; annotate CloudSprite<T> to keep metadata fields.
-type CloudSprite<T extends object = {}> =
-  CloudSpriteBase<T> & Omit<T, keyof CloudSpriteBase<T>>;
+interface SpriteFields<D> {
+  text: string;
+  image: ImageLike | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  font: string;
+  style: string;
+  weight: string | number;
+  rotate: number;
+  size: number;
+  padding: number;
+  datum: D;
+  width: number;
+  height: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  trimX: number;
+  trimY: number;
+  trimWidth: number;
+  trimHeight: number;
+}
 
-declare const CloudSprite: {
-  new<T extends object = SpriteMetadata>(options?: CloudSpriteOptions<T>): CloudSprite<T>;
-  readonly prototype: CloudSpriteBase<object>;
-};
+/** A plain object describing one successful placement. */
+export interface PlacedSprite<D = unknown> extends SpriteFields<D> {
+  x: number;
+  y: number;
+}
+
+/**
+ * An immutable, rasterized mask created by `CloudLayout.getSprite()`. The
+ * same sprite can be placed any number of times.
+ */
+declare class CloudSprite<D = unknown> implements Readonly<SpriteFields<D>> {
+  private constructor();
+
+  readonly text: string;
+  readonly image: ImageLike | null;
+  readonly imageWidth: number | null;
+  readonly imageHeight: number | null;
+  readonly font: string;
+  readonly style: string;
+  readonly weight: string | number;
+  readonly rotate: number;
+  readonly size: number;
+  readonly padding: number;
+  readonly datum: D;
+  readonly width: number;
+  readonly height: number;
+  readonly x0: number;
+  readonly y0: number;
+  readonly x1: number;
+  readonly y1: number;
+  readonly trimX: number;
+  readonly trimY: number;
+  readonly trimWidth: number;
+  readonly trimHeight: number;
+  readonly spriteWidth: number;
+  readonly sprite: Uint32Array;
+}
 
 declare class CloudLayout {
   constructor();
@@ -169,7 +145,7 @@ declare class CloudLayout {
 
   clear(): this;
   bounds(): Bounds | null;
-  eraseSprite<T extends object = SpriteMetadata>(sprite: CloudSprite<T>): void;
+  erase(word: PlacedSprite<unknown>): void;
 
   size(): [number, number];
   size(value: [number, number] | number): this;
@@ -186,10 +162,10 @@ declare class CloudLayout {
   blockSize(): number;
   blockSize(value: number): this;
 
-  getSprite<T extends object = SpriteMetadata>(source: TextSource, options?: TextSpriteOptions<T>): CloudSprite<T> | null;
-  getSprite<T extends object = SpriteMetadata>(source: ImageLike, options?: ImageSpriteOptions<T>): CloudSprite<T> | null;
+  getSprite<D = undefined>(source: TextSource, options?: SpriteOptions<D>): CloudSprite<D> | null;
+  getSprite<D = undefined>(source: ImageLike, options?: ImageSpriteOptions<D>): CloudSprite<D> | null;
 
-  place<T extends object = SpriteMetadata>(sprite: CloudSprite<T>, options?: PlaceOptions): PlacedSprite<T> | null;
+  place<D>(sprite: CloudSprite<D>, options?: PlaceOptions): PlacedSprite<D> | null;
 }
 
 export default CloudLayout;

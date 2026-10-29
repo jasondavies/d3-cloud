@@ -127,8 +127,10 @@ function runLayout(scenario, words, seed) {
 
   const sprites = sortedWords
     .map(word => layout.getSprite(word.text, {
-      ...word,
-      font: "sans-serif"
+      font: "sans-serif",
+      size: word.size,
+      rotate: word.rotate,
+      padding: word.padding
     }))
     .filter(Boolean);
   const placed = placeSprites(layout, sprites);

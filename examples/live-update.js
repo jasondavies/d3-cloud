@@ -61,7 +61,8 @@ function showNextRevision() {
     .random(createRandom(revision.seed));
   const sprites = revision.words
     .map(word => layout.getSprite(word.text, {
-      ...word,
+      size: word.size,
+      datum: word,
       font: "Impact",
       padding: 1,
       rotate: word.rotate

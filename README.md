@@ -43,7 +43,8 @@ const layout = new CloudLayout();
 const sprites = [...words]
   .sort((a, b) => b.size - a.size)
   .map(word => layout.getSprite(word.text, {
-    ...word,
+    size: word.size,
+    datum: word,
     font: "Impact",
     padding: 1,
     rotate: 0
@@ -117,6 +118,8 @@ version before changing any unversioned URLs.
 - The old factory and event API is gone. Use `new CloudLayout()` together with
   `getSprite()` and `place()` instead of `start()`, `stop()`, `on()`,
   `words()`, and `timeInterval()`.
+- Input words are no longer annotated with layout fields. Pass your word as
+  `datum` and read it back from each placed word.
 - Text and image styling now lives on `getSprite(source, options)` rather than
   layout-wide accessors such as `text()`, `font()`, `fontSize()`, `rotate()`,
   and `padding()`.
@@ -136,40 +139,71 @@ Constructs a new cloud layout instance.
 <a name="clear" href="#clear">#</a> <b>clear</b>()
 
 Clears the current placement state and bounds so the instance can be reused for
-a fresh layout.
+a fresh layout. Words placed before clearing can no longer be erased.
 
 <a name="bounds" href="#bounds">#</a> <b>bounds</b>()
 
 Returns the current placement extent as `[{x, y}, {x, y}]`, or `null` if no
-sprites have been placed yet. After `eraseSprite()`, these bounds are only
-reset when the layout becomes completely empty; otherwise they may remain
-conservative.
+words have been placed yet. After `erase()`, these bounds are only reset when
+the layout becomes completely empty; otherwise they may remain conservative.
 
-<a name="erasesprite" href="#erasesprite">#</a> <b>eraseSprite</b>(<i>sprite</i>)
+<a name="getsprite" href="#getsprite">#</a> <b>getSprite</b>(<i>source</i>[, <i>options</i>])
 
-Erases a previously placed `CloudSprite` from the layout.
+Rasterizes the specified text or image-like source and returns an immutable
+`CloudSprite`, or `null` if it could not be rasterized into the internal scratch
+canvas.
 
-Pass the original `CloudSprite` instance that was given to `place()`, not the
-plain placed sprite snapshot returned by `place()`. The sprite must currently be
-placed in this layout. This low-level operation does not shrink `bounds()` unless
-the layout becomes completely empty.
+A sprite is a mask: it holds the source, its styling, its trimmed geometry
+(`width`, `height`, `x0`, `y0`, `x1`, `y1`) and its pixels, but no position.
+Rasterization is the expensive step, so prepare a sprite once and place it as
+many times as you like, in this or any other layout. Sprites are frozen and
+can only be created by `getSprite()`.
+
+The optional *options* object may include `font`, `style`, `weight`, `rotate`,
+`size`, `padding`, and `datum`. The defaults are `font: "serif"`,
+`style: "normal"`, `weight: "normal"`, `size: 1`, `rotate: 0`, and
+`padding: 1`. `fontStyle`, `fontWeight`, and `fontSize` are accepted as aliases.
+Other option fields are ignored.
+
+Use `datum` to carry your own data, such as the input word, a link, or an ID.
+It is stored by reference on the sprite and on every word placed from it, and
+is never read by the layout.
+
+Image sprites are extracted from the source alpha channel, so transparent
+pixels are ignored automatically. For image sources, `options.width` and
+`options.height` may be used to resize the image before extraction; if only one
+dimension is provided, the other is derived from the source aspect ratio.
+`options.text` sets the sprite's text, which defaults to the image's `alt`.
+Images and videos use their intrinsic dimensions rather than their display size.
+
+`padding` applies only to text. Image masks use the source alpha unchanged;
+adding transparent margins does not create occupied padding pixels.
+
+Text and image bounds are trimmed to nontransparent pixels, including text
+padding. Packed rows are aligned internally without adding empty space to
+reported bounds or bounded placement checks.
+`null` can indicate empty text, an unloaded or empty image, or a raster exceeding
+the 2048-pixel scratch dimensions. Load images and fonts before preparing sprites.
 
 <a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>[, <i>options</i>])
 
-Attempts to place a single prepared `CloudSprite` immediately and returns the
-placed sprite snapshot, or `null` if it could not be placed.
+Attempts to place *sprite* and returns a new placed word, or `null` if it could
+not be placed. The sprite itself is not changed, so it can be placed again;
+for example, this fills the remaining space with one word at decreasing sizes:
 
-The returned object is a plain placed sprite snapshot. Internal raster fields
-such as `sprite`, `spriteWidth`, and `hasPixels` are omitted, while custom
-metadata from `getSprite(..., options)` is preserved.
+```js
+for (let size = 80; size >= 8; size -= 4) {
+  const sprite = layout.getSprite("fill", { size, font: "Impact" });
+  while (sprite && layout.place(sprite)) {}
+}
+```
 
-Snapshots are shallow objects, not a serialization format. An image sprite
-retains its `image` source, which may be a DOM element. Before posting or
-serializing a result, omit that source and any non-serializable custom metadata;
-carry an image URL or ID for the renderer instead.
-
-A `CloudSprite` instance can only be placed once at a time. Call
-`eraseSprite(sprite)` or `clear()` before placing the same sprite instance again.
+The placed word is a plain object with the sprite's `text`, `image`,
+`imageWidth`, `imageHeight`, `font`, `style`, `weight`, `rotate`, `size`,
+`padding`, `datum`, and trimmed geometry, plus the placed position `x` and `y`.
+It is shallow and not a serialization format: an image word retains its
+`image` source, which may be a DOM element, and `datum` is whatever you passed.
+Before posting or serializing a word, omit anything that cannot be cloned.
 
 If specified, the optional *options* object may include `x` and `y` to control
 the initial placement attempt before the strategy search begins. Any omitted axis
@@ -183,45 +217,16 @@ Image sprites use the returned `x` and `y` coordinates as the sprite center.
 For text, render from `x` and `y` directly with a centered horizontal anchor,
 as shown in the canvas and SVG snippets above.
 
-<a name="getsprite" href="#getsprite">#</a> <b>getSprite</b>(<i>source</i>[, <i>options</i>])
+To place multiple sprites, call `place()` in your own loop.
 
-Builds and returns a `CloudSprite` for the specified text or image-like source,
-or `null` if it could not be rasterized into the internal scratch canvas.
+<a name="erase" href="#erase">#</a> <b>erase</b>(<i>word</i>)
 
-The returned value is a prepared `CloudSprite`, not the plain placed sprite
-snapshot returned by `place()`. The prepared sprite can be placed, erased, and
-placed again.
+Erases a placed word, freeing its pixels for later placements. *word* must be
+an object returned by `place()` on this layout since it was last cleared; it is
+matched by identity, so changing its fields does not affect what is erased, and
+copies are rejected. Each word can be erased once.
 
-The optional *options* object may include `font`, `style`, `weight`, `rotate`,
-`size`, `padding`, and any additional fields you want to carry through to the
-resulting sprite. The defaults are `font:
-"serif"`, `style: "normal"`, `weight: "normal"`, `size: 1`, `rotate: 0`, and
-`padding: 1`.
-
-Image sprites are extracted from the source alpha channel, so transparent
-pixels are ignored automatically. For image sources, `options.width` and
-`options.height` may be used to resize the image before extraction; if only one
-dimension is provided, the other is derived from the source aspect ratio.
-Images and videos use their intrinsic dimensions rather than their display size.
-
-`padding` applies only to text. Image masks use the source alpha unchanged;
-adding transparent margins does not create occupied padding pixels.
-
-Built-in sprite fields are reserved and take precedence over custom metadata:
-`text`, `image`, `imageWidth`, `imageHeight`, `font`, `style`, `weight`, `rotate`,
-`size`, `padding`, `x`, `y`, `width`, `height`, `x0`, `y0`, `x1`, `y1`,
-`trimX`, `trimY`, `trimWidth`, `trimHeight`, `hasPixels`, `spriteWidth`, and
-`sprite`. Avoid method names such as `rasterize` and internal names beginning
-with `_` as well. Use a nested `datum` object to carry arbitrary input fields.
-
-Text and image bounds are trimmed to nontransparent pixels, including text
-padding. Packed rows are aligned internally without adding empty space to
-reported bounds or bounded placement checks.
-`null` can indicate empty text, an unloaded or empty image, or a raster exceeding
-the 2048-pixel scratch dimensions. Load images and fonts before preparing sprites.
-
-Sprites that cannot be placed simply return `null`. To place multiple sprites,
-call `place()` in your own loop.
+This does not shrink `bounds()` unless the layout becomes completely empty.
 
 <a name="size" href="#size">#</a> <b>size</b>([<i>size</i>])
 

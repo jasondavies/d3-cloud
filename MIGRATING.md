@@ -95,8 +95,7 @@ const prepared = words.map((datum, index) => ({
 const placed = [];
 for (const word of prepared) {
   const sprite = layout.getSprite(word.text, {
-    datum: word.datum,
-    index: word.index,
+    datum: word,
     font: "Impact",
     size: word.size,
     rotate: 0,
@@ -111,9 +110,10 @@ for (const word of prepared) {
 draw(placed, layout.bounds());
 ```
 
-`draw` is your renderer. The example carries the original object in `datum`
-so event handlers can still associate a placed word with its input. Other
-metadata, such as IDs or URLs, can also be passed in the options object.
+`draw` is your renderer. The example passes the prepared word, which holds the
+original object and its index, as `datum`, so event handlers can associate
+each placed word with its input via `result.datum`. Put IDs, URLs, and other
+data in `datum` too; other option fields are ignored rather than copied.
 
 Both `getSprite()` and `place()` can return `null`. The former means the source
 could not produce a sprite; the latter means placement failed. Neither means
@@ -171,19 +171,18 @@ are loaded before creating sprites; see the
 
 ## Data ownership and repeated layouts
 
-V1 wrote placement properties onto the input word objects. V2 creates a
-`CloudSprite` and returns a separate plain snapshot on successful placement.
-Use that result for rendering rather than expecting `words` to be mutated.
-Metadata is copied shallowly; nested objects such as `datum` keep their identity.
+V1 wrote placement properties onto the input word objects. V2 rasterizes each
+source into an immutable `CloudSprite`, and each successful `place()` returns a
+new plain placed word. Use those results for rendering rather than expecting
+`words` to be mutated. `datum` is stored by reference, so it keeps its identity.
 
 `place()` adds to existing occupancy. Use `clear()` before a fresh layout.
-For incremental removal, retain the original `CloudSprite` and pass it to
-`eraseSprite()`; the returned snapshot cannot be used for erasure. A sprite
-can only be placed in one layout at a time. Erase it or clear its layout
-before placing it again. Do not change a placed sprite's coordinates or mask.
+For incremental removal, keep the placed word returned by `place()` and pass it
+to `erase()`. Sprites have no position, so the same sprite can be placed any
+number of times, in one layout or several.
 
 Create a new sprite when its text, font, size, padding, or rotation changes;
-rasterized sprites cache their pixels. After an erasure, `bounds()` may remain
+sprites cannot be modified. After an erasure, `bounds()` may remain
 conservative until the layout becomes empty. Rebuild the layout if you need
 tight bounds for a fresh set of words.
 
@@ -199,13 +198,13 @@ batches. Yield around rasterization as well as placement. A single `place()`
 call cannot be interrupted by that flag.
 
 For larger jobs, see the [worker example](./examples/worker.html). A worker can
-use `.canvas(() => new OffscreenCanvas(1, 1))`; text placement snapshots can be
-posted back if your custom metadata is also structured-cloneable. Keep prepared
+use `.canvas(() => new OffscreenCanvas(1, 1))`; placed text words can be
+posted back if their `datum` is also structured-cloneable. Keep prepared
 sprites and the layout in the worker. Terminate the worker for immediate
 cancellation, or ignore results from superseded requests.
 
 In React, create a new layout in an effect when inputs change and store the
-returned snapshots in state. If you schedule batches or use workers, cancel
+returned placed words in state. If you schedule batches or use workers, cancel
 pending work in the effect cleanup. The default canvas factory needs a DOM;
 run on the client or supply a suitable canvas implementation. See the
 [React example](./examples/react/README.md).
@@ -227,7 +226,8 @@ V2 includes its own TypeScript declarations. Remove a direct dependency on
 `@types/d3-cloud` when migrating your code to v2; a wrapper still using v1 may
 retain its own types. Replace old `Cloud` / `Word` types and local
 `declare module "d3-cloud"` shims with the exported `CloudLayout`,
-`CloudSprite`, `PlacedSprite`, and `Bounds` types as appropriate. Prefer a
+`CloudSprite`, `PlacedSprite`, and `Bounds` types as appropriate. Both are
+generic in the type of `datum`, which is inferred from `getSprite()` options. Prefer a
 current module resolution mode that understands package `exports`, such as
 `node16`, `nodenext`, or `bundler`, as appropriate to your build.
 

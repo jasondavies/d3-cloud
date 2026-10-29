@@ -12,7 +12,8 @@ const layout = new CloudLayout().canvas(() => createCanvas(1, 1))
 
 const sprites = words
   .map(word => layout.getSprite(word.text, {
-    ...word,
+    size: word.size,
+    datum: word,
     font: "Impact",
     padding: 5,
     rotate: Math.floor(Math.random() * 2) * 90

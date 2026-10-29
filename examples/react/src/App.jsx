@@ -58,7 +58,7 @@ export default function App() {
         </p>
         <svg viewBox={VIEW_BOX} aria-label="Clickable React word cloud">
           {placedWords.map((word, index) => (
-            <a key={word.text} href={word.href} target="_blank" rel="noreferrer">
+            <a key={word.text} href={word.datum.href} target="_blank" rel="noreferrer">
               <text
                 transform={`translate(${word.x} ${word.y}) rotate(${word.rotate})`}
                 textAnchor="middle"
@@ -86,7 +86,8 @@ function createCloud() {
   return [...WORDS]
     .sort((a, b) => b.size - a.size)
     .map(word => layout.getSprite(word.text, {
-      ...word,
+      size: word.size,
+      datum: word,
       font: "sans-serif",
       weight: "bold",
       padding: 1,

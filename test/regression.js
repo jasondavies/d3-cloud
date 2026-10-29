@@ -128,10 +128,42 @@ test("layout can build a reusable CloudSprite", () => {
 
   assert.ok(sprite instanceof CloudSprite);
   assert.equal(sprite.text, "hello");
-  assert.equal(sprite.hasPixels, true);
   assert.ok(sprite.sprite instanceof Uint32Array);
   assert.ok(sprite.width > 0);
   assert.ok(sprite.height > 0);
+  assert.ok(Object.isFrozen(sprite));
+  assert.throws(() => { "use strict"; sprite.size = 40; }, TypeError);
+});
+
+test("sprites can only be created by getSprite()", () => {
+  assert.throws(() => new CloudSprite(), /getSprite/);
+  assert.throws(() => new CloudSprite(Symbol("CloudSprite"), { text: "forged" }), /getSprite/);
+});
+
+test("the same sprite can be placed repeatedly without changing", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size([200, 100]).overflow(false)
+    .random(createSeededRandom(5));
+  const sprite = layout.getSprite("hello", { size: 20, padding: 0, datum: { id: 1 } });
+  const before = { ...sprite };
+  const words = [];
+  for (let word; (word = layout.place(sprite));) {
+    words.push(word);
+  }
+  assert.ok(words.length > 3, `placed ${words.length} copies`);
+  assert.deepEqual({ ...sprite }, before);
+  for (let i = 0; i < words.length; i++) {
+    assert.equal(words[i].datum, sprite.datum);
+    for (let j = 0; j < i; j++) {
+      const a = words[i];
+      const b = words[j];
+      assert.ok(a.x + a.x1 <= b.x + b.x0 || a.x + a.x0 >= b.x + b.x1 ||
+        a.y + a.y1 <= b.y + b.y0 || a.y + a.y0 >= b.y + b.y1, `copies ${i} and ${j} overlap`);
+    }
+  }
+  for (const word of words) {
+    layout.erase(word);
+  }
+  assert.equal(layout.bounds(), null);
 });
 
 test("layout rasterizes text with alphabetic baseline", () => {
@@ -259,7 +291,7 @@ test("text geometry is trimmed to ink while the packed stride stays word-aligned
   assert.ok(word, "a word fits when its pixels, but not its scratch raster, fit the box");
   assert.deepEqual(layout.bounds(), [{ x: -25, y: -20 }, { x: 25, y: 20 }]);
   assert.equal("_rasterWidth" in word, false);
-  layout.eraseSprite(sprite);
+  layout.erase(word);
   assert.equal(layout.bounds(), null);
 });
 
@@ -267,16 +299,15 @@ test("occupancy insertion and erasure work across positive and negative block bo
   const image = createFakeImage(4, 4, Array.from({ length: 16 }, (_, i) => [i % 4, i >>> 2]));
   for (const blockSize of [32, 64, 512]) {
     const layout = new CloudLayout().canvas(createFakeCanvas).size(0).blockSize(blockSize).strategy("none");
+    const sprite = layout.getSprite(image);
     for (const edge of [-blockSize, 0, blockSize]) {
-      const first = layout.getSprite(image);
-      const second = layout.getSprite(image);
       const position = { x: edge, y: edge };
-      assert.ok(layout.place(first, position));
-      assert.equal(layout.place(second, position), null);
-      layout.eraseSprite(first);
+      const first = layout.place(sprite, position);
+      assert.ok(first);
+      assert.equal(layout.place(sprite, position), null);
+      layout.erase(first);
       assert.equal(layout.bounds(), null);
-      assert.ok(layout.place(second, position));
-      layout.eraseSprite(second);
+      layout.erase(layout.place(sprite, position));
     }
   }
 });
@@ -340,15 +371,14 @@ test("opaque image sprites support explicit adjacent placement and erasure", () 
   const image = createCanvas(10, 10);
   image.getContext("2d").fillRect(0, 0, 10, 10);
   const layout = new CloudLayout().canvas(() => createCanvas(1, 1)).size(0).strategy("none");
-  const first = layout.getSprite(image);
-  const second = layout.getSprite(image);
-  const probe = layout.getSprite(image);
-  assert.ok(layout.place(first, { x: 0, y: 0 }));
-  assert.ok(layout.place(second, { x: 10, y: 0 }));
-  assert.equal(layout.place(probe, { x: 9, y: 0 }), null);
-  layout.eraseSprite(second);
-  assert.equal(layout.place(probe, { x: 9, y: 0 }), null);
-  assert.ok(layout.place(probe, { x: 10, y: 0 }));
+  const sprite = layout.getSprite(image);
+  assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+  const second = layout.place(sprite, { x: 10, y: 0 });
+  assert.ok(second);
+  assert.equal(layout.place(sprite, { x: 9, y: 0 }), null);
+  layout.erase(second);
+  assert.equal(layout.place(sprite, { x: 9, y: 0 }), null);
+  assert.ok(layout.place(sprite, { x: 10, y: 0 }));
 });
 
 for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
@@ -571,9 +601,11 @@ test("text overhang cannot contaminate subsequent text or image sprites", () => 
 
 test("ratio-three text readback preserves tail pixels without spilling between rows", () => {
   for (const measuredWidth of [20, 31]) {
-    const context = createFakeCanvas().getContext("2d");
+    const canvas = createFakeCanvas();
+    const context = canvas.getContext("2d");
     context.measureText = () => ({ width: measuredWidth });
     let physicalWidth;
+    // A 1×1 probe returns 3×3 pixels, so the layout infers a ratio of three.
     // Keep the ink one pixel inside the raster, as ink touching the edge is
     // treated as clipped and redrawn larger.
     context.getImageData = (_x, _y, width, height) => {
@@ -583,8 +615,7 @@ test("ratio-three text readback preserves tail pixels without spilling between r
       data[((physicalWidth * 2 + 1) * 4) + 3] = 255;
       return { data };
     };
-    const sprite = new CloudSprite({ text: "test", size: 20, padding: 0 });
-    sprite.rasterize({ context, ratio: 3, pixelWidth: 2048, clearWidth: 0, clearHeight: 0 });
+    const sprite = new CloudLayout().canvas(() => canvas).getSprite("test", { size: 20, padding: 0 });
     const trimmedWidth = physicalWidth - 2;
     const stride = Math.ceil(trimmedWidth / 32);
     const expected = new Uint32Array(stride * 2);
@@ -793,31 +824,37 @@ test("place accepts a prepared CloudSprite", () => {
   assert.equal(placed.y, 0);
 });
 
-test("placed words omit internal raster state and preserve custom fields", () => {
+test("placed words are plain objects that carry the datum by reference", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
     .size([0, 0])
     .overflow(true)
     .random(() => 0.5);
 
+  const datum = { id: "greeting" };
   const sprite = layout.getSprite("hello", {
     font: "serif",
     size: 20,
     rotate: 0,
     padding: 0,
-    id: "greeting"
+    datum,
+    id: "ignored"
   });
   const placed = layout.place(sprite);
 
-  assert.equal(placed.id, "greeting");
+  assert.equal(sprite.datum, datum);
+  assert.equal(placed.datum, datum);
+  assert.equal("id" in sprite, false, "unknown options are not copied");
+  assert.equal("id" in placed, false);
+  assert.equal(Object.getPrototypeOf(placed), Object.prototype);
   assert.deepEqual(structuredClone(placed), placed);
-  assert.equal("_placedLayout" in placed, false);
   assert.equal("sprite" in placed, false);
   assert.equal("spriteWidth" in placed, false);
-  assert.equal("hasPixels" in placed, false);
+  assert.equal("_rasterWidth" in placed, false);
   assert.equal(typeof placed.text, "string");
   assert.equal(typeof placed.x, "number");
   assert.equal(typeof placed.trimHeight, "number");
+  assert.equal(layout.place(layout.getSprite("plain")).datum, undefined);
 });
 
 test("place accepts explicit initial coordinates", () => {
@@ -866,24 +903,23 @@ test("fractional coordinates are floored and preserve collision detection", () =
       .canvas(() => createFakeCanvas())
       .size(0)
       .strategy("none");
-    const first = layout.getSprite("hello", { size: 20, padding: 0 });
-    const second = layout.getSprite("hello", { size: 20, padding: 0 });
+    const sprite = layout.getSprite("hello", { size: 20, padding: 0 });
     const integerCoordinates = { x: Math.floor(coordinates.x), y: Math.floor(coordinates.y) };
-    const placed = layout.place(first, coordinates);
+    const placed = layout.place(sprite, coordinates);
 
     assert.equal(placed.x, integerCoordinates.x);
     assert.equal(placed.y, integerCoordinates.y);
-    assert.equal(layout.place(second, coordinates), null);
-    assert.equal(layout.place(second, integerCoordinates), null);
-    assert.equal(layout.place(second, {
+    assert.equal(layout.place(sprite, coordinates), null);
+    assert.equal(layout.place(sprite, integerCoordinates), null);
+    assert.equal(layout.place(sprite, {
       x: 100,
       y: 100,
       strategy: singleCandidateStrategy(coordinates.x, coordinates.y)
     }), null);
 
-    layout.eraseSprite(first);
+    layout.erase(placed);
     assert.equal(layout.bounds(), null);
-    assert.ok(layout.place(second, integerCoordinates));
+    assert.ok(layout.place(sprite, integerCoordinates));
   }
 });
 
@@ -907,44 +943,26 @@ test("place rejects raw word objects", () => {
   assert.throws(() => layout.place({ text: "hello" }), /CloudSprite/);
 });
 
-test("place rejects an already placed CloudSprite without moving it", () => {
-  const layout = new CloudLayout()
-    .canvas(() => createRightEdgeCanvas())
-    .size([0, 0])
-    .overflow(true)
-    .strategy(noneStrategy);
-  const sprite = extractSprite(layout, { text: "hello", size: 16, padding: 0, rotate: 0, font: "serif" });
-  const original = layout.place(sprite, { x: 0, y: 0 });
+test("erase rejects sprites, copies, erased words, and other layouts' words", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size(0).strategy(noneStrategy);
+  const other = new CloudLayout().canvas(createFakeCanvas).size(0).strategy(noneStrategy);
+  const sprite = layout.getSprite("hello", { size: 16, padding: 0 });
+  const word = layout.place(sprite, { x: 0, y: 0 });
+  const otherWord = other.place(sprite, { x: 0, y: 0 });
 
-  assert.ok(original);
-  assert.throws(
-    () => layout.place(sprite, { x: 31, y: 0, strategy: "none" }),
-    /already placed/
-  );
-  assert.equal(sprite.x, 0);
-  assert.equal(sprite.y, 0);
+  for (const value of [sprite, { ...word }, otherWord, null, undefined, "hello"]) {
+    assert.throws(() => layout.erase(value), /returned by place\(\) on this layout/);
+  }
+  assert.throws(() => layout.place({ ...sprite }), TypeError);
 
-  layout.eraseSprite(sprite);
-  assert.ok(layout.place(sprite, { x: 0, y: 0, strategy: "none" }));
+  // Changing a placed word does not affect what erase() removes.
+  word.x = 500;
+  layout.erase(word);
+  assert.equal(layout.bounds(), null);
+  assert.throws(() => layout.erase(word), /returned by place\(\) on this layout/);
+  assert.ok(other.bounds(), "erasing from one layout leaves the other intact");
 });
 
-test("eraseSprite rejects unplaced and foreign sprites", () => {
-  const firstLayout = new CloudLayout()
-    .canvas(() => createRightEdgeCanvas())
-    .size([0, 0])
-    .overflow(true)
-    .strategy(noneStrategy);
-  const secondLayout = new CloudLayout()
-    .canvas(() => createRightEdgeCanvas())
-    .size([0, 0])
-    .overflow(true)
-    .strategy(noneStrategy);
-  const sprite = extractSprite(firstLayout, { text: "hello", size: 16, padding: 0, rotate: 0, font: "serif" });
-
-  assert.throws(() => firstLayout.eraseSprite(sprite), /placed in this layout/);
-  assert.ok(firstLayout.place(sprite, { x: 0, y: 0 }));
-  assert.throws(() => secondLayout.eraseSprite(sprite), /placed in this layout/);
-});
 
 test("place accepts a per-call strategy override", () => {
   const layout = new CloudLayout()
@@ -966,7 +984,7 @@ test("place accepts a per-call strategy override", () => {
   assert.equal(second.y, 0);
 });
 
-test("eraseSprite removes a placed sprite and frees its occupied space", () => {
+test("erase removes a placed word and frees its occupied space", () => {
   const layout = new CloudLayout()
     .canvas(() => createRightEdgeCanvas())
     .size([0, 0])
@@ -975,9 +993,10 @@ test("eraseSprite removes a placed sprite and frees its occupied space", () => {
   const firstSprite = extractSprite(layout, { text: "first", size: 16, padding: 0, rotate: 0, font: "serif" });
   const secondSprite = extractSprite(layout, { text: "second", size: 16, padding: 0, rotate: 0, font: "serif" });
 
-  assert.ok(layout.place(firstSprite, { x: 0, y: 0 }));
+  const first = layout.place(firstSprite, { x: 0, y: 0 });
+  assert.ok(first);
   assert.equal(layout.place(secondSprite, { x: 0, y: 0 }), null);
-  layout.eraseSprite(firstSprite);
+  layout.erase(first);
   assert.equal(layout.bounds(), null);
 
   const secondPlacement = layout.place(secondSprite, { x: 0, y: 0 });
@@ -1009,23 +1028,23 @@ test("setting the same normalized block size preserves occupied pixels", () => {
     .canvas(() => createFakeCanvas())
     .size(0)
     .strategy("none");
-  const first = layout.getSprite("hello", { size: 20, padding: 0 });
-  const second = layout.getSprite("hello", { size: 20, padding: 0 });
-  assert.ok(layout.place(first));
+  const sprite = layout.getSprite("hello", { size: 20, padding: 0 });
+  const first = layout.place(sprite);
+  assert.ok(first);
   const bounds = layout.bounds();
 
   for (const size of [layout.blockSize(), layout.blockSize() - 1]) {
     assert.equal(layout.blockSize(size), layout);
     assert.deepEqual(layout.bounds(), bounds);
-    assert.equal(layout.place(second), null);
+    assert.equal(layout.place(sprite), null);
   }
 
-  layout.eraseSprite(first);
+  layout.erase(first);
   assert.equal(layout.bounds(), null);
-  assert.ok(layout.place(second));
+  assert.ok(layout.place(sprite));
 });
 
-test("clear releases placed sprites for reuse", () => {
+test("clear invalidates earlier placed words", () => {
   const layout = new CloudLayout()
     .canvas(() => createFakeCanvas())
     .size([0, 0])
@@ -1033,26 +1052,14 @@ test("clear releases placed sprites for reuse", () => {
     .strategy(noneStrategy);
   const sprite = extractSprite(layout, { text: "hello", size: 20, padding: 0, rotate: 0, font: "serif" });
 
-  assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+  const word = layout.place(sprite, { x: 0, y: 0 });
+  assert.ok(word);
+  assert.equal(layout.place(sprite, { x: 0, y: 0 }), null);
   layout.clear();
-  assert.throws(() => layout.eraseSprite(sprite), /placed in this layout/);
+  assert.throws(() => layout.erase(word), /since it was last cleared/);
   assert.ok(layout.place(sprite, { x: 0, y: 0 }));
 });
 
-test("sprites built from a placed sprite's fields start unplaced", () => {
-  const layout = new CloudLayout().canvas(createFakeCanvas).size(0).strategy("none");
-  const placed = layout.getSprite("hello", { size: 20, padding: 0 });
-  assert.ok(layout.place(placed, { x: 0, y: 0 }));
-  for (const copy of [
-    layout.getSprite(placed.text, { ...placed, size: 20 }),
-    new CloudSprite({ ...placed })
-  ]) {
-    assert.throws(() => layout.eraseSprite(copy), /placed in this layout/);
-    assert.equal(layout.place(copy, { x: 0, y: 0 }), null, "the original still occupies its pixels");
-  }
-  layout.eraseSprite(placed);
-  assert.equal(layout.bounds(), null);
-});
 
 test("image sprites stay attached to the cloud rather than forming islands", () => {
   const { createCanvas } = loadNodeCanvas();

@@ -1,50 +1,59 @@
 const RADIANS = Math.PI / 180;
 const SCRATCH_WIDTH = 1 << 11;
 const SCRATCH_HEIGHT = 1 << 11;
+const CREATE = Symbol("CloudSprite");
 
+// An immutable, rasterized mask for a text or image source. Sprites are only
+// created by CloudLayout.getSprite() and can be placed any number of times.
 export default class CloudSprite {
-  constructor({
-    text = "",
-    image = null,
-    imageWidth = null,
-    imageHeight = null,
-    font = "serif",
-    style = "normal",
-    weight = "normal",
-    rotate = 0,
-    size = 1,
-    padding = 1,
-    ...rest
-  } = {}) {
-    Object.assign(this, rest);
-    this.text = text == null ? "" : String(text);
-    this.image = image;
-    this.imageWidth = normalizeOptionalInteger(imageWidth);
-    this.imageHeight = normalizeOptionalInteger(imageHeight);
-    this.font = font;
-    this.style = style;
-    this.weight = weight;
-    this.rotate = normalizeNumber(rotate);
-    this.size = normalizeInteger(size);
-    this.padding = normalizeNumber(padding);
-    this.x = 0;
-    this.y = 0;
-    // Metadata copied from a placed sprite must not carry its placement.
-    this._placedLayout = null;
-    this._placedGeneration = 0;
-    resetSprite(this);
-  }
-
-  rasterize(contextAndRatio) {
-    if (this.sprite) {
-      return this;
+  constructor(token, fields) {
+    if (token !== CREATE) {
+      throw new TypeError("CloudSprite instances are created by CloudLayout.getSprite()");
     }
-
-    resetSprite(this);
-    return this.image
-      ? rasterizeImageSprite(this, contextAndRatio)
-      : rasterizeTextSprite(this, contextAndRatio);
+    const { _rasterWidth, ...rest } = fields;
+    Object.assign(this, rest);
+    Object.defineProperty(this, "_rasterWidth", { value: _rasterWidth });
+    Object.freeze(this);
   }
+}
+
+export function createSprite(source, options, contextAndRatio) {
+  const image = isImageSource(source) ? source : null;
+  if (!image && !isTextSource(source)) {
+    throw new TypeError("getSprite() expects text or an image-like source");
+  }
+
+  const fields = {
+    text: String(image ? options.text ?? source.alt ?? "" : source),
+    image,
+    imageWidth: image ? normalizeOptionalInteger(options.width) : null,
+    imageHeight: image ? normalizeOptionalInteger(options.height) : null,
+    font: options.font ?? "serif",
+    style: options.style ?? options.fontStyle ?? "normal",
+    weight: options.weight ?? options.fontWeight ?? "normal",
+    rotate: normalizeNumber(options.rotate ?? 0),
+    size: normalizeInteger(options.size ?? options.fontSize ?? 1),
+    padding: normalizeNumber(options.padding ?? (image ? 0 : 1)),
+    datum: options.datum,
+    width: 0,
+    height: 0,
+    x0: 0,
+    y0: 0,
+    x1: 0,
+    y1: 0,
+    trimX: 0,
+    trimY: 0,
+    trimWidth: 0,
+    trimHeight: 0,
+    spriteWidth: 0,
+    sprite: null,
+    _rasterWidth: null
+  };
+
+  const rasterized = image
+    ? rasterizeImageSprite(fields, contextAndRatio)
+    : rasterizeTextSprite(fields, contextAndRatio);
+  return rasterized ? new CloudSprite(CREATE, fields) : null;
 }
 
 export function createSpriteContext(canvas) {
@@ -86,23 +95,6 @@ function normalizeNumber(value) {
 
 function ceilToRatio(value, ratio) {
   return Math.max(1, Math.ceil(value / ratio) * ratio);
-}
-
-function resetSprite(sprite) {
-  sprite.hasPixels = false;
-  sprite.width = 0;
-  sprite.height = 0;
-  sprite.spriteWidth = 0;
-  sprite._rasterWidth = null;
-  sprite.trimX = 0;
-  sprite.trimY = 0;
-  sprite.trimWidth = 0;
-  sprite.trimHeight = 0;
-  sprite.x0 = 0;
-  sprite.y0 = 0;
-  sprite.x1 = 0;
-  sprite.y1 = 0;
-  sprite.sprite = undefined;
 }
 
 function clearContext(contextAndRatio) {
@@ -191,7 +183,7 @@ function drawTextSprite(sprite, contextAndRatio, context) {
     if (rasterWidth > maxWidth || rasterHeight > maxHeight) {
       contextAndRatio.clearWidth = 0;
       contextAndRatio.clearHeight = 0;
-      return sprite;
+      return false;
     }
 
     context.save();
@@ -250,7 +242,7 @@ function drawTextSprite(sprite, contextAndRatio, context) {
   }
 
   if (!alphaBounds) {
-    return sprite;
+    return false;
   }
 
   sprite._rasterWidth = envelopeWidth;
@@ -266,7 +258,7 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   if (!imageSize) {
     contextAndRatio.clearWidth = 0;
     contextAndRatio.clearHeight = 0;
-    return sprite;
+    return false;
   }
 
   const { drawWidth, drawHeight } = imageSize;
@@ -279,7 +271,7 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
     contextAndRatio.clearWidth = 0;
     contextAndRatio.clearHeight = 0;
-    return sprite;
+    return false;
   }
 
   context.save();
@@ -306,7 +298,7 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
   const alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
 
   if (!alphaBounds) {
-    return sprite;
+    return false;
   }
 
   sprite.imageWidth = drawWidth;
@@ -331,7 +323,6 @@ function extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBou
   sprite.y0 = originY + alphaBounds.y0;
   sprite.x1 = sprite.x0 + sprite.width;
   sprite.y1 = sprite.y0 + sprite.height;
-  sprite.hasPixels = true;
   sprite.sprite = new Uint32Array(wordsPerRow * sprite.height);
 
   for (let row = 0; row < sprite.height; row += 1) {
@@ -345,7 +336,7 @@ function extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBou
     }
   }
 
-  return sprite;
+  return true;
 }
 
 function resolveImageSize(image, imageWidth, imageHeight) {
@@ -432,4 +423,19 @@ function findAlphaBounds(pixels, width, height) {
     width: maxX - minX + 1,
     height: maxY - minY + 1
   };
+}
+
+function isTextSource(source) {
+  return typeof source === "string" || typeof source === "number" || typeof source === "boolean" || source instanceof String;
+}
+
+function isImageSource(source) {
+  return !!source &&
+    typeof source === "object" &&
+    !Array.isArray(source) &&
+    (
+      typeof source.width === "number" ||
+      typeof source.naturalWidth === "number" ||
+      typeof source.videoWidth === "number"
+    );
 }

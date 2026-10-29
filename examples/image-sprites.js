@@ -76,8 +76,7 @@ async function createSprites(layout, descriptors) {
       text: descriptor.label,
       width: descriptor.size,
       height: descriptor.size,
-      imageHref: image.currentSrc || image.src,
-      shape: descriptor.shape
+      datum: { href: image.currentSrc || image.src, shape: descriptor.shape }
     });
   }));
 
@@ -97,8 +96,8 @@ function draw(words, bounds) {
     imageNode.setAttribute("width", drawWidth);
     imageNode.setAttribute("height", drawHeight);
     imageNode.setAttribute("preserveAspectRatio", "none");
-    imageNode.setAttributeNS(XLINK_NS, "href", word.imageHref || word.image?.currentSrc || word.image?.src || "");
-    imageNode.setAttribute("href", word.imageHref || word.image?.currentSrc || word.image?.src || "");
+    imageNode.setAttributeNS(XLINK_NS, "href", word.datum.href || word.image?.currentSrc || word.image?.src || "");
+    imageNode.setAttribute("href", word.datum.href || word.image?.currentSrc || word.image?.src || "");
     imageNode.setAttribute("opacity", "0.98");
     imageNode.setAttribute("aria-label", word.text);
     if (word.rotate) {

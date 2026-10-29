@@ -19,8 +19,11 @@ Dependencies constrained to 1.x continue to use the old API.
   `d3-dispatch` dependency. Browser scripts must use ESM imports.
 - Changed the default rotation from random multiples of 30 degrees to zero,
   and the default font size from `sqrt(value)` to 1. Set styling explicitly.
-- Input word objects are no longer mutated. Placement returns separate snapshots,
-  and callers control the word ordering.
+- Input word objects are no longer mutated. Placement returns separate plain
+  words, and callers control the word ordering.
+- Custom data is carried in a single `datum` option, stored by reference on
+  sprites and placed words. Other option fields are ignored rather than copied
+  onto sprites and results, so built-in field names are no longer reserved.
 - Replaced the old event-driven factory API (`start()`, `stop()`, `on()`,
   `words()`, `timeInterval()`, accessor-based text/font configuration) with the
   class-based `CloudLayout` / `CloudSprite` API.
@@ -38,10 +41,12 @@ Dependencies constrained to 1.x continue to use the old API.
 ### Added
 
 - Added `CloudLayout.getSprite(...)` for explicit sprite preparation and
-  `place()` for caller-controlled placement.
+  `place()` for caller-controlled placement. Sprites are immutable masks with
+  no position, so one sprite can be placed any number of times; they can only
+  be created by `getSprite()`.
 - Added built-in placement strategies including `noneStrategy` for single-attempt
   placement.
-- Added `eraseSprite()` for erasing previously placed `CloudSprite` instances.
+- Added `erase()` for erasing a word returned by `place()`.
 - Added image sprite extraction from alpha masks, including optional image
   resizing with `options.width` and `options.height`.
 - Added sparse packed block placement for effectively unbounded layouts.
@@ -64,13 +69,11 @@ Dependencies constrained to 1.x continue to use the old API.
 - Rasterized text with `textAlign = "center"`, matching the documented
   rendering contract, since some canvases position centered glyphs differently
   from a manually offset left-aligned run.
-- Allowed ordinary TypeScript interfaces as sprite metadata without requiring
-  an index signature.
 - Preserved image edge pixels for odd dimensions, rotation, and resizing, and
   allowed opaque image sprites to pack beside each other while still touching
   the existing cloud.
-- Preserved custom metadata types on prepared sprites as well as placed
-  snapshots, with built-in field types taking precedence over metadata.
+- Typed `datum` generically on sprites and placed words, inferred from
+  `getSprite()` options.
 - Limited bounded placement searches per axis to the fixed box and initial
   coordinates, avoiding expansion-distance searches after the box fills up.
 - Extended unbounded search limits to reach the existing cloud from distant
@@ -78,8 +81,6 @@ Dependencies constrained to 1.x continue to use the old API.
 - Applied the same search limits to built-in and custom strategies, so wrapped
   built-ins behave identically, and stopped generators that repeat points or
   move along one axis after 100,000 candidates without progress.
-- Copying a placed sprite's fields into a new sprite no longer marks the copy
-  as placed, and layouts no longer retain references to placed sprites.
 - Trimmed text and image geometry to occupied pixels, independently of packed
   row alignment, so bounded layouts do not reject words due to raster slack.
 - Replaced string block keys and temporary range objects with numeric map
