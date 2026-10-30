@@ -569,7 +569,7 @@ var CloudLayout = class {
   }
 };
 function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, overflow, random) {
-  var range = anchorRange(mask, bounds, size, overflow);
+  const range = anchorRange(mask, bounds, size, overflow);
   if (!range) {
     return null;
   }
@@ -577,8 +577,9 @@ function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, over
     blocks.insert(mask, seedX, seedY);
     return { x: seedX, y: seedY };
   }
-  var startX = Math.min(Math.max(seedX, range.x0), range.x1), startY = Math.min(Math.max(seedY, range.y0), range.y1);
-  var next = strategy(
+  const startX = Math.min(Math.max(seedX, range.x0), range.x1);
+  const startY = Math.min(Math.max(seedY, range.y0), range.y1);
+  const next = strategy(
     { x: startX, y: startY },
     {
       size: size.slice(),
@@ -591,7 +592,14 @@ function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, over
   if (typeof next !== "function") {
     throw new TypeError("strategy factories must return a candidate generator");
   }
-  var envelope = mask.envelope, candidate, limitX = Math.max(startX - range.x0, range.x1 - startX) + envelope.x1 - envelope.x0 + 1, limitY = Math.max(startY - range.y0, range.y1 - startY) + envelope.y1 - envelope.y0 + 1, insideLimit = Math.max(MIN_SEARCH_BUDGET, (range.x1 - range.x0 + 1) * (range.y1 - range.y0 + 1)), outsideLimit = Math.max(MIN_SEARCH_BUDGET, 4 * limitX * limitY), inside = 0, outside = 0;
+  const envelope = mask.envelope;
+  const limitX = Math.max(startX - range.x0, range.x1 - startX) + envelope.x1 - envelope.x0 + 1;
+  const limitY = Math.max(startY - range.y0, range.y1 - startY) + envelope.y1 - envelope.y0 + 1;
+  const insideLimit = Math.max(MIN_SEARCH_BUDGET, (range.x1 - range.x0 + 1) * (range.y1 - range.y0 + 1));
+  const outsideLimit = Math.max(MIN_SEARCH_BUDGET, 4 * limitX * limitY);
+  let candidate;
+  let inside = 0;
+  let outside = 0;
   while (candidate = normalizeStrategyCandidate(next())) {
     if (!withinRange(range, candidate.x, candidate.y)) {
       if (Math.abs(candidate.x - startX) >= limitX && Math.abs(candidate.y - startY) >= limitY) break;
@@ -608,7 +616,11 @@ function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, over
   return null;
 }
 function anchorRange(mask, bounds, size, overflow) {
-  var x0 = -MAX_COORDINATE, y0 = -MAX_COORDINATE, x1 = MAX_COORDINATE, y1 = MAX_COORDINATE, envelope = mask.envelope;
+  let x0 = -MAX_COORDINATE;
+  let y0 = -MAX_COORDINATE;
+  let x1 = MAX_COORDINATE;
+  let y1 = MAX_COORDINATE;
+  const envelope = mask.envelope;
   if (!overflow) {
     x0 = Math.max(x0, Math.ceil(-size[0] / 2 - mask.x0));
     y0 = Math.max(y0, Math.ceil(-size[1] / 2 - mask.y0));
@@ -630,19 +642,32 @@ function createOccupancyBlocks(blockSize) {
   const blocks = /* @__PURE__ */ new Map();
   const blockWordsPerRow = blockSize >>> 5;
   function visitBlocks(mask, x, y, visit, create, prune) {
-    var data = mask.data, wordsPerRow = mask.words, left = x + mask.x0, top = y + mask.y0, right = x + mask.x1, bottom = y + mask.y1, firstX = Math.floor(left / blockSize), lastX = Math.floor((right - 1) / blockSize), firstY = Math.floor(top / blockSize), lastY = Math.floor((bottom - 1) / blockSize);
-    for (var blockY = firstY; blockY <= lastY; blockY++) {
-      var blockRow = blocks.get(blockY);
+    const data = mask.data;
+    const wordsPerRow = mask.words;
+    const left = x + mask.x0;
+    const top = y + mask.y0;
+    const right = x + mask.x1;
+    const bottom = y + mask.y1;
+    const firstX = Math.floor(left / blockSize);
+    const lastX = Math.floor((right - 1) / blockSize);
+    const firstY = Math.floor(top / blockSize);
+    const lastY = Math.floor((bottom - 1) / blockSize);
+    for (let blockY = firstY; blockY <= lastY; blockY++) {
+      let blockRow = blocks.get(blockY);
       if (!blockRow) {
         if (!create) continue;
         blockRow = /* @__PURE__ */ new Map();
         blocks.set(blockY, blockRow);
       }
-      var blockTop = blockY * blockSize, overlapTop = Math.max(top, blockTop), overlapBottom = Math.min(bottom, blockTop + blockSize);
-      for (var blockX = firstX; blockX <= lastX; blockX++) {
-        var blockLeft = blockX * blockSize, overlapLeft = Math.max(left, blockLeft), overlapRight = Math.min(right, blockLeft + blockSize);
+      const blockTop = blockY * blockSize;
+      const overlapTop = Math.max(top, blockTop);
+      const overlapBottom = Math.min(bottom, blockTop + blockSize);
+      for (let blockX = firstX; blockX <= lastX; blockX++) {
+        const blockLeft = blockX * blockSize;
+        const overlapLeft = Math.max(left, blockLeft);
+        const overlapRight = Math.min(right, blockLeft + blockSize);
         if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) continue;
-        var block = blockRow.get(blockX);
+        let block = blockRow.get(blockX);
         if (!block) {
           if (!create) continue;
           block = new Uint32Array(blockWordsPerRow * blockSize);
@@ -688,11 +713,21 @@ function createOccupancyBlocks(blockSize) {
   };
 }
 function packedRegionCollides(aData, aWordsPerRow, aLeft, aTop, bData, bWordsPerRow, bLeft, bTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
-  var rows = overlapBottom - overlapTop, words = overlapRight - overlapLeft + 31 >>> 5, aStartBit = overlapLeft - aLeft, bStartBit = overlapLeft - bLeft, aStartRow = overlapTop - aTop, bStartRow = overlapTop - bTop, trailing = overlapRight - overlapLeft & 31, lastMask = trailing ? ~0 << 32 - trailing >>> 0 : 4294967295;
-  for (var row = 0; row < rows; row++) {
-    var aRowOffset = (aStartRow + row) * aWordsPerRow, bRowOffset = (bStartRow + row) * bWordsPerRow;
-    for (var word = 0; word < words; word++) {
-      var mask = word === words - 1 ? lastMask : 4294967295, aWord = readPackedWord(aData, aRowOffset, aWordsPerRow, aStartBit + (word << 5)), bWord = readPackedWord(bData, bRowOffset, bWordsPerRow, bStartBit + (word << 5));
+  const rows = overlapBottom - overlapTop;
+  const words = overlapRight - overlapLeft + 31 >>> 5;
+  const aStartBit = overlapLeft - aLeft;
+  const bStartBit = overlapLeft - bLeft;
+  const aStartRow = overlapTop - aTop;
+  const bStartRow = overlapTop - bTop;
+  const trailing = overlapRight - overlapLeft & 31;
+  const lastMask = trailing ? ~0 << 32 - trailing >>> 0 : 4294967295;
+  for (let row = 0; row < rows; row++) {
+    const aRowOffset = (aStartRow + row) * aWordsPerRow;
+    const bRowOffset = (bStartRow + row) * bWordsPerRow;
+    for (let word = 0; word < words; word++) {
+      const mask = word === words - 1 ? lastMask : 4294967295;
+      const aWord = readPackedWord(aData, aRowOffset, aWordsPerRow, aStartBit + (word << 5));
+      const bWord = readPackedWord(bData, bRowOffset, bWordsPerRow, bStartBit + (word << 5));
       if ((aWord & bWord & mask) !== 0) {
         return true;
       }
@@ -701,35 +736,56 @@ function packedRegionCollides(aData, aWordsPerRow, aLeft, aTop, bData, bWordsPer
   return false;
 }
 function stampPackedRegion(sourceData, sourceWordsPerRow, sourceLeft, sourceTop, targetData, targetWordsPerRow, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
-  var rows = overlapBottom - overlapTop, words = overlapRight - overlapLeft + 31 >>> 5, sourceStartBit = overlapLeft - sourceLeft, targetStartBit = overlapLeft - targetLeft, sourceStartRow = overlapTop - sourceTop, targetStartRow = overlapTop - targetTop, trailing = overlapRight - overlapLeft & 31, lastMask = trailing ? ~0 << 32 - trailing >>> 0 : 4294967295;
-  for (var row = 0; row < rows; row++) {
-    var sourceRowOffset = (sourceStartRow + row) * sourceWordsPerRow, targetRowOffset = (targetStartRow + row) * targetWordsPerRow;
-    for (var word = 0; word < words; word++) {
-      var mask = word === words - 1 ? lastMask : 4294967295, sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWordsPerRow, sourceStartBit + (word << 5)) & mask;
+  const rows = overlapBottom - overlapTop;
+  const words = overlapRight - overlapLeft + 31 >>> 5;
+  const sourceStartBit = overlapLeft - sourceLeft;
+  const targetStartBit = overlapLeft - targetLeft;
+  const sourceStartRow = overlapTop - sourceTop;
+  const targetStartRow = overlapTop - targetTop;
+  const trailing = overlapRight - overlapLeft & 31;
+  const lastMask = trailing ? ~0 << 32 - trailing >>> 0 : 4294967295;
+  for (let row = 0; row < rows; row++) {
+    const sourceRowOffset = (sourceStartRow + row) * sourceWordsPerRow;
+    const targetRowOffset = (targetStartRow + row) * targetWordsPerRow;
+    for (let word = 0; word < words; word++) {
+      const mask = word === words - 1 ? lastMask : 4294967295;
+      const sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWordsPerRow, sourceStartBit + (word << 5)) & mask;
       orPackedWord(targetData, targetRowOffset, targetWordsPerRow, targetStartBit + (word << 5), sourceWord);
     }
   }
 }
 function clearPackedRegion(sourceData, sourceWordsPerRow, sourceLeft, sourceTop, targetData, targetWordsPerRow, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
-  var rows = overlapBottom - overlapTop, words = overlapRight - overlapLeft + 31 >>> 5, sourceStartBit = overlapLeft - sourceLeft, targetStartBit = overlapLeft - targetLeft, sourceStartRow = overlapTop - sourceTop, targetStartRow = overlapTop - targetTop, trailing = overlapRight - overlapLeft & 31, lastMask = trailing ? ~0 << 32 - trailing >>> 0 : 4294967295;
-  for (var row = 0; row < rows; row++) {
-    var sourceRowOffset = (sourceStartRow + row) * sourceWordsPerRow, targetRowOffset = (targetStartRow + row) * targetWordsPerRow;
-    for (var word = 0; word < words; word++) {
-      var mask = word === words - 1 ? lastMask : 4294967295, sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWordsPerRow, sourceStartBit + (word << 5)) & mask;
+  const rows = overlapBottom - overlapTop;
+  const words = overlapRight - overlapLeft + 31 >>> 5;
+  const sourceStartBit = overlapLeft - sourceLeft;
+  const targetStartBit = overlapLeft - targetLeft;
+  const sourceStartRow = overlapTop - sourceTop;
+  const targetStartRow = overlapTop - targetTop;
+  const trailing = overlapRight - overlapLeft & 31;
+  const lastMask = trailing ? ~0 << 32 - trailing >>> 0 : 4294967295;
+  for (let row = 0; row < rows; row++) {
+    const sourceRowOffset = (sourceStartRow + row) * sourceWordsPerRow;
+    const targetRowOffset = (targetStartRow + row) * targetWordsPerRow;
+    for (let word = 0; word < words; word++) {
+      const mask = word === words - 1 ? lastMask : 4294967295;
+      const sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWordsPerRow, sourceStartBit + (word << 5)) & mask;
       clearPackedWord(targetData, targetRowOffset, targetWordsPerRow, targetStartBit + (word << 5), sourceWord);
     }
   }
 }
 function readPackedWord(sprite, rowOffset, wordsPerRow, bitIndex) {
-  var wordIndex = bitIndex >>> 5, bitOffset = bitIndex & 31, current = wordIndex < wordsPerRow ? sprite[rowOffset + wordIndex] : 0;
+  const wordIndex = bitIndex >>> 5;
+  const bitOffset = bitIndex & 31;
+  const current = wordIndex < wordsPerRow ? sprite[rowOffset + wordIndex] : 0;
   if (!bitOffset) {
     return current;
   }
-  var next = wordIndex + 1 < wordsPerRow ? sprite[rowOffset + wordIndex + 1] : 0;
+  const next = wordIndex + 1 < wordsPerRow ? sprite[rowOffset + wordIndex + 1] : 0;
   return (current << bitOffset | next >>> 32 - bitOffset) >>> 0;
 }
 function orPackedWord(target, rowOffset, wordsPerRow, bitIndex, value) {
-  var wordIndex = bitIndex >>> 5, bitOffset = bitIndex & 31;
+  const wordIndex = bitIndex >>> 5;
+  const bitOffset = bitIndex & 31;
   if (!bitOffset) {
     target[rowOffset + wordIndex] |= value;
     return;
@@ -740,7 +796,8 @@ function orPackedWord(target, rowOffset, wordsPerRow, bitIndex, value) {
   }
 }
 function clearPackedWord(target, rowOffset, wordsPerRow, bitIndex, value) {
-  var wordIndex = bitIndex >>> 5, bitOffset = bitIndex & 31;
+  const wordIndex = bitIndex >>> 5;
+  const bitOffset = bitIndex & 31;
   if (!bitOffset) {
     target[rowOffset + wordIndex] &= ~value >>> 0;
     return;
@@ -751,7 +808,7 @@ function clearPackedWord(target, rowOffset, wordsPerRow, bitIndex, value) {
   }
 }
 function isZeroBlock(block) {
-  for (var index = 0; index < block.length; index++) {
+  for (let index = 0; index < block.length; index++) {
     if (block[index] !== 0) {
       return false;
     }
@@ -763,7 +820,10 @@ function createPlacedWord(sprite, x, y) {
   return __spreadProps(__spreadValues({}, fields), { x, y });
 }
 function extendBounds(bounds, mask, x, y) {
-  var left = x + mask.x0, top = y + mask.y0, right = x + mask.x1, bottom = y + mask.y1;
+  const left = x + mask.x0;
+  const top = y + mask.y0;
+  const right = x + mask.x1;
+  const bottom = y + mask.y1;
   if (!bounds) {
     return [{ x: left, y: top }, { x: right, y: bottom }];
   }
@@ -783,9 +843,11 @@ function cloneBounds(bounds) {
   ];
 }
 function archimedeanStrategy(initial, context) {
-  var e = spiralAspectRatio(context.aspectRatio), dt = context.random() < 0.5 ? 1 : -1, t = -dt;
+  const e = spiralAspectRatio(context.aspectRatio);
+  const dt = context.random() < 0.5 ? 1 : -1;
+  let t = -dt;
   return function() {
-    var angle = (t += dt) * 0.1;
+    const angle = (t += dt) * 0.1;
     return {
       x: initial.x + ~~(e * angle * Math.cos(angle)),
       y: initial.y + ~~(angle * Math.sin(angle))
@@ -793,9 +855,22 @@ function archimedeanStrategy(initial, context) {
   };
 }
 function rectangularStrategy(initial, context) {
-  var e = spiralAspectRatio(context.aspectRatio), sign = context.random() < 0.5 ? 1 : -1, a = 0, b = 0, runs = [], run = 0, x = 0, y = 0, dx = 0, dy = 0, count = 1;
+  const e = spiralAspectRatio(context.aspectRatio);
+  const sign = context.random() < 0.5 ? 1 : -1;
+  let a = 0;
+  let b = 0;
+  let runs = [];
+  let run = 0;
+  let x = 0;
+  let y = 0;
+  let dx = 0;
+  let dy = 0;
+  let count = 1;
   function grow() {
-    var nextX = e >= 1 ? (a + 1) / e : a + 1, nextY = e >= 1 ? b + 1 : (b + 1) * e, growX = nextX <= nextY, growY = nextY <= nextX;
+    const nextX = e >= 1 ? (a + 1) / e : a + 1;
+    const nextY = e >= 1 ? b + 1 : (b + 1) * e;
+    const growX = nextX <= nextY;
+    const growY = nextY <= nextX;
     if (growX) a++;
     if (growY) b++;
     if (growX && growY) {
@@ -869,7 +944,7 @@ function rectangularStrategy(initial, context) {
       dy = runs[run++];
       count = runs[run++];
     }
-    var candidate = {
+    const candidate = {
       x: initial.x + 4 * x,
       y: initial.y + 4 * sign * y
     };
