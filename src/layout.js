@@ -380,6 +380,8 @@ function packedRegionCollides(aData, aWordsPerRow, aLeft, aTop, bData, bWordsPer
   return false;
 }
 
+// Keep insertion and erasure specialized: a shared set/clear writer measured
+// about 6% slower in an insertion/erasure microbenchmark.
 function stampPackedRegion(sourceData, sourceWordsPerRow, sourceLeft, sourceTop, targetData, targetWordsPerRow, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
   var rows = overlapBottom - overlapTop,
       words = (overlapRight - overlapLeft + 31) >>> 5,
@@ -532,6 +534,8 @@ export function archimedeanStrategy(initial, context) {
 // once. Each edge is a run of points, so each candidate takes constant time and
 // memory at any aspect ratio.
 export function rectangularStrategy(initial, context) {
+  // e is the capped aspect ratio; a and b are the rectangle's horizontal and
+  // vertical half-extents in grid steps (each step is 4px).
   var e = spiralAspectRatio(context.aspectRatio),
       // Mirroring the rectangles vertically reverses the spiral's direction.
       sign = context.random() < .5 ? 1 : -1,

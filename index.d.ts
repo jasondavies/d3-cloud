@@ -113,7 +113,7 @@ declare class CloudSprite<D = unknown, I extends ImageLike = ImageLike> {
   readonly sprite: Uint32Array;
 }
 
-// Merged with the class, so sprites have every placed-word field, read-only.
+// Merged with the class to provide the shared sprite fields as read-only.
 interface CloudSprite<D = unknown, I extends ImageLike = ImageLike> extends Readonly<SpriteFields<D, I>> {}
 
 declare class CloudLayout {
