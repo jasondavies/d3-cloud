@@ -19,8 +19,6 @@ root with any static file server, and open `examples/`.
 This package is ESM-only.
 Node.js usage requires Node 20 or newer, matching the minimum CI version.
 
-See [RELEASING.md](./RELEASING.md) for the manual release checklist.
-
 ## Install
 
 ```sh

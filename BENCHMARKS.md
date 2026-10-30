@@ -32,74 +32,35 @@ do not imply identical positions or placement counts. V1 and v2 may also
 consume random values differently. Fonts and canvas implementations vary by
 platform; these are reproducible workloads, not a promise of identical numbers.
 
-## Local comparison, 2026-09-30
+## Local comparison, 2026-10-30
 
-Measured on an Apple M5 Pro, macOS arm64, Node 24.21.0, node-canvas 3.2.3,
-Cairo 1.18.4, and Pango 1.57.1. V2 includes the pixel-tight text geometry and
-numeric occupancy-map changes following commit `fef6d45`, the bounded search
-correction described below, and the measured text-ink bounds and cleanup fix.
-This comparison uses five measured runs per version
-(`node benchmark.js --compare-v1 --runs=5`).
+Measured on an Apple M5 Pro, macOS 27.2 arm64, Node 24.22.1, node-canvas
+3.2.3, Cairo 1.18.4, and Pango 1.57.1, at commit `5befb39`, with five
+measured runs per version (`node benchmark.js --compare-v1 --runs=5`).
 
 | Scenario | Version | Mean time | Min–max time | Mean placed | Placement range | Mean bounds area (px²) |
 | --- | --- | ---: | --- | ---: | --- | ---: |
-| 220 words, 2048 × 1536 | v1.2.9 | 125.61 ms | 124.35–128.80 ms | 220 | 220–220 | 2,915,899 |
-| 220 words, 2048 × 1536 | v2 | 127.87 ms | 125.44–129.60 ms | 220 | 220–220 | 2,756,819 |
-| 320 words, 512 × 384 | v1.2.9 | 198.54 ms | 194.65–204.60 ms | 30.8 | 29–33 | 195,994 |
-| 320 words, 512 × 384 | v2 | 199.52 ms | 198.19–202.00 ms | 30.0 | 26–33 | 195,483 |
+| 220 words, 2048 × 1536 | v1.2.9 | 129.64 ms | 127.67–131.47 ms | 220 | 220–220 | 2,915,899 |
+| 220 words, 2048 × 1536 | v2 | 130.83 ms | 127.94–135.17 ms | 220 | 220–220 | 2,803,181 |
+| 320 words, 512 × 384 | v1.2.9 | 202.72 ms | 198.16–204.32 ms | 30.8 | 29–33 | 195,994 |
+| 320 words, 512 × 384 | v2 | 181.48 ms | 179.68–183.52 ms | 29.6 | 28–32 | 195,943 |
 
-V2's timings were similar to v1 in both scenarios on this machine, with
-overlapping timing ranges. Placement counts still differ in the crowded box.
-These results do not support a general claim that v2 is faster than v1. Sparse
-storage and incremental erasure provide capabilities separate from throughput
-on these bounded workloads.
+In the generous box, both versions placed every word in similar time, and v2's
+cloud was about 4% smaller. In the crowded box, v2 was about 10% faster and
+placed about one word fewer on average, within the overlapping placement
+ranges. These results do not support a general claim that v2 is faster than
+v1. Sparse storage and incremental erasure provide capabilities separate from
+throughput on these bounded workloads.
 
-## Bounded search correction
+## Unbounded layouts
 
-The initial v2 search limit grew with sprite size and cloud bounds even when
-`overflow(false)` prevented placement outside a fixed box. Failed placements
-therefore spent substantial time generating and rejecting distant positions.
-Bounded searches now use the box diagonal, extended when necessary to reach
-fitting positions from explicit initial coordinates outside the box.
-Unbounded searches retain their previous limit.
+The same machine measured v2 with `overflow(true)`, which has no v1
+counterpart (`node benchmark.js --scenario=fit --runs=5` and
+`--scenario=overflow`):
 
-Instrumenting `bounded-tight` with seed 29 showed the effect:
+| Scenario | Mean time | Min–max time | Mean placed | Mean bounds area (px²) |
+| --- | ---: | --- | ---: | ---: |
+| fit: 220 words, seeded in 512 × 384 | 161.99 ms | 159.44–164.28 ms | 220 | 2,745,119 |
+| overflow: 320 words, seeded in 512 × 512 | 300.41 ms | 293.28–316.96 ms | 320 | 4,505,835 |
 
-| Version | Spiral candidates | Candidates rejected outside the box | Collision checks |
-| --- | ---: | ---: | ---: |
-| v1.2.9 | 2,395,132 | 2,015,794 | 379,047 |
-| v2 before correction | 4,086,340 | 3,660,937 | 425,393 |
-| v2 after correction | 2,418,616 | 1,993,213 | 425,393 |
-
-The correction removes out-of-bounds work without removing collision checks
-in this sample. A separate five-run, alternating-order comparison measured
-the crowded default-spiral workload at 252.86 ms before and 218.19 ms after.
-The same comparison with the rectangular spiral measured 760.75 ms before
-and 401.61 ms after. These times came from different runs than the v1
-comparison above; compare within each experiment only.
-
-Placement snapshots were identical before and after across five seeds in all
-four default-spiral scenarios, and in both bounded scenarios with the
-rectangular spiral. Regression tests cover crowded-box termination, corner
-gaps in portrait and landscape boxes, both spiral directions, and starting
-coordinates outside the box.
-
-## Occupancy lookup experiment
-
-Before changing text geometry, replacing string keys and temporary range
-objects with nested numeric maps produced these v2 timings. Each row used
-five measured runs; placement counts and mean bounds areas were unchanged.
-These were separate local runs, not an allocation profiler or a statistical
-significance test. This earlier harness timed rasterization and placement,
-excluding layout setup and sorting; compare within this table only.
-
-| Scenario | String keys | Numeric maps |
-| --- | ---: | ---: |
-| bounded-fit | 162.77 ms | 144.31 ms |
-| bounded-tight | 277.67 ms | 253.84 ms |
-| fit (unbounded) | 212.13 ms | 191.75 ms |
-| overflow (unbounded) | 413.79 ms | 353.79 ms |
-
-The numeric map removes per-candidate block-key strings and range objects.
-It preserves separate signed x/y coordinates without packing them into a
-numeric key that could alias at large coordinates.
+Every word is placed, because the cloud grows beyond `size()` as needed.
