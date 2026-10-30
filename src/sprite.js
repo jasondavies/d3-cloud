@@ -8,6 +8,12 @@ const CREATE = Symbol("CloudSprite");
 // created. Placement reads only this private copy, so changing a sprite's
 // public mask cannot corrupt a layout, and objects missing from this map were
 // not created by getSprite().
+// Mask data is row-major, with the leftmost pixel in the most significant
+// bit of each 32-bit word; words is the padded row stride in words. Geometry
+// is in pixels relative to the placement origin, with inclusive x0/y0 and
+// exclusive x1/y1. The envelope uses the same coordinates but may extend past
+// the ink: it limits searches to positions adjoining the cloud, while the
+// mask itself controls pixel collisions, fixed-box containment, and bounds.
 const MASKS = new WeakMap();
 
 // Context and clearing state for each scratch canvas, shared by every layout
@@ -111,8 +117,6 @@ export function rasterizeSprite(fields, state) {
     y0: raster.y0,
     x1: raster.x1,
     y1: raster.y1,
-    width: raster.width,
-    height: raster.height,
     envelope: raster.envelope
   });
   return sprite;

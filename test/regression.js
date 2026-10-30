@@ -1988,7 +1988,10 @@ test("the rectangular spiral fills tall and wide boxes equally densely", () => {
   assert.ok(counts[0] > 500 && counts[1] > 500, `placed ${counts}`);
 });
 
-function createFakeCanvas() {
+function createFakeCanvas({
+  measureText = text => ({ width: text.length * 10 }),
+  textBox = createBox
+} = {}) {
   const boxes = [];
   const images = [];
   const stack = [];
@@ -2029,14 +2032,12 @@ function createFakeCanvas() {
       this._ty += y;
     },
     rotate() {},
-    measureText(text) {
-      return { width: text.length * 10 };
-    },
+    measureText,
     fillText(text, x, y) {
-      boxes.push(createBox(this, text, x, y, 0));
+      boxes.push(textBox(this, text, x, y, 0));
     },
     strokeText(text, x, y) {
-      boxes.push(createBox(this, text, x, y, this.lineWidth));
+      boxes.push(textBox(this, text, x, y, this.lineWidth));
     },
     drawImage(image, x, y, width = image.width, height = image.height) {
       images.push(createImageDraw(this, image, x, y, width, height));
@@ -2076,90 +2077,14 @@ function createFakeCanvas() {
 }
 
 function createRightEdgeCanvas() {
-  const boxes = [];
-  const images = [];
-  const stack = [];
-  const context = {
-    _tx: 0,
-    _ty: 0,
-    fillStyle: "",
-    strokeStyle: "",
-    font: "10px sans-serif",
-    textAlign: "start",
-    textBaseline: "alphabetic",
-    lineWidth: 1,
-    clearRect() {
-      boxes.length = 0;
-      images.length = 0;
-    },
-    save() {
-      stack.push({
-        font: this.font,
-        textAlign: this.textAlign,
-        textBaseline: this.textBaseline,
-        lineWidth: this.lineWidth,
-        tx: this._tx,
-        ty: this._ty
-      });
-    },
-    restore() {
-      const state = stack.pop();
-      this.font = state.font;
-      this.textAlign = state.textAlign;
-      this.textBaseline = state.textBaseline;
-      this.lineWidth = state.lineWidth;
-      this._tx = state.tx;
-      this._ty = state.ty;
-    },
-    translate(x, y) {
-      this._tx += x;
-      this._ty += y;
-    },
-    rotate() {},
+  return createFakeCanvas({
     measureText() {
       return { width: 31 };
     },
-    fillText(_text, _x, y) {
-      boxes.push(createRightEdgeBox(this, y, 0));
-    },
-    strokeText(_text, _x, y) {
-      boxes.push(createRightEdgeBox(this, y, this.lineWidth));
-    },
-    drawImage(image, x, y, width = image.width, height = image.height) {
-      images.push(createImageDraw(this, image, x, y, width, height));
-    },
-    getImageData(_x, _y, width, height) {
-      const data = new Uint8ClampedArray(width * height * 4);
-
-      for (const box of boxes) {
-        const x0 = Math.max(0, box.x0);
-        const y0 = Math.max(0, box.y0);
-        const x1 = Math.min(width, box.x1);
-        const y1 = Math.min(height, box.y1);
-
-        for (let row = y0; row < y1; row += 1) {
-          for (let column = x0; column < x1; column += 1) {
-            data[(row * width + column) * 4 + 3] = 255;
-          }
-        }
-      }
-
-      for (const image of images) {
-        paintImageDraw(data, width, height, image);
-      }
-
-      return { data };
+    textBox(context, _text, _x, y, inflate) {
+      return createRightEdgeBox(context, y, inflate);
     }
-  };
-
-  return {
-    width: 1,
-    height: 1,
-    getContext(type) {
-      assert.equal(type, "2d");
-      return context;
-    }
-  };
+  });
 }
 
 function createBox(context, text, x, y, inflate) {

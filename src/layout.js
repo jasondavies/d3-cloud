@@ -258,8 +258,10 @@ function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, over
 
 // Returns the integer anchors at which the sprite could be placed: inside the
 // box when overflow is disabled, and with its envelope overlapping the cloud
-// bounds once there are any, or null if there are none. Without overflow or
-// bounds the layout is empty, so the seed itself always fits.
+// bounds once there are any, or null if no anchors fit. Both ends of the
+// returned range are inclusive, unlike the exclusive right/bottom mask edges.
+// With overflow enabled and no cloud bounds, any seed within the coordinate
+// limit fits.
 function anchorRange(mask, bounds, size, overflow) {
   var x0 = -MAX_COORDINATE,
       y0 = -MAX_COORDINATE,
@@ -288,14 +290,14 @@ function withinRange(range, x, y) {
 
 function createOccupancyBlocks(blockSize) {
   const blocks = new Map();
-  const blockWords = blockSize >>> 5;
+  const blockWordsPerRow = blockSize >>> 5;
 
   // Applies visit to each block region the sprite overlaps at x, y, stopping
   // early if it returns true. Missing blocks are created when inserting, and
   // emptied blocks are pruned when removing.
   function visitBlocks(mask, x, y, visit, create, prune) {
     var data = mask.data,
-        words = mask.words,
+        wordsPerRow = mask.words,
         left = x + mask.x0,
         top = y + mask.y0,
         right = x + mask.x1,
@@ -323,16 +325,16 @@ function createOccupancyBlocks(blockSize) {
         var block = blockRow.get(blockX);
         if (!block) {
           if (!create) continue;
-          block = new Uint32Array(blockWords * blockSize);
+          block = new Uint32Array(blockWordsPerRow * blockSize);
           blockRow.set(blockX, block);
         }
         if (visit(
           data,
-          words,
+          wordsPerRow,
           left,
           top,
           block,
-          blockWords,
+          blockWordsPerRow,
           blockLeft,
           blockTop,
           overlapLeft,
@@ -367,7 +369,7 @@ function createOccupancyBlocks(blockSize) {
   };
 }
 
-function packedRegionCollides(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, bTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
+function packedRegionCollides(aData, aWordsPerRow, aLeft, aTop, bData, bWordsPerRow, bLeft, bTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
   var rows = overlapBottom - overlapTop,
       words = (overlapRight - overlapLeft + 31) >>> 5,
       aStartBit = overlapLeft - aLeft,
@@ -378,12 +380,12 @@ function packedRegionCollides(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, 
       lastMask = trailing ? (~0 << (32 - trailing)) >>> 0 : 0xffffffff;
 
   for (var row = 0; row < rows; row++) {
-    var aRowOffset = (aStartRow + row) * aWidth,
-        bRowOffset = (bStartRow + row) * bWidth;
+    var aRowOffset = (aStartRow + row) * aWordsPerRow,
+        bRowOffset = (bStartRow + row) * bWordsPerRow;
     for (var word = 0; word < words; word++) {
       var mask = word === words - 1 ? lastMask : 0xffffffff,
-          aWord = readPackedWord(aData, aRowOffset, aWidth, aStartBit + (word << 5)),
-          bWord = readPackedWord(bData, bRowOffset, bWidth, bStartBit + (word << 5));
+          aWord = readPackedWord(aData, aRowOffset, aWordsPerRow, aStartBit + (word << 5)),
+          bWord = readPackedWord(bData, bRowOffset, bWordsPerRow, bStartBit + (word << 5));
       if ((aWord & bWord & mask) !== 0) {
         return true;
       }
@@ -393,7 +395,7 @@ function packedRegionCollides(aData, aWidth, aLeft, aTop, bData, bWidth, bLeft, 
   return false;
 }
 
-function stampPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targetData, targetWidth, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
+function stampPackedRegion(sourceData, sourceWordsPerRow, sourceLeft, sourceTop, targetData, targetWordsPerRow, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
   var rows = overlapBottom - overlapTop,
       words = (overlapRight - overlapLeft + 31) >>> 5,
       sourceStartBit = overlapLeft - sourceLeft,
@@ -404,17 +406,17 @@ function stampPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targe
       lastMask = trailing ? (~0 << (32 - trailing)) >>> 0 : 0xffffffff;
 
   for (var row = 0; row < rows; row++) {
-    var sourceRowOffset = (sourceStartRow + row) * sourceWidth,
-        targetRowOffset = (targetStartRow + row) * targetWidth;
+    var sourceRowOffset = (sourceStartRow + row) * sourceWordsPerRow,
+        targetRowOffset = (targetStartRow + row) * targetWordsPerRow;
     for (var word = 0; word < words; word++) {
       var mask = word === words - 1 ? lastMask : 0xffffffff,
-          sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWidth, sourceStartBit + (word << 5)) & mask;
-      orPackedWord(targetData, targetRowOffset, targetWidth, targetStartBit + (word << 5), sourceWord);
+          sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWordsPerRow, sourceStartBit + (word << 5)) & mask;
+      orPackedWord(targetData, targetRowOffset, targetWordsPerRow, targetStartBit + (word << 5), sourceWord);
     }
   }
 }
 
-function clearPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targetData, targetWidth, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
+function clearPackedRegion(sourceData, sourceWordsPerRow, sourceLeft, sourceTop, targetData, targetWordsPerRow, targetLeft, targetTop, overlapLeft, overlapTop, overlapRight, overlapBottom) {
   var rows = overlapBottom - overlapTop,
       words = (overlapRight - overlapLeft + 31) >>> 5,
       sourceStartBit = overlapLeft - sourceLeft,
@@ -425,30 +427,30 @@ function clearPackedRegion(sourceData, sourceWidth, sourceLeft, sourceTop, targe
       lastMask = trailing ? (~0 << (32 - trailing)) >>> 0 : 0xffffffff;
 
   for (var row = 0; row < rows; row++) {
-    var sourceRowOffset = (sourceStartRow + row) * sourceWidth,
-        targetRowOffset = (targetStartRow + row) * targetWidth;
+    var sourceRowOffset = (sourceStartRow + row) * sourceWordsPerRow,
+        targetRowOffset = (targetStartRow + row) * targetWordsPerRow;
     for (var word = 0; word < words; word++) {
       var mask = word === words - 1 ? lastMask : 0xffffffff,
-          sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWidth, sourceStartBit + (word << 5)) & mask;
-      clearPackedWord(targetData, targetRowOffset, targetWidth, targetStartBit + (word << 5), sourceWord);
+          sourceWord = readPackedWord(sourceData, sourceRowOffset, sourceWordsPerRow, sourceStartBit + (word << 5)) & mask;
+      clearPackedWord(targetData, targetRowOffset, targetWordsPerRow, targetStartBit + (word << 5), sourceWord);
     }
   }
 }
 
-function readPackedWord(sprite, rowOffset, rowWidth, bitIndex) {
+function readPackedWord(sprite, rowOffset, wordsPerRow, bitIndex) {
   var wordIndex = bitIndex >>> 5,
       bitOffset = bitIndex & 31,
-      current = wordIndex < rowWidth ? sprite[rowOffset + wordIndex] : 0;
+      current = wordIndex < wordsPerRow ? sprite[rowOffset + wordIndex] : 0;
 
   if (!bitOffset) {
     return current;
   }
 
-  var next = wordIndex + 1 < rowWidth ? sprite[rowOffset + wordIndex + 1] : 0;
+  var next = wordIndex + 1 < wordsPerRow ? sprite[rowOffset + wordIndex + 1] : 0;
   return ((current << bitOffset) | (next >>> (32 - bitOffset))) >>> 0;
 }
 
-function orPackedWord(target, rowOffset, rowWidth, bitIndex, value) {
+function orPackedWord(target, rowOffset, wordsPerRow, bitIndex, value) {
   var wordIndex = bitIndex >>> 5,
       bitOffset = bitIndex & 31;
 
@@ -458,12 +460,12 @@ function orPackedWord(target, rowOffset, rowWidth, bitIndex, value) {
   }
 
   target[rowOffset + wordIndex] |= value >>> bitOffset;
-  if (wordIndex + 1 < rowWidth) {
+  if (wordIndex + 1 < wordsPerRow) {
     target[rowOffset + wordIndex + 1] |= (value << (32 - bitOffset)) >>> 0;
   }
 }
 
-function clearPackedWord(target, rowOffset, rowWidth, bitIndex, value) {
+function clearPackedWord(target, rowOffset, wordsPerRow, bitIndex, value) {
   var wordIndex = bitIndex >>> 5,
       bitOffset = bitIndex & 31;
 
@@ -473,7 +475,7 @@ function clearPackedWord(target, rowOffset, rowWidth, bitIndex, value) {
   }
 
   target[rowOffset + wordIndex] &= (~(value >>> bitOffset)) >>> 0;
-  if (wordIndex + 1 < rowWidth) {
+  if (wordIndex + 1 < wordsPerRow) {
     target[rowOffset + wordIndex + 1] &= (~((value << (32 - bitOffset)) >>> 0)) >>> 0;
   }
 }
