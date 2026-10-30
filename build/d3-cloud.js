@@ -115,7 +115,7 @@ function rasterizeSprite(fields, state) {
 function createSpriteContext(canvas) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   let state = CONTEXT_STATES.get(context);
-  if (state) {
+  if (state && !state.invalid) {
     return state;
   }
   canvas.width = canvas.height = 1;
@@ -123,13 +123,14 @@ function createSpriteContext(canvas) {
   canvas.width = SCRATCH_WIDTH / ratio;
   canvas.height = SCRATCH_HEIGHT / ratio;
   context.fillStyle = context.strokeStyle = "red";
-  state = {
+  state = Object.assign(state || {}, {
     context,
     ratio,
+    invalid: false,
     pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
     clearHeight: 0
-  };
+  });
   CONTEXT_STATES.set(context, state);
   return state;
 }
@@ -532,6 +533,7 @@ var CloudLayout = class {
     try {
       return rasterizeSprite(fields, state);
     } catch (error) {
+      state.invalid = true;
       this._spriteContext = null;
       throw error;
     }
@@ -571,7 +573,7 @@ var CloudLayout = class {
     return word;
   }
   _getContext() {
-    if (!this._spriteContext) {
+    if (!this._spriteContext || this._spriteContext.invalid) {
       this._spriteContext = createSpriteContext(this._canvasFactory());
     }
     return this._spriteContext;
@@ -793,7 +795,7 @@ function cloneBounds(bounds) {
   ];
 }
 function archimedeanStrategy(initial, context) {
-  var spiral = archimedeanOffsets(context.aspectRatio), dt = context.random() < 0.5 ? 1 : -1, t = 0;
+  var spiral = archimedeanOffsets(context.aspectRatio), dt = context.random() < 0.5 ? 1 : -1, t = -dt;
   return function() {
     var dxdy = spiral(t += dt);
     return {
@@ -803,16 +805,12 @@ function archimedeanStrategy(initial, context) {
   };
 }
 function rectangularStrategy(initial, context) {
-  var rings = rectangularRings(context.aspectRatio), sign = context.random() < 0.5 ? 1 : -1, ring = 0, points = rings.get(0), index = 0;
+  var points = rectangularOffsets(context.aspectRatio), sign = context.random() < 0.5 ? 1 : -1;
   return function() {
-    while (index === points.length) {
-      points = rings.get(++ring);
-      index = 0;
-    }
-    var x = points[index++], y = points[index++];
+    var point = points.next().value;
     return {
-      x: initial.x + 4 * x,
-      y: initial.y + 4 * sign * y
+      x: initial.x + 4 * point[0],
+      y: initial.y + 4 * sign * point[1]
     };
   };
 }
@@ -828,49 +826,28 @@ function archimedeanOffsets(aspectRatio) {
     return [e * t * Math.cos(t), t * Math.sin(t)];
   };
 }
-var rectangularRingCache = /* @__PURE__ */ new Map();
-function rectangularRings(aspectRatio) {
-  var e = normalizeAspectRatio(aspectRatio), rings = rectangularRingCache.get(e);
-  if (rings) {
-    rectangularRingCache.delete(e);
-  } else {
-    var scaleX = Math.max(1, e), scaleY = Math.max(1, 1 / e), list = [new Int32Array(2)];
-    rings = {
-      get(k) {
-        while (list.length <= k) {
-          list.push(rectangularRing(list.length, scaleX, scaleY));
-        }
-        return list[k];
-      }
-    };
-    if (rectangularRingCache.size >= 4) {
-      rectangularRingCache.delete(rectangularRingCache.keys().next().value);
+function* rectangularOffsets(aspectRatio) {
+  var e = normalizeAspectRatio(aspectRatio), a = 0, b = 0;
+  yield [0, 0];
+  for (; ; ) {
+    var nextX = e >= 1 ? (a + 1) / e : a + 1, nextY = e >= 1 ? b + 1 : (b + 1) * e, growX = nextX <= nextY, growY = nextY <= nextX;
+    if (growX) a++;
+    if (growY) b++;
+    if (growX && growY) {
+      for (var y = -1; y >= -b; y--) yield [-a, y];
+      for (var x = -a + 1; x <= a; x++) yield [x, -b];
+      for (var y = -b + 1; y <= b; y++) yield [a, y];
+      for (var x = a - 1; x >= -a; x--) yield [x, b];
+      for (var y = b - 1; y >= 0; y--) yield [-a, y];
+    } else if (growX) {
+      for (var y = -1; y >= -b; y--) yield [-a, y];
+      for (var y = -b; y <= b; y++) yield [a, y];
+      for (var y = b; y >= 0; y--) yield [-a, y];
+    } else {
+      for (var x = -a; x <= a; x++) yield [x, -b];
+      for (var x = a; x >= -a; x--) yield [x, b];
     }
   }
-  rectangularRingCache.set(e, rings);
-  return rings;
-}
-function rectangularRing(k, scaleX, scaleY) {
-  var a = Math.floor(k * scaleX), b = Math.floor(k * scaleY), innerA = Math.floor((k - 1) * scaleX), innerB = Math.floor((k - 1) * scaleY), points = [];
-  for (var y = -b; y <= b; y++) {
-    var innerRow = Math.abs(y) <= innerB;
-    for (var x = -a; x <= a; x++) {
-      if (innerRow && x === -innerA) {
-        x = innerA;
-        continue;
-      }
-      points.push([x, y, Math.max(Math.abs(x) / scaleX, Math.abs(y) / scaleY), Math.atan2(y, x)]);
-    }
-  }
-  points.sort(function(p, q) {
-    return p[2] - q[2] || p[3] - q[3];
-  });
-  var steps = new Int32Array(points.length * 2);
-  for (var i = 0; i < points.length; i++) {
-    steps[i * 2] = points[i][0];
-    steps[i * 2 + 1] = points[i][1];
-  }
-  return steps;
 }
 function defaultCanvasFactory() {
   return document.createElement("canvas");

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import test from "node:test";
 
@@ -783,6 +784,68 @@ test("overflow searches reach the cloud from distant seeds", () => {
     assert.ok(layout.place(layout.getSprite("first", { size: 20 }), { x: 0, y: 0 }));
     assert.ok(layout.place(layout.getSprite("second", { size: 20 }), seed), `gave up from ${seed.x},${seed.y}`);
   }
+});
+
+test("built-in searches try the clamped anchor when it is the only position that fits", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const image = createCanvas(400, 20);
+  image.getContext("2d").fillRect(0, 0, 400, 20);
+  for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+    for (const direction of [0.25, 0.75]) {
+      const layout = new CloudLayout().canvas(() => createCanvas(1, 1))
+        .size([400, 20]).overflow(false).random(() => direction).strategy(strategy);
+      const sprite = layout.getSprite(image);
+      assert.equal(layout.place(sprite, { strategy: "none" }), null,
+        "none still tries only the original, off-center seed");
+      const word = layout.place(sprite);
+      assert.ok(word, `${strategy.name} missed the sole fitting anchor`);
+      assert.deepEqual([word.x, word.y], [0, 0]);
+    }
+  }
+});
+
+test("rectangular candidates cover the grid in aspect-scaled distance and angle order", () => {
+  for (const aspectRatio of [0.1, 0.4, 1, 1.25, 2.5, 10]) {
+    const scaleX = Math.max(1, aspectRatio);
+    const scaleY = Math.max(1, 1 / aspectRatio);
+    const expected = [];
+    for (let y = -Math.floor(3 * scaleY); y <= Math.floor(3 * scaleY); y++) {
+      for (let x = -Math.floor(3 * scaleX); x <= Math.floor(3 * scaleX); x++) {
+        expected.push({ x, y });
+      }
+    }
+    const distance = p => Math.max(Math.abs(p.x) / scaleX, Math.abs(p.y) / scaleY);
+    expected.sort((p, q) => distance(p) - distance(q) || Math.atan2(p.y, p.x) - Math.atan2(q.y, q.x));
+    const next = rectangularStrategy({ x: 0, y: 0 }, { aspectRatio, random: () => 0.25 });
+    assert.deepEqual(expected.map(() => next()), expected.map(p => ({ x: 4 * p.x, y: 4 * p.y })),
+      `grid order changed at aspect ratio ${aspectRatio}`);
+  }
+});
+
+test("extreme rectangular aspect ratios do not allocate entire rings", () => {
+  // Keep an eager-allocation regression confined to a small, timed process.
+  const script = `
+    import assert from "node:assert/strict";
+    import CloudLayout, { rectangularStrategy } from ${JSON.stringify(new URL("../src/index.js", import.meta.url).href)};
+    import { createCanvas } from "canvas";
+    for (const aspectRatio of [1e12, 1e-12, Number.MIN_VALUE]) {
+      const next = rectangularStrategy({ x: 0, y: 0 }, { aspectRatio, random: () => 0.25 });
+      const points = Array.from({ length: 32 }, () => next());
+      assert.equal(new Set(points.map(p => p.x + "," + p.y)).size, 32);
+      assert.ok(points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y)));
+    }
+    const layout = new CloudLayout().canvas(() => createCanvas(1, 1))
+      .size([1000000, 1]).strategy("rectangular");
+    const sprite = layout.getSprite("word", { size: 20 });
+    assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+    assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+  `;
+  const result = spawnSync(process.execPath, ["--max-old-space-size=64", "--input-type=module", "-e", script], {
+    encoding: "utf8",
+    timeout: 5000
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test("wrapped built-in strategies search exactly like the built-ins", () => {
@@ -1622,6 +1685,42 @@ test("a failed readback, such as from a tainted canvas, does not break later spr
   assert.throws(() => layout.getSprite(tainted), /tainted/);
   assert.ok(layout.getSprite("after", { size: 20 }));
   assert.equal(canvases.length, 2);
+});
+
+test("failed shared canvases reset before either layout uses them again", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const canvas = createCanvas(1, 1);
+  const context = canvas.getContext("2d");
+  const read = context.getImageData.bind(context);
+  let tainted = false;
+  let resets = 0;
+  context.getImageData = (...args) => {
+    if (tainted) throw new DOMException("tainted", "SecurityError");
+    return read(...args);
+  };
+  // Resizing a browser canvas clears its origin taint. Model that behavior
+  // around a real rasterizer, since node-canvas does not enforce CORS.
+  const shared = {
+    get width() { return canvas.width; },
+    set width(value) { canvas.width = value; tainted = false; resets++; },
+    get height() { return canvas.height; },
+    set height(value) { canvas.height = value; tainted = false; resets++; },
+    getContext() { return context; }
+  };
+  const a = new CloudLayout().canvas(() => shared);
+  const b = new CloudLayout().canvas(() => shared);
+  const options = { size: 20 };
+  const expected = a.getSprite("word", options);
+  assert.ok(b.getSprite("word", options));
+  const initialResets = resets;
+  tainted = true;
+  assert.throws(() => a.getSprite("bad", options), /tainted/);
+  assert.deepEqual(b.getSprite("word", options).sprite, expected.sprite,
+    "the other layout must detect that its cached context was invalidated");
+  assert.ok(resets > initialResets);
+  const recoveredResets = resets;
+  assert.deepEqual(a.getSprite("word", options).sprite, expected.sprite);
+  assert.equal(resets, recoveredResets, "healthy shared state should be reused");
 });
 
 test("layouts sharing one canvas do not contaminate each other's masks", () => {

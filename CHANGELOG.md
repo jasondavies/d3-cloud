@@ -66,6 +66,14 @@ Dependencies constrained to 1.x continue to use the old API.
 
 ### Changed
 
+- Tried the clamped search origin before advancing the archimedean spiral, so
+  an off-center seed can still place a sprite that exactly fills a fixed box.
+- Generated rectangular candidates incrementally in distance and angle order,
+  without allocating or retaining whole rings at extreme aspect ratios.
+- Reset invalidated scratch contexts even when a factory returns the same
+  canvas, and let other layouts sharing it recover before drawing again.
+- Preserved `undefined` in TypeScript results when `datum` is optional or
+  omitted, while retaining precise inference for a required `datum`.
 - Restored the scratch context after failed image draws and rejected unavailable
   image/video sources even when they have explicit display dimensions.
 - Used intrinsic video dimensions to preserve aspect ratio when resizing sprites.
@@ -125,5 +133,5 @@ Dependencies constrained to 1.x continue to use the old API.
   and stretches its spiral to the aspect ratio, so in fixed boxes at extreme
   aspect ratios (around 20:1 and beyond) it places fewer words than at
   moderate ratios. Use the rectangular strategy for such boxes.
-- The rectangular strategy samples a finer grid than in 1.x, so it is up to
-  about 1.6 times slower in wide layouts, in exchange for denser packing.
+- The rectangular strategy samples a finer grid than in 1.x, so it can be
+  slower in wide layouts, in exchange for denser packing.

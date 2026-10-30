@@ -162,9 +162,12 @@ declare class CloudLayout {
   blockSize(): number;
   blockSize(value: number): this;
 
-  getSprite<D = undefined>(source: TextSource, options?: SpriteOptions<D> | null): CloudSprite<D, never> | null;
-  getSprite<D = undefined, I extends ImageLike = ImageLike>(source: I, options?: ImageSpriteOptions<D> | null): CloudSprite<D, I> | null;
-  getSprite<D = undefined, I extends ImageLike = ImageLike>(source: TextSource | I, options?: ImageSpriteOptions<D> | null): CloudSprite<D, I> | null;
+  getSprite<D>(source: TextSource, options: SpriteOptions<D> & { datum: D }): CloudSprite<D, never> | null;
+  getSprite<D = undefined>(source: TextSource, options?: SpriteOptions<D> | null): CloudSprite<D | undefined, never> | null;
+  getSprite<D, I extends ImageLike = ImageLike>(source: I, options: ImageSpriteOptions<D> & { datum: D }): CloudSprite<D, I> | null;
+  getSprite<D = undefined, I extends ImageLike = ImageLike>(source: I, options?: ImageSpriteOptions<D> | null): CloudSprite<D | undefined, I> | null;
+  getSprite<D, I extends ImageLike = ImageLike>(source: TextSource | I, options: ImageSpriteOptions<D> & { datum: D }): CloudSprite<D, I> | null;
+  getSprite<D = undefined, I extends ImageLike = ImageLike>(source: TextSource | I, options?: ImageSpriteOptions<D> | null): CloudSprite<D | undefined, I> | null;
 
   place<D, I extends ImageLike>(sprite: CloudSprite<D, I>, options?: PlaceOptions | null): PlacedSprite<D, I> | null;
 }

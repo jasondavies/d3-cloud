@@ -122,7 +122,9 @@ export default class CloudLayout {
     } catch (error) {
       // A failed draw or readback, for example after a cross-origin image
       // taints the canvas, must not break later sprites, so start over with a
-      // new canvas from the factory.
+      // new canvas from the factory. Mark shared state invalid too, so a
+      // factory returning the same canvas resets it before any layout reuses it.
+      state.invalid = true;
       this._spriteContext = null;
       throw error;
     }
@@ -168,7 +170,7 @@ export default class CloudLayout {
   }
 
   _getContext() {
-    if (!this._spriteContext) {
+    if (!this._spriteContext || this._spriteContext.invalid) {
       this._spriteContext = createSpriteContext(this._canvasFactory());
     }
     return this._spriteContext;
@@ -505,7 +507,8 @@ function cloneBounds(bounds) {
 export function archimedeanStrategy(initial, context) {
   var spiral = archimedeanOffsets(context.aspectRatio),
       dt = context.random() < .5 ? 1 : -1,
-      t = 0;
+      // The search origin may have been clamped since the initial attempt.
+      t = -dt;
 
   return function() {
     var dxdy = spiral(t += dt);
@@ -517,23 +520,15 @@ export function archimedeanStrategy(initial, context) {
 }
 
 export function rectangularStrategy(initial, context) {
-  var rings = rectangularRings(context.aspectRatio),
+  var points = rectangularOffsets(context.aspectRatio),
       // Mirroring the rings vertically reverses the spiral's direction.
-      sign = context.random() < .5 ? 1 : -1,
-      ring = 0,
-      points = rings.get(0),
-      index = 0;
+      sign = context.random() < .5 ? 1 : -1;
 
   return function() {
-    while (index === points.length) {
-      points = rings.get(++ring);
-      index = 0;
-    }
-    var x = points[index++],
-        y = points[index++];
+    var point = points.next().value;
     return {
-      x: initial.x + 4 * x,
-      y: initial.y + 4 * sign * y
+      x: initial.x + 4 * point[0],
+      y: initial.y + 4 * sign * point[1]
     };
   };
 }
@@ -552,65 +547,39 @@ function archimedeanOffsets(aspectRatio) {
   };
 }
 
-// Rings depend only on the aspect ratio, so they are shared by every search
-// with the same ratio. Only the most recent ratios are kept.
-var rectangularRingCache = new Map();
-
-function rectangularRings(aspectRatio) {
+// Grow a rectangle whenever the next grid column or row reaches its boundary
+// in aspect-scaled distance. Emit only the new edges, in angle order, so the
+// search visits every grid point once without allocating or caching rings.
+// Each next() does constant work even at extreme aspect ratios.
+function* rectangularOffsets(aspectRatio) {
   var e = normalizeAspectRatio(aspectRatio),
-      rings = rectangularRingCache.get(e);
-  if (rings) {
-    rectangularRingCache.delete(e);
-  } else {
-    var scaleX = Math.max(1, e),
-        scaleY = Math.max(1, 1 / e),
-        list = [new Int32Array(2)];
-    rings = {
-      get(k) {
-        while (list.length <= k) {
-          list.push(rectangularRing(list.length, scaleX, scaleY));
-        }
-        return list[k];
-      }
-    };
-    if (rectangularRingCache.size >= 4) {
-      rectangularRingCache.delete(rectangularRingCache.keys().next().value);
+      a = 0,
+      b = 0;
+  yield [0, 0];
+  for (;;) {
+    // Avoid 1 / e, which can overflow for very small positive aspect ratios.
+    var nextX = e >= 1 ? (a + 1) / e : a + 1,
+        nextY = e >= 1 ? b + 1 : (b + 1) * e,
+        growX = nextX <= nextY,
+        growY = nextY <= nextX;
+    if (growX) a++;
+    if (growY) b++;
+
+    if (growX && growY) {
+      for (var y = -1; y >= -b; y--) yield [-a, y];
+      for (var x = -a + 1; x <= a; x++) yield [x, -b];
+      for (var y = -b + 1; y <= b; y++) yield [a, y];
+      for (var x = a - 1; x >= -a; x--) yield [x, b];
+      for (var y = b - 1; y >= 0; y--) yield [-a, y];
+    } else if (growX) {
+      for (var y = -1; y >= -b; y--) yield [-a, y];
+      for (var y = -b; y <= b; y++) yield [a, y];
+      for (var y = b; y >= 0; y--) yield [-a, y];
+    } else {
+      for (var x = -a; x <= a; x++) yield [x, -b];
+      for (var x = a; x >= -a; x--) yield [x, b];
     }
   }
-  rectangularRingCache.set(e, rings);
-  return rings;
-}
-
-// Returns the points of a 4px grid in ring k > 0 of a rectangular spiral, as
-// interleaved x and y steps: inside a rectangle k steps from the center along
-// the shorter axis, and proportionally farther along the longer one, but not
-// inside ring k - 1. Points are ordered by distance, then by angle, so every
-// grid point is visited once regardless of the aspect ratio.
-function rectangularRing(k, scaleX, scaleY) {
-  var a = Math.floor(k * scaleX),
-      b = Math.floor(k * scaleY),
-      innerA = Math.floor((k - 1) * scaleX),
-      innerB = Math.floor((k - 1) * scaleY),
-      points = [];
-
-  for (var y = -b; y <= b; y++) {
-    var innerRow = Math.abs(y) <= innerB;
-    for (var x = -a; x <= a; x++) {
-      if (innerRow && x === -innerA) {
-        x = innerA;
-        continue;
-      }
-      points.push([x, y, Math.max(Math.abs(x) / scaleX, Math.abs(y) / scaleY), Math.atan2(y, x)]);
-    }
-  }
-  points.sort(function(p, q) { return p[2] - q[2] || p[3] - q[3]; });
-
-  var steps = new Int32Array(points.length * 2);
-  for (var i = 0; i < points.length; i++) {
-    steps[i * 2] = points[i][0];
-    steps[i * 2 + 1] = points[i][1];
-  }
-  return steps;
 }
 
 function defaultCanvasFactory() {

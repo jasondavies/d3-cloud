@@ -176,7 +176,9 @@ than rasterizing a mask in the canvas's previous font.
 
 Use `datum` to carry your own data, such as the input word, a link, or an ID.
 It is stored by reference on the sprite and on every word placed from it, and
-is never read by the layout.
+is never read by the layout. If omitted, it is `undefined`. TypeScript preserves
+that possibility when the options declare `datum` as optional; passing a
+required `datum` infers its type directly.
 
 Image sprites are extracted from the source alpha channel, so transparent
 pixels are ignored automatically. For image sources, `options.width` and
@@ -353,8 +355,10 @@ function() { return document.createElement("canvas"); }
 When using Node.js, you will almost definitely override this default, e.g.
 using the [canvas module](https://www.npmjs.com/package/canvas).
 
-The factory is called once, and again only after a sprite fails to draw. Layouts
-may share one canvas, but nothing else should draw to it.
+The factory is called once, and again after a sprite fails to draw or read back.
+If it returns the same canvas, that canvas is reset before reuse. Layouts may
+share one canvas; a failure invalidates their shared context until it is reset.
+Nothing else should draw to the scratch canvas.
 
 ## Benchmarks
 

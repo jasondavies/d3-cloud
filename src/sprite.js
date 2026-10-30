@@ -103,7 +103,7 @@ export function rasterizeSprite(fields, state) {
 export function createSpriteContext(canvas) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   let state = CONTEXT_STATES.get(context);
-  if (state) {
+  if (state && !state.invalid) {
     return state;
   }
 
@@ -114,13 +114,16 @@ export function createSpriteContext(canvas) {
 
   context.fillStyle = context.strokeStyle = "red";
 
-  state = {
+  // Keep the state object shared by layouts, including those that already
+  // hold a reference to it when another layout invalidates the context.
+  state = Object.assign(state || {}, {
     context,
     ratio,
+    invalid: false,
     pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
     clearHeight: 0
-  };
+  });
   CONTEXT_STATES.set(context, state);
   return state;
 }
