@@ -229,8 +229,9 @@ V2 includes its own TypeScript declarations. Remove a direct dependency on
 `@types/d3-cloud` when migrating your code to v2; a wrapper still using v1 may
 retain its own types. Replace old `Cloud` / `Word` types and local
 `declare module "d3-cloud"` shims with the exported `CloudLayout`,
-`CloudSprite`, `PlacedSprite`, and `Bounds` types as appropriate. Both are
-generic in the type of `datum`, which is inferred from `getSprite()` options. Prefer a
+`CloudSprite`, `PlacedSprite`, and `Bounds` types as appropriate. `CloudSprite`
+and `PlacedSprite` are generic in the type of `datum`, which is inferred from
+`getSprite()` options. Prefer a
 current module resolution mode that understands package `exports`, such as
 `node16`, `nodenext`, or `bundler`, as appropriate to your build.
 

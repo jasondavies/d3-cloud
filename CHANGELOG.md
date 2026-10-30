@@ -41,11 +41,16 @@ Dependencies constrained to 1.x continue to use the old API.
   shaped to the aspect ratio, instead of stepping four pixels times the aspect
   ratio along the longer axis. Rectangular layouts differ from 1.x, and pack
   densely at any aspect ratio.
+- Both built-in spirals stretch to the aspect ratio only up to 64:1. Beyond
+  that they barely moved along the shorter axis, so a search starting in a
+  blocked column or row could take minutes and then fail. Layouts with more
+  extreme aspect ratios differ from 1.x.
 - Invalid arguments throw instead of being silently replaced: non-finite
   coordinates, sizes, rotations, padding, image dimensions and strategy
   candidates; negative padding; `size()` dimensions outside 0–16,777,216;
   `blockSize()` outside 1–4096; a `random()` that is not a function or returns
-  a value outside `[0, 1)`; and fonts the canvas rejects.
+  anything but a number in `[0, 1)`; fonts the canvas rejects; and canvases
+  without a 2d context.
 
 ### Added
 
@@ -68,10 +73,8 @@ Dependencies constrained to 1.x continue to use the old API.
 
 - Tried the clamped search origin before advancing the archimedean spiral, so
   an off-center seed can still place a sprite that exactly fills a fixed box.
-- Generated rectangular candidates incrementally in distance and angle order,
-  without allocating or retaining whole rings at extreme aspect ratios.
-- Reset invalidated scratch contexts even when a factory returns the same
-  canvas, and let other layouts sharing it recover before drawing again.
+- Generated rectangular candidates edge by edge in distance and angle order,
+  in constant time and memory per candidate at any aspect ratio.
 - Preserved `undefined` in TypeScript results when `datum` is optional or
   omitted, while retaining precise inference for a required `datum`.
 - Restored the scratch context after failed image draws and rejected unavailable
@@ -104,13 +107,23 @@ Dependencies constrained to 1.x continue to use the old API.
 - Applied the same search limits to built-in and custom strategies, so wrapped
   built-ins behave identically. Limits scale with the number of positions
   where the sprite could be placed, so scans and random samplers can cover
-  them, while generators that repeat points or move along one axis still stop.
+  them, while generators that repeat points still stop. A generator that
+  leaves along one axis and never returns stops after a run proportional to
+  the area it could have searched.
 - Placement uses a private copy of each sprite's mask, and only accepts
   sprites created by `getSprite()`, so changing or forging a sprite cannot
   corrupt a layout.
-- Layouts sharing one canvas clear each other's drawings, and a layout
-  requests a new canvas after a failed draw or readback, for example from a
-  tainted canvas.
+- Layouts sharing one canvas share its clearing state, so they clear each
+  other's drawings, even if `getContext()` returns a new wrapper each time.
+  After a failed draw or readback, for example from a tainted canvas, every
+  layout using that canvas requests a canvas from its factory again, and a
+  reused canvas is reset; a rejected font does not count as a failure.
+- `getSprite()` throws if called while a sprite is being drawn to the same
+  canvas, for example from an image getter, and `clear()` and `blockSize()`
+  throw while `place()` is searching, for example from `random()`, rather
+  than corrupting masks or occupancy. Non-numeric font weights are converted
+  to strings before drawing.
+- Typed the `build/d3-cloud.js` export with the package declarations.
 - Trimmed text and image geometry to occupied pixels, independently of packed
   row alignment, so bounded layouts do not reject words due to raster slack.
 - Replaced string block keys and temporary range objects with numeric map

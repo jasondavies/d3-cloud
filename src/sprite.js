@@ -10,9 +10,9 @@ const CREATE = Symbol("CloudSprite");
 // not created by getSprite().
 const MASKS = new WeakMap();
 
-// Clearing state for each scratch context, shared by every layout that draws
-// to the same canvas.
-const CONTEXT_STATES = new WeakMap();
+// Context and clearing state for each scratch canvas, shared by every layout
+// that draws to it.
+const CANVAS_STATES = new WeakMap();
 
 // An immutable, rasterized mask for a text or image source. Sprites are only
 // created by CloudLayout.getSprite() and can be placed any number of times.
@@ -50,7 +50,7 @@ export function spriteFields(source, options) {
     imageHeight: image ? imageDimensionOption(options.height, "height") : null,
     font: String(options.font ?? "serif"),
     style: String(options.style ?? options.fontStyle ?? "normal"),
-    weight: options.weight ?? options.fontWeight ?? "normal",
+    weight: fontWeightOption(options.weight ?? options.fontWeight ?? "normal"),
     rotate: finiteOption(options.rotate, "rotate", 0),
     size: Math.trunc(size),
     padding,
@@ -62,9 +62,27 @@ export function spriteFields(source, options) {
 }
 
 export function rasterizeSprite(fields, state) {
-  const raster = fields.image
-    ? rasterizeImageSprite(fields, state)
-    : rasterizeTextSprite(fields, state);
+  // Image getters could call getSprite() again mid-draw, which would leave ink
+  // that neither call clears.
+  if (state.drawing) {
+    throw new Error("getSprite() cannot be called while a sprite is being drawn to the same canvas");
+  }
+  const font = fields.image ? null : textFont(fields, state);
+  let raster;
+  state.drawing = true;
+  try {
+    raster = fields.image
+      ? rasterizeImageSprite(fields, state)
+      : rasterizeTextSprite(fields, font, state);
+  } catch (error) {
+    // A failed draw or readback, for example after a cross-origin image
+    // taints the canvas, must not break later sprites, so every layout using
+    // this canvas asks its factory for a canvas again.
+    state.invalid = true;
+    throw error;
+  } finally {
+    state.drawing = false;
+  }
   if (!raster) {
     return null;
   }
@@ -101,12 +119,16 @@ export function rasterizeSprite(fields, state) {
 }
 
 export function createSpriteContext(canvas) {
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  let state = CONTEXT_STATES.get(context);
+  let state = CANVAS_STATES.get(canvas);
   if (state && !state.invalid) {
     return state;
   }
 
+  // Check the context before resetting the canvas, which may be shared.
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    throw new TypeError("canvas() factories must return a canvas with a 2d context");
+  }
   canvas.width = canvas.height = 1;
   const ratio = Math.sqrt(context.getImageData(0, 0, 1, 1).data.length >> 2);
   canvas.width = SCRATCH_WIDTH / ratio;
@@ -120,11 +142,12 @@ export function createSpriteContext(canvas) {
     context,
     ratio,
     invalid: false,
+    drawing: false,
     pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
     clearHeight: 0
   });
-  CONTEXT_STATES.set(context, state);
+  CANVAS_STATES.set(canvas, state);
   return state;
 }
 
@@ -137,6 +160,12 @@ function finiteOption(value, name, defaultValue) {
     throw new TypeError(`getSprite() expects a finite ${name}`);
   }
   return value;
+}
+
+// Numeric weights are kept as numbers; anything else is converted to a string
+// before drawing, so a toString() cannot run mid-draw.
+function fontWeightOption(value) {
+  return typeof value === "number" ? value : String(value);
 }
 
 function imageDimensionOption(value, name) {
@@ -159,12 +188,29 @@ function clearContext(state, width = state.clearWidth, height = state.clearHeigh
   return context;
 }
 
-function rasterizeTextSprite(sprite, state) {
+// Returns the CSS font for a text sprite. Canvases ignore fonts they cannot
+// parse and keep drawing with the previous one, which would leave a mask that
+// does not match the rendered text. Set a font of a different size first, so a
+// rejected font is detectable before drawing.
+function textFont(sprite, state) {
+  const context = state.context;
+  const fontSize = Math.max(1, Math.ceil(sprite.size / state.ratio));
+  const font = `${sprite.style} ${sprite.weight} ${fontSize}px ${sprite.font}`;
+  context.font = `${fontSize + 1}px serif`;
+  const previousFont = context.font;
+  context.font = font;
+  if (context.font === previousFont) {
+    throw new TypeError(`getSprite() font "${font}" was rejected by the canvas`);
+  }
+  return font;
+}
+
+function rasterizeTextSprite(sprite, font, state) {
   const context = clearContext(state);
 
   context.save();
   try {
-    return drawTextSprite(sprite, state, context);
+    return drawTextSprite(sprite, font, state, context);
   } finally {
     // A failed measure or draw must not affect the font, alignment, or
     // transform of the next sprite.
@@ -172,21 +218,11 @@ function rasterizeTextSprite(sprite, state) {
   }
 }
 
-function drawTextSprite(sprite, state, context) {
+function drawTextSprite(sprite, font, state, context) {
   const ratio = state.ratio;
   const pixelWidth = state.pixelWidth;
-  const fontSize = Math.max(1, Math.ceil(sprite.size / ratio));
-  const font = `${sprite.style} ${sprite.weight} ${fontSize}px ${sprite.font}`;
 
-  // Canvases ignore fonts they cannot parse and keep drawing with the previous
-  // one, which would leave a mask that does not match the rendered text. Set a
-  // font of a different size first, so a rejected font is detectable.
-  context.font = `${fontSize + 1}px serif`;
-  const previousFont = context.font;
   context.font = font;
-  if (context.font === previousFont) {
-    throw new TypeError(`getSprite() font "${font}" was rejected by the canvas`);
-  }
   // Match the documented rendering contract exactly: some canvases position
   // centered glyphs differently from a manually offset left-aligned run.
   context.textAlign = "center";

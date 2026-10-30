@@ -37,7 +37,7 @@ var SCRATCH_HEIGHT = 1 << 11;
 var IMAGE_SLACK = 4;
 var CREATE = Symbol("CloudSprite");
 var MASKS = /* @__PURE__ */ new WeakMap();
-var CONTEXT_STATES = /* @__PURE__ */ new WeakMap();
+var CANVAS_STATES = /* @__PURE__ */ new WeakMap();
 var CloudSprite = class {
   constructor(token, fields) {
     if (token !== CREATE) {
@@ -68,7 +68,7 @@ function spriteFields(source, options) {
     imageHeight: image ? imageDimensionOption(options.height, "height") : null,
     font: String((_d = options.font) != null ? _d : "serif"),
     style: String((_f = (_e = options.style) != null ? _e : options.fontStyle) != null ? _f : "normal"),
-    weight: (_h = (_g = options.weight) != null ? _g : options.fontWeight) != null ? _h : "normal",
+    weight: fontWeightOption((_h = (_g = options.weight) != null ? _g : options.fontWeight) != null ? _h : "normal"),
     rotate: finiteOption(options.rotate, "rotate", 0),
     size: Math.trunc(size),
     padding,
@@ -79,7 +79,20 @@ function spriteFields(source, options) {
 }
 function rasterizeSprite(fields, state) {
   var _a, _b;
-  const raster = fields.image ? rasterizeImageSprite(fields, state) : rasterizeTextSprite(fields, state);
+  if (state.drawing) {
+    throw new Error("getSprite() cannot be called while a sprite is being drawn to the same canvas");
+  }
+  const font = fields.image ? null : textFont(fields, state);
+  let raster;
+  state.drawing = true;
+  try {
+    raster = fields.image ? rasterizeImageSprite(fields, state) : rasterizeTextSprite(fields, font, state);
+  } catch (error) {
+    state.invalid = true;
+    throw error;
+  } finally {
+    state.drawing = false;
+  }
   if (!raster) {
     return null;
   }
@@ -113,10 +126,13 @@ function rasterizeSprite(fields, state) {
   return sprite;
 }
 function createSpriteContext(canvas) {
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  let state = CONTEXT_STATES.get(context);
+  let state = CANVAS_STATES.get(canvas);
   if (state && !state.invalid) {
     return state;
+  }
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    throw new TypeError("canvas() factories must return a canvas with a 2d context");
   }
   canvas.width = canvas.height = 1;
   const ratio = Math.sqrt(context.getImageData(0, 0, 1, 1).data.length >> 2);
@@ -127,11 +143,12 @@ function createSpriteContext(canvas) {
     context,
     ratio,
     invalid: false,
+    drawing: false,
     pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
     clearHeight: 0
   });
-  CONTEXT_STATES.set(context, state);
+  CANVAS_STATES.set(canvas, state);
   return state;
 }
 function finiteOption(value, name, defaultValue) {
@@ -143,6 +160,9 @@ function finiteOption(value, name, defaultValue) {
     throw new TypeError(`getSprite() expects a finite ${name}`);
   }
   return value;
+}
+function fontWeightOption(value) {
+  return typeof value === "number" ? value : String(value);
 }
 function imageDimensionOption(value, name) {
   value = finiteOption(value, name, null);
@@ -159,19 +179,9 @@ function clearContext(state, width = state.clearWidth, height = state.clearHeigh
   }
   return context;
 }
-function rasterizeTextSprite(sprite, state) {
-  const context = clearContext(state);
-  context.save();
-  try {
-    return drawTextSprite(sprite, state, context);
-  } finally {
-    context.restore();
-  }
-}
-function drawTextSprite(sprite, state, context) {
-  const ratio = state.ratio;
-  const pixelWidth = state.pixelWidth;
-  const fontSize = Math.max(1, Math.ceil(sprite.size / ratio));
+function textFont(sprite, state) {
+  const context = state.context;
+  const fontSize = Math.max(1, Math.ceil(sprite.size / state.ratio));
   const font = `${sprite.style} ${sprite.weight} ${fontSize}px ${sprite.font}`;
   context.font = `${fontSize + 1}px serif`;
   const previousFont = context.font;
@@ -179,6 +189,21 @@ function drawTextSprite(sprite, state, context) {
   if (context.font === previousFont) {
     throw new TypeError(`getSprite() font "${font}" was rejected by the canvas`);
   }
+  return font;
+}
+function rasterizeTextSprite(sprite, font, state) {
+  const context = clearContext(state);
+  context.save();
+  try {
+    return drawTextSprite(sprite, font, state, context);
+  } finally {
+    context.restore();
+  }
+}
+function drawTextSprite(sprite, font, state, context) {
+  const ratio = state.ratio;
+  const pixelWidth = state.pixelWidth;
+  context.font = font;
   context.textAlign = "center";
   const metrics = context.measureText(sprite.text);
   let width = (metrics.width + 1) * ratio;
@@ -435,6 +460,7 @@ function isImageSource(source) {
 var MAX_COORDINATE = 1 << 24;
 var MAX_BLOCK_SIZE = 4096;
 var MIN_SEARCH_BUDGET = 1e5;
+var MAX_SPIRAL_ASPECT_RATIO = 64;
 var STRATEGIES = {
   archimedean: archimedeanStrategy,
   rectangular: rectangularStrategy,
@@ -451,6 +477,7 @@ var CloudLayout = class {
     this._spriteContext = null;
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
+    this._searches = 0;
     this._placements = /* @__PURE__ */ new WeakMap();
   }
   canvas(_) {
@@ -465,6 +492,7 @@ var CloudLayout = class {
     return this;
   }
   clear() {
+    this._assertNotSearching("clear()");
     this._placements = /* @__PURE__ */ new WeakMap();
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
@@ -512,6 +540,7 @@ var CloudLayout = class {
     if (nextBlockSize === this._blockSize) {
       return this;
     }
+    this._assertNotSearching("blockSize()");
     if (this._bounds) {
       throw new Error("Cannot change blockSize after placement; call clear() first");
     }
@@ -529,14 +558,7 @@ var CloudLayout = class {
     if (!fields) {
       return null;
     }
-    const state = this._getContext();
-    try {
-      return rasterizeSprite(fields, state);
-    } catch (error) {
-      state.invalid = true;
-      this._spriteContext = null;
-      throw error;
-    }
+    return rasterizeSprite(fields, this._getContext());
   }
   erase(word) {
     const placement = word && typeof word === "object" ? this._placements.get(word) : void 0;
@@ -563,7 +585,13 @@ var CloudLayout = class {
     const strategy = optionStrategy == null ? this._strategy : resolveStrategy(optionStrategy);
     const x = optionX == null ? seedCoordinate(this._size[0], this._random) : placeCoordinate(optionX);
     const y = optionY == null ? seedCoordinate(this._size[1], this._random) : placeCoordinate(optionY);
-    const position = tryPlaceSprite(this._blocks, mask, x, y, this._bounds, strategy, this._size, this._overflow, this._random);
+    let position;
+    this._searches++;
+    try {
+      position = tryPlaceSprite(this._blocks, mask, x, y, this._bounds, strategy, this._size, this._overflow, this._random);
+    } finally {
+      this._searches--;
+    }
     if (!position) {
       return null;
     }
@@ -571,6 +599,14 @@ var CloudLayout = class {
     const word = createPlacedWord(sprite, position.x, position.y);
     this._placements.set(word, { mask, x: position.x, y: position.y });
     return word;
+  }
+  // A search holds the occupancy blocks it started with. Replacing them
+  // mid-search would leave the word out of the new blocks, where later words
+  // could overlap it.
+  _assertNotSearching(method) {
+    if (this._searches) {
+      throw new Error(`${method} cannot be called while place() is searching`);
+    }
   }
   _getContext() {
     if (!this._spriteContext || this._spriteContext.invalid) {
@@ -805,13 +841,90 @@ function archimedeanStrategy(initial, context) {
   };
 }
 function rectangularStrategy(initial, context) {
-  var points = rectangularOffsets(context.aspectRatio), sign = context.random() < 0.5 ? 1 : -1;
+  var e = spiralAspectRatio(context.aspectRatio), sign = context.random() < 0.5 ? 1 : -1, a = 0, b = 0, runs = [], run = 0, x = 0, y = 0, dx = 0, dy = 0, count = 1;
+  function grow() {
+    var nextX = e >= 1 ? (a + 1) / e : a + 1, nextY = e >= 1 ? b + 1 : (b + 1) * e, growX = nextX <= nextY, growY = nextY <= nextX;
+    if (growX) a++;
+    if (growY) b++;
+    if (growX && growY) {
+      runs = [
+        -a,
+        -1,
+        0,
+        -1,
+        b,
+        -a + 1,
+        -b,
+        1,
+        0,
+        2 * a,
+        a,
+        -b + 1,
+        0,
+        1,
+        2 * b,
+        a - 1,
+        b,
+        -1,
+        0,
+        2 * a,
+        -a,
+        b - 1,
+        0,
+        -1,
+        b
+      ];
+    } else if (growX) {
+      runs = [
+        -a,
+        -1,
+        0,
+        -1,
+        b,
+        a,
+        -b,
+        0,
+        1,
+        2 * b + 1,
+        -a,
+        b,
+        0,
+        -1,
+        b + 1
+      ];
+    } else {
+      runs = [
+        -a,
+        -b,
+        1,
+        0,
+        2 * a + 1,
+        a,
+        b,
+        -1,
+        0,
+        2 * a + 1
+      ];
+    }
+    run = 0;
+  }
   return function() {
-    var point = points.next().value;
-    return {
-      x: initial.x + 4 * point[0],
-      y: initial.y + 4 * sign * point[1]
+    while (!count) {
+      if (run === runs.length) grow();
+      x = runs[run++];
+      y = runs[run++];
+      dx = runs[run++];
+      dy = runs[run++];
+      count = runs[run++];
+    }
+    var candidate = {
+      x: initial.x + 4 * x,
+      y: initial.y + 4 * sign * y
     };
+    x += dx;
+    y += dy;
+    count--;
+    return candidate;
   };
 }
 function noneStrategy() {
@@ -820,34 +933,11 @@ function noneStrategy() {
   };
 }
 function archimedeanOffsets(aspectRatio) {
-  var e = normalizeAspectRatio(aspectRatio);
+  var e = spiralAspectRatio(aspectRatio);
   return function(t) {
     t *= 0.1;
     return [e * t * Math.cos(t), t * Math.sin(t)];
   };
-}
-function* rectangularOffsets(aspectRatio) {
-  var e = normalizeAspectRatio(aspectRatio), a = 0, b = 0;
-  yield [0, 0];
-  for (; ; ) {
-    var nextX = e >= 1 ? (a + 1) / e : a + 1, nextY = e >= 1 ? b + 1 : (b + 1) * e, growX = nextX <= nextY, growY = nextY <= nextX;
-    if (growX) a++;
-    if (growY) b++;
-    if (growX && growY) {
-      for (var y = -1; y >= -b; y--) yield [-a, y];
-      for (var x = -a + 1; x <= a; x++) yield [x, -b];
-      for (var y = -b + 1; y <= b; y++) yield [a, y];
-      for (var x = a - 1; x >= -a; x--) yield [x, b];
-      for (var y = b - 1; y >= 0; y--) yield [-a, y];
-    } else if (growX) {
-      for (var y = -1; y >= -b; y--) yield [-a, y];
-      for (var y = -b; y <= b; y++) yield [a, y];
-      for (var y = b; y >= 0; y--) yield [-a, y];
-    } else {
-      for (var x = -a; x <= a; x++) yield [x, -b];
-      for (var x = a; x >= -a; x--) yield [x, b];
-    }
-  }
 }
 function defaultCanvasFactory() {
   return document.createElement("canvas");
@@ -856,9 +946,12 @@ function normalizeAspectRatio(value) {
   value = +value;
   return value > 0 && Number.isFinite(value) ? value : 1;
 }
+function spiralAspectRatio(value) {
+  return Math.min(Math.max(normalizeAspectRatio(value), 1 / MAX_SPIRAL_ASPECT_RATIO), MAX_SPIRAL_ASPECT_RATIO);
+}
 function normalizeBlockSize(value) {
   value = +value;
-  if (!(value > 0 && value <= MAX_BLOCK_SIZE)) {
+  if (!(value >= 1 && value <= MAX_BLOCK_SIZE)) {
     throw new RangeError(`blockSize() expects a size from 1 to ${MAX_BLOCK_SIZE}`);
   }
   return Math.ceil(value / 32) * 32;
@@ -897,7 +990,7 @@ function seedCoordinate(size, random) {
     return 0;
   }
   const value = random();
-  if (!(value >= 0 && value < 1)) {
+  if (!(typeof value === "number" && value >= 0 && value < 1)) {
     throw new RangeError("random() must return a number in [0, 1)");
   }
   return Math.floor((value - 0.5) * (size / 2));

@@ -139,7 +139,9 @@ Constructs a new cloud layout instance.
 <a name="clear" href="#clear">#</a> <b>clear</b>()
 
 Clears the current placement state and bounds so the instance can be reused for
-a fresh layout. Words placed before clearing can no longer be erased.
+a fresh layout. Words placed before clearing can no longer be erased. Calling
+`clear()` while `place()` is searching, for example from `random()` or a
+strategy, throws an error.
 
 <a name="bounds" href="#bounds">#</a> <b>bounds</b>()
 
@@ -166,7 +168,9 @@ layouts cannot be mixed.
 The optional *options* object may include `font`, `style`, `weight`, `rotate`,
 `size`, `padding`, and `datum`. The defaults are `font: "serif"`,
 `style: "normal"`, `weight: "normal"`, `size: 1`, `rotate: 0`, and
-`padding: 1`. `fontStyle`, `fontWeight`, and `fontSize` are accepted as aliases.
+`padding: 1` (0 for images). `fontStyle`, `fontWeight`, and `fontSize` are
+accepted as aliases. `font` and `style` are converted to strings, as is
+`weight` unless it is a number.
 Other option fields are ignored, and `null` is the same as no options.
 Numeric options must be finite, and `padding` must not be negative. Text sizes
 are truncated to whole pixels, and text smaller than 1 pixel returns `null`.
@@ -201,7 +205,9 @@ reported bounds or bounded placement checks.
 the 2048-pixel scratch dimensions. Load images and fonts before preparing sprites.
 If drawing or reading the scratch canvas throws, for example because a
 cross-origin image tainted it, the error is rethrown and the layout requests a
-new canvas from its factory for later sprites.
+new canvas from its factory for later sprites; see [canvas](#canvas).
+`getSprite()` throws if it is called while a sprite is being drawn to the same
+canvas, for example from an image's property getter.
 
 <a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>[, <i>options</i>])
 
@@ -307,18 +313,23 @@ the sprite could not be placed are skipped without a collision check. A search
 stops, returning `null`, once a candidate is beyond every such position on both
 axes by more than the sprite's own size; after as many candidates where it could
 be placed as there are such positions, or 100,000 if that is more; or after a
-long run of candidates where it could not. These limits end searches that
-repeat points or move along only one axis, but cannot interrupt a generator
+run of candidates where it could not that is longer than four times the area
+from the search start to the farthest such position, extended by the sprite's
+size, or 100,000 if that is more. These limits end searches that repeat points,
+but a generator that moves away along one axis and never returns takes time
+proportional to that area to stop, and none of them can interrupt a generator
 that never returns from an individual call.
 
-The archimedean spiral is stretched to the aspect ratio. The rectangular
-spiral visits every point of a 4-pixel grid in rings shaped to the aspect
-ratio.
+`aspectRatio` is the width of `size()` divided by its height, or 1 if either
+is 0. The archimedean spiral is stretched to the aspect ratio, and the
+rectangular spiral visits every point of a 4-pixel grid in rings shaped to it,
+both up to 64:1; beyond that they would barely move along the shorter axis.
 
 The built-in strategies are also exported as `archimedeanStrategy`,
 `rectangularStrategy`, and `noneStrategy`, so callers do not need to use string
 names. Use `noneStrategy` or `"none"` for a single-attempt placement that tries
-only the initial `{x, y}`.
+only the seed position, not the nearest position where the sprite could be
+placed.
 
 If not specified, returns the current strategy factory, which defaults to the
 built-in `archimedeanStrategy`.
@@ -339,8 +350,9 @@ to `Math.random`.
 
 If specified, sets the sparse block size used during placement, from 1 to
 4096 pixels. Block sizes are rounded up to the next multiple of 32 pixels so
-they align with the packed sprite representation. If not specified, returns
-the current size, which defaults to `512`.
+they align with the packed sprite representation. Changing the size throws an
+error once words have been placed, until `clear()` is called. If not
+specified, returns the current size, which defaults to `512`.
 
 <a name="canvas" href="#canvas">#</a> <b>canvas</b>([<i>canvas</i>])
 
@@ -355,10 +367,13 @@ function() { return document.createElement("canvas"); }
 When using Node.js, you will almost definitely override this default, e.g.
 using the [canvas module](https://www.npmjs.com/package/canvas).
 
-The factory is called once, and again after a sprite fails to draw or read back.
-If it returns the same canvas, that canvas is reset before reuse. Layouts may
-share one canvas; a failure invalidates their shared context until it is reset.
-Nothing else should draw to the scratch canvas.
+The canvas must provide a 2d context; otherwise `getSprite()` throws a
+`TypeError`. The factory is called once, and again after a sprite fails to draw
+or read back. If it returns the same canvas, that canvas is reset before reuse,
+but browsers keep a canvas tainted by a cross-origin image even after a reset,
+so return a new canvas to recover from that. Layouts may share one canvas; a
+failure makes every layout using it call its factory again. Nothing else should
+draw to the scratch canvas.
 
 ## Benchmarks
 

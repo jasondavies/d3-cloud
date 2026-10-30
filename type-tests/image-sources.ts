@@ -1,5 +1,6 @@
 import { createCanvas, Image } from "canvas";
 import CloudLayout from "d3-cloud";
+import BundledCloudLayout, { type PlacedSprite } from "d3-cloud/build/d3-cloud.js";
 
 const layout = new CloudLayout();
 
@@ -33,3 +34,6 @@ layout.place(layout.getSprite("text", null)!, null);
 
 // @ts-expect-error plain objects with only dimensions are not drawable
 layout.getSprite({ width: 10, height: 10 });
+
+// The browser bundle has the same types.
+const bundled: PlacedSprite<undefined> | null = new BundledCloudLayout().place(new BundledCloudLayout().getSprite("word")!);

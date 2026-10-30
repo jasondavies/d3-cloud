@@ -8,6 +8,10 @@ import { createSpriteContext, rasterizeSprite, spriteFields, spriteMask } from "
 const MAX_COORDINATE = 1 << 24;
 const MAX_BLOCK_SIZE = 4096;
 const MIN_SEARCH_BUDGET = 100000;
+// Built-in spirals stretch to the layout's aspect ratio up to this limit.
+// Beyond it they would barely move along the shorter axis, and searches that
+// cannot leave a blocked column or row would run for minutes.
+const MAX_SPIRAL_ASPECT_RATIO = 64;
 
 const STRATEGIES = {
   archimedean: archimedeanStrategy,
@@ -26,6 +30,9 @@ export default class CloudLayout {
     this._spriteContext = null;
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
+    // The number of place() calls in progress, which strategies or random()
+    // could re-enter.
+    this._searches = 0;
     // Maps each placed word returned by place() to the mask and position
     // needed to erase it. Results that are dropped are garbage collected.
     this._placements = new WeakMap();
@@ -44,6 +51,7 @@ export default class CloudLayout {
   }
 
   clear() {
+    this._assertNotSearching("clear()");
     this._placements = new WeakMap();
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
@@ -97,6 +105,7 @@ export default class CloudLayout {
     if (nextBlockSize === this._blockSize) {
       return this;
     }
+    this._assertNotSearching("blockSize()");
     if (this._bounds) {
       throw new Error("Cannot change blockSize after placement; call clear() first");
     }
@@ -116,18 +125,7 @@ export default class CloudLayout {
     if (!fields) {
       return null;
     }
-    const state = this._getContext();
-    try {
-      return rasterizeSprite(fields, state);
-    } catch (error) {
-      // A failed draw or readback, for example after a cross-origin image
-      // taints the canvas, must not break later sprites, so start over with a
-      // new canvas from the factory. Mark shared state invalid too, so a
-      // factory returning the same canvas resets it before any layout reuses it.
-      state.invalid = true;
-      this._spriteContext = null;
-      throw error;
-    }
+    return rasterizeSprite(fields, this._getContext());
   }
 
   erase(word) {
@@ -158,7 +156,13 @@ export default class CloudLayout {
     const strategy = optionStrategy == null ? this._strategy : resolveStrategy(optionStrategy);
     const x = optionX == null ? seedCoordinate(this._size[0], this._random) : placeCoordinate(optionX);
     const y = optionY == null ? seedCoordinate(this._size[1], this._random) : placeCoordinate(optionY);
-    const position = tryPlaceSprite(this._blocks, mask, x, y, this._bounds, strategy, this._size, this._overflow, this._random);
+    let position;
+    this._searches++;
+    try {
+      position = tryPlaceSprite(this._blocks, mask, x, y, this._bounds, strategy, this._size, this._overflow, this._random);
+    } finally {
+      this._searches--;
+    }
     if (!position) {
       return null;
     }
@@ -169,7 +173,18 @@ export default class CloudLayout {
     return word;
   }
 
+  // A search holds the occupancy blocks it started with. Replacing them
+  // mid-search would leave the word out of the new blocks, where later words
+  // could overlap it.
+  _assertNotSearching(method) {
+    if (this._searches) {
+      throw new Error(`${method} cannot be called while place() is searching`);
+    }
+  }
+
   _getContext() {
+    // A failed draw invalidates the state of every layout sharing the canvas,
+    // so each asks its factory again, and a reused canvas is reset.
     if (!this._spriteContext || this._spriteContext.invalid) {
       this._spriteContext = createSpriteContext(this._canvasFactory());
     }
@@ -512,6 +527,8 @@ export function archimedeanStrategy(initial, context) {
 
   return function() {
     var dxdy = spiral(t += dt);
+    // With the aspect ratio capped, offsets only exceed 32 bits after hundreds
+    // of millions of candidates.
     return {
       x: initial.x + ~~dxdy[0],
       y: initial.y + ~~dxdy[1]
@@ -519,17 +536,74 @@ export function archimedeanStrategy(initial, context) {
   };
 }
 
+// Walks a 4px grid in growing rectangles. The rectangle grows whenever the next
+// grid column or row reaches its boundary in aspect-scaled distance, and only
+// the new edges are visited, in angle order, so every grid point is visited
+// once. Each edge is a run of points, so each candidate takes constant time and
+// memory at any aspect ratio.
 export function rectangularStrategy(initial, context) {
-  var points = rectangularOffsets(context.aspectRatio),
-      // Mirroring the rings vertically reverses the spiral's direction.
-      sign = context.random() < .5 ? 1 : -1;
+  var e = spiralAspectRatio(context.aspectRatio),
+      // Mirroring the rectangles vertically reverses the spiral's direction.
+      sign = context.random() < .5 ? 1 : -1,
+      a = 0,
+      b = 0,
+      // The new edges, as runs of [x, y, dx, dy, count].
+      runs = [],
+      run = 0,
+      x = 0,
+      y = 0,
+      dx = 0,
+      dy = 0,
+      count = 1;
+
+  function grow() {
+    var nextX = e >= 1 ? (a + 1) / e : a + 1,
+        nextY = e >= 1 ? b + 1 : (b + 1) * e,
+        growX = nextX <= nextY,
+        growY = nextY <= nextX;
+    if (growX) a++;
+    if (growY) b++;
+
+    if (growX && growY) {
+      runs = [
+        -a, -1, 0, -1, b,
+        -a + 1, -b, 1, 0, 2 * a,
+        a, -b + 1, 0, 1, 2 * b,
+        a - 1, b, -1, 0, 2 * a,
+        -a, b - 1, 0, -1, b
+      ];
+    } else if (growX) {
+      runs = [
+        -a, -1, 0, -1, b,
+        a, -b, 0, 1, 2 * b + 1,
+        -a, b, 0, -1, b + 1
+      ];
+    } else {
+      runs = [
+        -a, -b, 1, 0, 2 * a + 1,
+        a, b, -1, 0, 2 * a + 1
+      ];
+    }
+    run = 0;
+  }
 
   return function() {
-    var point = points.next().value;
-    return {
-      x: initial.x + 4 * point[0],
-      y: initial.y + 4 * sign * point[1]
+    while (!count) {
+      if (run === runs.length) grow();
+      x = runs[run++];
+      y = runs[run++];
+      dx = runs[run++];
+      dy = runs[run++];
+      count = runs[run++];
+    }
+    var candidate = {
+      x: initial.x + 4 * x,
+      y: initial.y + 4 * sign * y
     };
+    x += dx;
+    y += dy;
+    count--;
+    return candidate;
   };
 }
 
@@ -540,46 +614,11 @@ export function noneStrategy() {
 }
 
 function archimedeanOffsets(aspectRatio) {
-  var e = normalizeAspectRatio(aspectRatio);
+  var e = spiralAspectRatio(aspectRatio);
   return function(t) {
     t *= .1;
     return [e * t * Math.cos(t), t * Math.sin(t)];
   };
-}
-
-// Grow a rectangle whenever the next grid column or row reaches its boundary
-// in aspect-scaled distance. Emit only the new edges, in angle order, so the
-// search visits every grid point once without allocating or caching rings.
-// Each next() does constant work even at extreme aspect ratios.
-function* rectangularOffsets(aspectRatio) {
-  var e = normalizeAspectRatio(aspectRatio),
-      a = 0,
-      b = 0;
-  yield [0, 0];
-  for (;;) {
-    // Avoid 1 / e, which can overflow for very small positive aspect ratios.
-    var nextX = e >= 1 ? (a + 1) / e : a + 1,
-        nextY = e >= 1 ? b + 1 : (b + 1) * e,
-        growX = nextX <= nextY,
-        growY = nextY <= nextX;
-    if (growX) a++;
-    if (growY) b++;
-
-    if (growX && growY) {
-      for (var y = -1; y >= -b; y--) yield [-a, y];
-      for (var x = -a + 1; x <= a; x++) yield [x, -b];
-      for (var y = -b + 1; y <= b; y++) yield [a, y];
-      for (var x = a - 1; x >= -a; x--) yield [x, b];
-      for (var y = b - 1; y >= 0; y--) yield [-a, y];
-    } else if (growX) {
-      for (var y = -1; y >= -b; y--) yield [-a, y];
-      for (var y = -b; y <= b; y++) yield [a, y];
-      for (var y = b; y >= 0; y--) yield [-a, y];
-    } else {
-      for (var x = -a; x <= a; x++) yield [x, -b];
-      for (var x = a; x >= -a; x--) yield [x, b];
-    }
-  }
 }
 
 function defaultCanvasFactory() {
@@ -591,9 +630,13 @@ function normalizeAspectRatio(value) {
   return value > 0 && Number.isFinite(value) ? value : 1;
 }
 
+function spiralAspectRatio(value) {
+  return Math.min(Math.max(normalizeAspectRatio(value), 1 / MAX_SPIRAL_ASPECT_RATIO), MAX_SPIRAL_ASPECT_RATIO);
+}
+
 function normalizeBlockSize(value) {
   value = +value;
-  if (!(value > 0 && value <= MAX_BLOCK_SIZE)) {
+  if (!(value >= 1 && value <= MAX_BLOCK_SIZE)) {
     throw new RangeError(`blockSize() expects a size from 1 to ${MAX_BLOCK_SIZE}`);
   }
   return Math.ceil(value / 32) * 32;
@@ -637,7 +680,7 @@ function seedCoordinate(size, random) {
     return 0;
   }
   const value = random();
-  if (!(value >= 0 && value < 1)) {
+  if (!(typeof value === "number" && value >= 0 && value < 1)) {
     throw new RangeError("random() must return a number in [0, 1)");
   }
   return Math.floor((value - 0.5) * (size / 2));

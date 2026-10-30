@@ -732,7 +732,7 @@ test("random() must be a function returning numbers in [0, 1)", () => {
   const layout = new CloudLayout().canvas(createFakeCanvas);
   assert.throws(() => layout.random(0.5), /random\(\) expects a function/);
   const sprite = layout.getSprite("word", { size: 20 });
-  for (const value of [undefined, NaN, 1, -0.1, "0.5x"]) {
+  for (const value of [undefined, NaN, 1, -0.1, "0.5x", "0.5", [0.5]]) {
     layout.random(() => value);
     assert.throws(() => layout.place(sprite), /random\(\) must return/);
     assert.equal(layout.bounds(), null);
@@ -743,7 +743,7 @@ test("random() must be a function returning numbers in [0, 1)", () => {
 
 test("blockSize() rejects sizes that cannot be allocated", () => {
   const layout = new CloudLayout();
-  for (const value of [0, -1, NaN, Infinity, 2 ** 31, 1e12, 4097]) {
+  for (const value of [0, 0.5, -1, NaN, Infinity, 2 ** 31, 1e12, 4097]) {
     assert.throws(() => layout.blockSize(value), RangeError);
   }
   assert.equal(layout.blockSize(4096).blockSize(), 4096);
@@ -766,6 +766,39 @@ test("built-in spirals give up promptly in full boxes with extreme aspect ratios
       const probe = layout.getSprite(createFakeImage(2, 2, [[0, 0], [1, 0], [0, 1], [1, 1]]));
       assert.equal(layout.place(probe, { x: 0, y: 0, strategy: counted }), null);
       assert.ok(attempts < 1000000, `${strategy.name} ${width}×${height}: ${attempts} candidates`);
+    }
+  }
+});
+
+test("built-in spirals stop stretching beyond a 64:1 aspect ratio", () => {
+  for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+    for (const [extreme, capped] of [[1e6, 64], [1e-6, 1 / 64], [Number.MIN_VALUE, 1 / 64]]) {
+      const a = strategy({ x: 0, y: 0 }, { aspectRatio: extreme, random: () => 0.25 });
+      const b = strategy({ x: 0, y: 0 }, { aspectRatio: capped, random: () => 0.25 });
+      for (let i = 0; i < 10000; i++) {
+        assert.deepEqual(a(), b(), `${strategy.name} at aspect ratio ${extreme}, candidate ${i}`);
+      }
+    }
+  }
+});
+
+test("built-in searches in extremely tall or wide layouts leave a blocked column promptly", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const block = createCanvas(400, 400);
+  block.getContext("2d").fillRect(0, 0, 400, 400);
+  for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+    for (const size of [[1, 16777216], [16777216, 1], [10, 100000]]) {
+      const layout = new CloudLayout().canvas(() => createCanvas(1, 1))
+        .size(size).random(() => 0.25);
+      assert.ok(layout.place(layout.getSprite(block), { x: 0, y: 0 }));
+      let attempts = 0;
+      const counted = (initial, context) => {
+        const next = strategy(initial, context);
+        return () => { attempts++; return next(); };
+      };
+      const word = layout.place(layout.getSprite("WWW", { size: 60 }), { x: 0, y: 0, strategy: counted });
+      assert.ok(word, `${strategy.name} ${size}: overflow layouts can always grow`);
+      assert.ok(attempts < 2000000, `${strategy.name} ${size}: ${attempts} candidates`);
     }
   }
 });
@@ -1185,6 +1218,36 @@ test("clear resets bounds and unlocks blockSize changes", () => {
   assert.equal(layout.bounds(), null);
   assert.equal(layout.blockSize(256), layout);
   assert.equal(layout.blockSize(), 256);
+});
+
+test("clear() and blockSize() cannot replace the occupancy during a search", () => {
+  const square = createFakeImage(8, 8, Array.from({ length: 64 }, (_, i) => [i % 8, Math.floor(i / 8)]));
+  for (const call of [layout => layout.clear(), layout => layout.blockSize(64)]) {
+    let layout;
+    let armed = false;
+    let error;
+    layout = new CloudLayout().canvas(createFakeCanvas).random(() => {
+      if (armed) {
+        armed = false;
+        try {
+          call(layout);
+        } catch (e) {
+          error = e;
+        }
+      }
+      return 0.25;
+    });
+    const sprite = layout.getSprite(square);
+    const first = layout.place(sprite, { x: 0, y: 0 });
+    armed = true;
+    const second = layout.place(sprite, { x: 0, y: 0 });
+    assert.match(error?.message ?? "", /while place\(\) is searching/);
+    assert.ok(second);
+    assert.equal(layout.place(sprite, { x: second.x, y: second.y, strategy: "none" }), null,
+      "the second word is still occupied");
+    layout.erase(first);
+    assert.equal(layout.clear(), layout, "clear() works again after the search");
+  }
 });
 
 test("setting the same normalized block size preserves occupied pixels", () => {
@@ -1663,6 +1726,118 @@ test("fonts the canvas rejects throw instead of rasterizing a mismatched mask", 
   for (let i = 0; i < 2; i++) {
     assert.ok(layout.getSprite("word", { size: 100, font: "serif" }).height > 40);
   }
+});
+
+test("rejected fonts do not discard the scratch canvas", () => {
+  const { createCanvas } = loadNodeCanvas();
+  let calls = 0;
+  const layout = new CloudLayout().canvas(() => (calls++, createCanvas(1, 1)));
+  assert.ok(layout.getSprite("word", { size: 20 }));
+  assert.throws(() => layout.getSprite("word", { size: 20, font: "3Dumb" }), /rejected by the canvas/);
+  assert.ok(layout.getSprite("word", { size: 20 }));
+  assert.equal(calls, 1);
+});
+
+test("font weights are converted before drawing, so getSprite() cannot be re-entered", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const layout = new CloudLayout().canvas(() => createCanvas(1, 1));
+  const expected = layout.getSprite("WWW", { size: 60 });
+  let calls = 0;
+  const weight = {
+    toString() {
+      calls++;
+      layout.getSprite("WWW", { size: 60, rotate: 90 });
+      return "bold";
+    }
+  };
+  const sprite = layout.getSprite("i", { size: 20, weight });
+  assert.equal(sprite.weight, "bold");
+  assert.equal(calls, 1);
+  assert.equal(layout.getSprite("i", { size: 20, weight: 700 }).weight, 700);
+  assert.deepEqual(layout.getSprite("WWW", { size: 60 }).sprite, expected.sprite);
+});
+
+test("getSprite() cannot be re-entered while a sprite is drawn to the same canvas", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const shared = createCanvas(1, 1);
+  const a = new CloudLayout().canvas(() => shared);
+  const b = new CloudLayout().canvas(() => shared);
+  const other = new CloudLayout().canvas(() => createCanvas(1, 1));
+  const expected = other.getSprite("WWW", { size: 60 });
+  for (const inner of [a, b, other]) {
+    let error;
+    // Image dimensions are read while the sprite is being drawn.
+    const source = createCanvas(10, 10);
+    source.getContext("2d").fillRect(0, 0, 10, 10);
+    Object.defineProperty(source, "naturalWidth", {
+      get() {
+        try {
+          inner.getSprite("WWW", { size: 60, rotate: 45 });
+        } catch (e) {
+          error = e;
+        }
+        return 10;
+      }
+    });
+    assert.ok(a.getSprite(source));
+    if (inner === other) {
+      assert.equal(error, undefined, "other canvases are independent");
+    } else {
+      assert.match(error?.message ?? "", /while a sprite is being drawn/);
+    }
+    assert.deepEqual(a.getSprite("WWW", { size: 60 }).sprite, expected.sprite);
+  }
+});
+
+test("a canvas without a 2d context does not break layouts sharing it", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const canvas = createCanvas(1, 1);
+  const context = canvas.getContext("2d");
+  let lost = false;
+  const shared = {
+    get width() { return canvas.width; },
+    set width(value) { canvas.width = value; },
+    get height() { return canvas.height; },
+    set height(value) { canvas.height = value; },
+    getContext() { return lost ? null : context; }
+  };
+  const a = new CloudLayout().canvas(() => shared);
+  const expected = a.getSprite("Hello", { size: 30 });
+  lost = true;
+  const b = new CloudLayout().canvas(() => shared);
+  assert.ok(b.getSprite("x", { size: 30 }), "the shared canvas is already set up");
+  lost = false;
+  assert.deepEqual(a.getSprite("Hello", { size: 30 }).sprite, expected.sprite);
+
+  // A canvas that has no 2d context is rejected without being resized.
+  const unusable = { width: 300, height: 150, getContext: () => null };
+  assert.throws(() => new CloudLayout().canvas(() => unusable).getSprite("x"), /2d context/);
+  assert.deepEqual([unusable.width, unusable.height], [300, 150]);
+});
+
+test("layouts sharing a canvas share state even if getContext() returns new wrappers", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const canvas = createCanvas(1, 1);
+  const context = canvas.getContext("2d");
+  const shared = {
+    get width() { return canvas.width; },
+    set width(value) { canvas.width = value; },
+    get height() { return canvas.height; },
+    set height(value) { canvas.height = value; },
+    getContext() {
+      return new Proxy(context, {
+        get: (target, key) => typeof target[key] === "function" ? target[key].bind(target) : target[key],
+        set: (target, key, value) => { target[key] = value; return true; }
+      });
+    }
+  };
+  const a = new CloudLayout().canvas(() => shared);
+  const b = new CloudLayout().canvas(() => shared);
+  const expected = new CloudLayout().canvas(() => createCanvas(1, 1)).getSprite(".", { size: 60 });
+  assert.ok(a.getSprite(".", { size: 2 }));
+  assert.ok(b.getSprite(".", { size: 2 }));
+  assert.ok(a.getSprite(".", { size: 20 }));
+  assert.deepEqual(b.getSprite(".", { size: 60 }).sprite, expected.sprite);
 });
 
 test("a failed readback, such as from a tainted canvas, does not break later sprites", () => {
