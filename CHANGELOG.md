@@ -78,74 +78,40 @@ Dependencies constrained to 1.x continue to use the old API.
 
 ### Changed
 
-- Tried the clamped search origin before advancing the archimedean spiral, so
-  an off-center seed can still place a sprite that exactly fills a fixed box.
-- Generated rectangular candidates edge by edge in distance and angle order,
-  in constant time and memory per candidate at any aspect ratio.
-- Preserved `undefined` in TypeScript results when `datum` is optional or
-  omitted, while retaining precise inference for a required `datum`.
-- Restored the scratch context after failed image draws and rejected unavailable
-  image/video sources even when they have explicit display dimensions.
-- Used intrinsic video dimensions to preserve aspect ratio when resizing sprites.
-- Accepted node-canvas factories in TypeScript alongside browser and offscreen
-  canvases.
-- Sized text rasters to measured ink bounds, including overhang and accents,
-  and redrew text into a larger raster, after clearing the scratch canvas,
-  when its ink reached the raster edge, as some canvas implementations
-  under-report ink bounds. Restored the scratch context after failed text
-  draws. Cleared an extra margin of the scratch canvas for width-only adapters
-  to prevent pixels from leaking into subsequent sprites.
-- Rasterized text with `textAlign = "center"`, matching the documented
-  rendering contract, since some canvases position centered glyphs differently
-  from a manually offset left-aligned run.
-- Preserved image edge pixels for odd dimensions, rotation, and resizing, and
-  allowed opaque image sprites to pack beside each other while still touching
-  the existing cloud.
-- Typed `datum` generically on sprites and placed words, inferred from
-  `getSprite()` options.
-- Typed image sources as images, videos, canvases, and `ImageBitmap`s,
-  including node-canvas images, and kept the source type on sprites and
-  placed words so `word.image` can be drawn directly. Accepted text-or-image
-  unions and readonly `size()` tuples.
-- Searches start from the nearest position where the sprite could overlap the
-  cloud's bounds (and, without overflow, fit in the box), and skip candidates
-  outside those positions, so distant seeds cost no extra time and small
-  clouds are not stepped over.
-- Applied the same search limits to built-in and custom strategies, so wrapped
-  built-ins behave identically. Limits scale with the number of positions
-  where the sprite could be placed, so scans and random samplers can cover
-  them, while generators that repeat points still stop. A generator that
-  leaves along one axis and never returns stops after a run proportional to
-  the area it could have searched.
-- Placement uses a private copy of each sprite's mask, and only accepts
-  sprites created by `getSprite()`, so changing or forging a sprite cannot
-  corrupt a layout.
-- Layouts sharing one canvas share its clearing state, so they clear each
-  other's drawings, even if `getContext()` returns a new wrapper each time.
-  After a failed draw or readback, for example from a tainted canvas, every
-  layout using that canvas requests a canvas from its factory again, and a
-  reused canvas is reset; a rejected font does not count as a failure.
+- Placement first tries the seed, then searches from the nearest position
+  where the sprite could touch the cloud (and, with `overflow(false)`, fit in
+  the box), skipping positions where it could not without a collision check.
+  Distant seeds cost no extra time, and small clouds are not stepped over.
+- Search limits scale with the number of positions where the sprite could be
+  placed, rather than the board diagonal, and apply equally to built-in and
+  custom strategies. Strategies that repeat points still stop; one that moves
+  away along one axis and never returns stops after a run proportional to the
+  area it could have searched.
+- Placement uses a private copy of each sprite's mask and accepts only sprites
+  created by `getSprite()`, so changing or forging a sprite cannot corrupt a
+  layout.
+- Text rasters are sized from measured ink bounds, including italic overhang
+  and accents, and redrawn larger if the ink reaches the raster edge, as some
+  canvases under-report ink bounds. Text is rasterized with
+  `textAlign = "center"`, matching how placed words should be rendered.
+- Sprite geometry is trimmed to occupied pixels, independently of the packed
+  row alignment, so bounded layouts do not reject words because of raster
+  slack. Sprite extraction reads back only the raster and stores masks as
+  `Uint32Array`s.
+- Layouts may share one scratch canvas. A failed draw or readback, for example
+  from a tainted canvas, makes every layout using it ask its factory for a
+  canvas again; a rejected font does not.
 - `getSprite()` throws if called while a sprite is being drawn to the same
-  canvas, for example from an image getter, and `clear()` and `blockSize()`
-  throw while `place()` is searching, for example from `random()`, rather
-  than corrupting masks or occupancy. Non-numeric font weights are converted
-  to strings before drawing.
-- Typed the `build/d3-cloud.js` export with the package declarations.
-- Trimmed text and image geometry to occupied pixels, independently of packed
-  row alignment, so bounded layouts do not reject words due to raster slack.
-- Replaced string block keys and temporary range objects with numeric map
-  lookups in collision checks.
-- Optimized sprite extraction to use partial canvas readback and `Uint32Array`
-  mask storage.
-- Documented the rendering anchor contract: image sprite coordinates mark the
-  sprite center, while text should be rendered from `x` and `y` directly with a
-  centered horizontal anchor.
-- Fixed layout state reuse between runs and corrected right-edge occupancy for
-  non-word-aligned widths.
-- Removed `maxDelta()` and now always derives the placement search limit from
-  the current sprite, bounds, and layout size.
-- Simplified the public examples and aligned the browser demo with the modern
-  ESM build.
+  canvas, and `clear()` and `blockSize()` throw while `place()` is
+  searching, rather than corrupting masks or occupancy.
+- The package includes TypeScript declarations, for both the package entry
+  and `build/d3-cloud.js`. `datum` is typed generically and inferred from
+  `getSprite()` options. Image sources may be images, videos, canvases, or
+  `ImageBitmap`s, including node-canvas, and placed words keep the source
+  type, so `word.image` can be drawn directly.
+- Documented the rendering contract: image coordinates mark the sprite center,
+  and text is rendered from `x` and `y` with a centered horizontal anchor.
+- Rewrote the examples for the ESM build.
 
 ### Known limitations
 

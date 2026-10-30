@@ -8,6 +8,7 @@ const CREATE = Symbol("CloudSprite");
 // created. Placement reads only this private copy, so changing a sprite's
 // public mask cannot corrupt a layout, and objects missing from this map were
 // not created by getSprite().
+//
 // Mask data is row-major, with the leftmost pixel in the most significant
 // bit of each 32-bit word; words is the padded row stride in words. Geometry
 // is in pixels relative to the placement origin, with inclusive x0/y0 and
@@ -220,49 +221,17 @@ function textFont(sprite, state) {
   return font;
 }
 
+// The font and alignment are set for every text sprite, and drawing restores
+// the transform and stroke settings, so a failed draw cannot affect the next
+// sprite.
 function rasterizeTextSprite(sprite, font, state) {
   const context = clearContext(state);
-
-  context.save();
-  try {
-    return drawTextSprite(sprite, font, state, context);
-  } finally {
-    // A failed measure or draw must not affect the font, alignment, or
-    // transform of the next sprite.
-    context.restore();
-  }
-}
-
-function drawTextSprite(sprite, font, state, context) {
   context.font = font;
   // Match the documented rendering contract exactly: some canvases position
   // centered glyphs differently from a manually offset left-aligned run.
   context.textAlign = "center";
 
-  const metrics = context.measureText(sprite.text);
-  let width = metrics.width + 1;
-  let height = sprite.size * 2;
-  const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) &&
-    Number.isFinite(metrics.actualBoundingBoxRight) &&
-    Number.isFinite(metrics.actualBoundingBoxAscent) &&
-    Number.isFinite(metrics.actualBoundingBoxDescent);
-
-  if (hasInkBounds) {
-    // Advance width and font size do not bound italic overhang or accents.
-    // Enclose the ink symmetrically around the rendering origin before
-    // rotation; round stroke joins extend at most padding beyond the ink.
-    width = Math.max(width, 2 * (sprite.padding + Math.max(
-      Math.abs(metrics.actualBoundingBoxLeft),
-      Math.abs(metrics.actualBoundingBoxRight)
-    )));
-    height = Math.max(height, 2 * (sprite.padding + Math.max(
-      Math.abs(metrics.actualBoundingBoxAscent),
-      Math.abs(metrics.actualBoundingBoxDescent)
-    )));
-  }
-
-  ({ width, height } = rotatedExtent(width, height, sprite.rotate));
-
+  const { width, height, hasInkBounds } = textRasterSize(sprite, context.measureText(sprite.text));
   const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * 2));
   // Width-only canvas adapters cannot tell us how far glyphs actually drew,
   // so clear two extra ems past the raster before the next sprite.
@@ -342,6 +311,33 @@ function drawTextSprite(sprite, font, state, context) {
     y1: raster.y1
   };
   return raster;
+}
+
+// Returns the size of a raster that encloses the text's ink and padding at
+// the sprite's rotation, and whether the canvas reported ink bounds.
+function textRasterSize(sprite, metrics) {
+  let width = metrics.width + 1;
+  let height = sprite.size * 2;
+  const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) &&
+    Number.isFinite(metrics.actualBoundingBoxRight) &&
+    Number.isFinite(metrics.actualBoundingBoxAscent) &&
+    Number.isFinite(metrics.actualBoundingBoxDescent);
+
+  if (hasInkBounds) {
+    // Advance width and font size do not bound italic overhang or accents.
+    // Enclose the ink symmetrically around the rendering origin before
+    // rotation; round stroke joins extend at most padding beyond the ink.
+    width = Math.max(width, 2 * (sprite.padding + Math.max(
+      Math.abs(metrics.actualBoundingBoxLeft),
+      Math.abs(metrics.actualBoundingBoxRight)
+    )));
+    height = Math.max(height, 2 * (sprite.padding + Math.max(
+      Math.abs(metrics.actualBoundingBoxAscent),
+      Math.abs(metrics.actualBoundingBoxDescent)
+    )));
+  }
+
+  return { ...rotatedExtent(width, height, sprite.rotate), hasInkBounds };
 }
 
 function rasterizeImageSprite(sprite, state) {

@@ -594,7 +594,6 @@ test("failed text draws restore the context and clear any partial drawing", () =
   assert.ok(layout.getSprite("small", { size: 20 }));
   assert.throws(() => layout.getSprite("broken", { size: 80, rotate: 30 }), error => error === failure);
   assert.ok(context.getTransform().isIdentity);
-  assert.equal(context.textAlign, "start");
   const options = { size: 40, padding: 0 };
   const recovered = layout.getSprite("hello", options);
   const fresh = new CloudLayout().canvas(() => createCanvas(1, 1)).getSprite("hello", options);

@@ -197,31 +197,9 @@ function textFont(sprite, state) {
 }
 function rasterizeTextSprite(sprite, font, state) {
   const context = clearContext(state);
-  context.save();
-  try {
-    return drawTextSprite(sprite, font, state, context);
-  } finally {
-    context.restore();
-  }
-}
-function drawTextSprite(sprite, font, state, context) {
   context.font = font;
   context.textAlign = "center";
-  const metrics = context.measureText(sprite.text);
-  let width = metrics.width + 1;
-  let height = sprite.size * 2;
-  const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) && Number.isFinite(metrics.actualBoundingBoxRight) && Number.isFinite(metrics.actualBoundingBoxAscent) && Number.isFinite(metrics.actualBoundingBoxDescent);
-  if (hasInkBounds) {
-    width = Math.max(width, 2 * (sprite.padding + Math.max(
-      Math.abs(metrics.actualBoundingBoxLeft),
-      Math.abs(metrics.actualBoundingBoxRight)
-    )));
-    height = Math.max(height, 2 * (sprite.padding + Math.max(
-      Math.abs(metrics.actualBoundingBoxAscent),
-      Math.abs(metrics.actualBoundingBoxDescent)
-    )));
-  }
-  ({ width, height } = rotatedExtent(width, height, sprite.rotate));
+  const { width, height, hasInkBounds } = textRasterSize(sprite, context.measureText(sprite.text));
   const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * 2));
   const overhang = hasInkBounds ? 0 : 2 * sprite.size;
   const envelopeWidth = Math.ceil(width + overscan * 2);
@@ -285,6 +263,22 @@ function drawTextSprite(sprite, font, state, context) {
     y1: raster.y1
   };
   return raster;
+}
+function textRasterSize(sprite, metrics) {
+  let width = metrics.width + 1;
+  let height = sprite.size * 2;
+  const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) && Number.isFinite(metrics.actualBoundingBoxRight) && Number.isFinite(metrics.actualBoundingBoxAscent) && Number.isFinite(metrics.actualBoundingBoxDescent);
+  if (hasInkBounds) {
+    width = Math.max(width, 2 * (sprite.padding + Math.max(
+      Math.abs(metrics.actualBoundingBoxLeft),
+      Math.abs(metrics.actualBoundingBoxRight)
+    )));
+    height = Math.max(height, 2 * (sprite.padding + Math.max(
+      Math.abs(metrics.actualBoundingBoxAscent),
+      Math.abs(metrics.actualBoundingBoxDescent)
+    )));
+  }
+  return __spreadProps(__spreadValues({}, rotatedExtent(width, height, sprite.rotate)), { hasInkBounds });
 }
 function rasterizeImageSprite(sprite, state) {
   const context = clearContext(state);
@@ -586,7 +580,7 @@ var CloudLayout = class {
   }
 };
 function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, overflow, random) {
-  var range = anchorRange(mask, bounds, size, overflow), startX, startY, next, candidate;
+  var range = anchorRange(mask, bounds, size, overflow);
   if (!range) {
     return null;
   }
@@ -594,9 +588,8 @@ function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, over
     blocks.insert(mask, seedX, seedY);
     return { x: seedX, y: seedY };
   }
-  startX = Math.min(Math.max(seedX, range.x0), range.x1);
-  startY = Math.min(Math.max(seedY, range.y0), range.y1);
-  next = strategy(
+  var startX = Math.min(Math.max(seedX, range.x0), range.x1), startY = Math.min(Math.max(seedY, range.y0), range.y1);
+  var next = strategy(
     { x: startX, y: startY },
     {
       size: size.slice(),
@@ -609,7 +602,7 @@ function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, over
   if (typeof next !== "function") {
     throw new TypeError("strategy factories must return a candidate generator");
   }
-  var envelope = mask.envelope, limitX = Math.max(startX - range.x0, range.x1 - startX) + envelope.x1 - envelope.x0 + 1, limitY = Math.max(startY - range.y0, range.y1 - startY) + envelope.y1 - envelope.y0 + 1, insideLimit = Math.max(MIN_SEARCH_BUDGET, (range.x1 - range.x0 + 1) * (range.y1 - range.y0 + 1)), outsideLimit = Math.max(MIN_SEARCH_BUDGET, 4 * limitX * limitY), inside = 0, outside = 0;
+  var envelope = mask.envelope, candidate, limitX = Math.max(startX - range.x0, range.x1 - startX) + envelope.x1 - envelope.x0 + 1, limitY = Math.max(startY - range.y0, range.y1 - startY) + envelope.y1 - envelope.y0 + 1, insideLimit = Math.max(MIN_SEARCH_BUDGET, (range.x1 - range.x0 + 1) * (range.y1 - range.y0 + 1)), outsideLimit = Math.max(MIN_SEARCH_BUDGET, 4 * limitX * limitY), inside = 0, outside = 0;
   while (candidate = normalizeStrategyCandidate(next())) {
     if (!withinRange(range, candidate.x, candidate.y)) {
       if (Math.abs(candidate.x - startX) >= limitX && Math.abs(candidate.y - startY) >= limitY) break;
@@ -801,12 +794,12 @@ function cloneBounds(bounds) {
   ];
 }
 function archimedeanStrategy(initial, context) {
-  var spiral = archimedeanOffsets(context.aspectRatio), dt = context.random() < 0.5 ? 1 : -1, t = -dt;
+  var e = spiralAspectRatio(context.aspectRatio), dt = context.random() < 0.5 ? 1 : -1, t = -dt;
   return function() {
-    var dxdy = spiral(t += dt);
+    var angle = (t += dt) * 0.1;
     return {
-      x: initial.x + ~~dxdy[0],
-      y: initial.y + ~~dxdy[1]
+      x: initial.x + ~~(e * angle * Math.cos(angle)),
+      y: initial.y + ~~(angle * Math.sin(angle))
     };
   };
 }
@@ -900,13 +893,6 @@ function rectangularStrategy(initial, context) {
 function noneStrategy() {
   return function() {
     return null;
-  };
-}
-function archimedeanOffsets(aspectRatio) {
-  var e = spiralAspectRatio(aspectRatio);
-  return function(t) {
-    t *= 0.1;
-    return [e * t * Math.cos(t), t * Math.sin(t)];
   };
 }
 function defaultCanvasFactory() {

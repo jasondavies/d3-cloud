@@ -184,12 +184,7 @@ export default class CloudLayout {
 // Returns the first position at which the sprite fits, after inserting it into
 // the occupancy blocks there, or null.
 function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, overflow, random) {
-  var range = anchorRange(mask, bounds, size, overflow),
-      startX,
-      startY,
-      next,
-      candidate;
-
+  var range = anchorRange(mask, bounds, size, overflow);
   if (!range) {
     return null;
   }
@@ -200,10 +195,10 @@ function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, over
 
   // Search from the nearest anchor at which the sprite could be placed, so
   // seeds outside a fixed box or far from the cloud need no long search.
-  startX = Math.min(Math.max(seedX, range.x0), range.x1);
-  startY = Math.min(Math.max(seedY, range.y0), range.y1);
+  var startX = Math.min(Math.max(seedX, range.x0), range.x1),
+      startY = Math.min(Math.max(seedY, range.y0), range.y1);
 
-  next = strategy(
+  var next = strategy(
     { x: startX, y: startY },
     {
       size: size.slice(),
@@ -221,8 +216,9 @@ function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, over
   // the range, and the box or cloud the sprite is placed against, on both
   // axes; after trying at least as many candidates inside the range as it has
   // anchors; or after a long run outside it, so generators that repeat points
-  // or move along only one axis also stop.
+  // also stop.
   var envelope = mask.envelope,
+      candidate,
       limitX = Math.max(startX - range.x0, range.x1 - startX) + envelope.x1 - envelope.x0 + 1,
       limitY = Math.max(startY - range.y0, range.y1 - startY) + envelope.y1 - envelope.y0 + 1,
       insideLimit = Math.max(MIN_SEARCH_BUDGET, (range.x1 - range.x0 + 1) * (range.y1 - range.y0 + 1)),
@@ -511,19 +507,21 @@ function cloneBounds(bounds) {
   ];
 }
 
+// Steps a tenth of a radian at a time along a spiral whose radius grows by a
+// tenth of a pixel per step, stretched horizontally by the aspect ratio.
 export function archimedeanStrategy(initial, context) {
-  var spiral = archimedeanOffsets(context.aspectRatio),
+  var e = spiralAspectRatio(context.aspectRatio),
       dt = context.random() < .5 ? 1 : -1,
       // The search origin may have been clamped since the initial attempt.
       t = -dt;
 
   return function() {
-    var dxdy = spiral(t += dt);
+    var angle = (t += dt) * .1;
     // With the aspect ratio capped, offsets only exceed 32 bits after hundreds
     // of millions of candidates.
     return {
-      x: initial.x + ~~dxdy[0],
-      y: initial.y + ~~dxdy[1]
+      x: initial.x + ~~(e * angle * Math.cos(angle)),
+      y: initial.y + ~~(angle * Math.sin(angle))
     };
   };
 }
@@ -602,14 +600,6 @@ export function rectangularStrategy(initial, context) {
 export function noneStrategy() {
   return function() {
     return null;
-  };
-}
-
-function archimedeanOffsets(aspectRatio) {
-  var e = spiralAspectRatio(aspectRatio);
-  return function(t) {
-    t *= .1;
-    return [e * t * Math.cos(t), t * Math.sin(t)];
   };
 }
 
