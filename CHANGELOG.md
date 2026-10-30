@@ -5,13 +5,7 @@ All notable changes to this project will be documented in this file.
 This changelog currently documents the 2.x line. The previous stable 1.x
 release was `v1.2.9`.
 
-## [2.0.0] - Unreleased
-
-Prerelease `2.0.0-rc.0` was published on 2026-10-30 under the `next` npm tag.
-Since then, the undocumented `trimX`, `trimY`, `trimWidth`, and `trimHeight`
-fields have been removed from sprites and placed words; use `width`, `height`,
-`x0`, and `y0` instead. Canvases that read back more than one pixel per unit
-are now rejected.
+## [2.0.0] - 2026-10-30
 
 See the [1.x to 2.x migration guide](./MIGRATING.md) before upgrading.
 Dependencies constrained to 1.x continue to use the old API.

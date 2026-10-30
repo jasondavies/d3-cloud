@@ -13,11 +13,8 @@ demonstration along with implementation details.
 
 ## Install
 
-This README describes v2, currently available as a prerelease under the `next`
-npm tag:
-
 ```sh
-npm install d3-cloud@next
+npm install d3-cloud
 ```
 
 The package is ESM-only. Node.js requires version 20 or newer and a canvas

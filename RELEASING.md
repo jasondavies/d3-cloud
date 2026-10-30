@@ -5,8 +5,8 @@ release on the same version.
 
 ## Prepare
 
-1. Release 2.x from the `v2` branch and 1.x patches from the 1.x maintenance
-   branch. Start from a clean working tree.
+1. Release 2.x from `main` and 1.x patches from the `1.x` branch. Start from
+   a clean working tree.
 2. Set the version in `package.json` and `package-lock.json`:
 
    ```sh
@@ -48,9 +48,3 @@ release on the same version.
 
 4. Create the GitHub release from the tag, reusing the changelog notes. Mark
    prereleases as such.
-
-## Stable 2.0.0
-
-Before moving `latest` to 2.x, create a `1.x` branch from the last 1.x commit
-on `main` for maintenance patches. Then merge `v2` into `main`, publish
-`2.0.0` with `--tag latest`, and mark its GitHub release as the latest.
