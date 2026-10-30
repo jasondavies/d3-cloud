@@ -1,16 +1,14 @@
 export type TextSource = string | number | boolean | String;
 
-export interface ImageLike {
-  width?: number;
-  height?: number;
-  naturalWidth?: number;
-  naturalHeight?: number;
-  videoWidth?: number;
-  videoHeight?: number;
-  alt?: string;
-  src?: string;
-  currentSrc?: string;
-}
+/**
+ * A drawable image source with numeric dimensions: an image element (or
+ * node-canvas `Image`), a video element, a canvas, or an `ImageBitmap`.
+ */
+export type ImageLike =
+  | { naturalWidth: number; naturalHeight: number }
+  | { videoWidth: number; videoHeight: number }
+  | { width: number; height: number; getContext(contextId: "2d", ...args: any[]): unknown }
+  | { width: number; height: number; close(): void };
 
 export interface BoundsPoint {
   x: number;
@@ -75,9 +73,10 @@ export interface ImageSpriteOptions<D = undefined> extends SpriteOptions<D> {
   height?: number;
 }
 
-interface SpriteFields<D> {
+interface SpriteFields<D, I extends ImageLike> {
   text: string;
-  image: ImageLike | null;
+  /** The image source passed to `getSprite()`, or null for text. */
+  image: I | null;
   imageWidth: number | null;
   imageHeight: number | null;
   font: string;
@@ -100,7 +99,7 @@ interface SpriteFields<D> {
 }
 
 /** A plain object describing one successful placement. */
-export interface PlacedSprite<D = unknown> extends SpriteFields<D> {
+export interface PlacedSprite<D = unknown, I extends ImageLike = ImageLike> extends SpriteFields<D, I> {
   x: number;
   y: number;
 }
@@ -109,11 +108,11 @@ export interface PlacedSprite<D = unknown> extends SpriteFields<D> {
  * An immutable, rasterized mask created by `CloudLayout.getSprite()`. The
  * same sprite can be placed any number of times.
  */
-declare class CloudSprite<D = unknown> implements Readonly<SpriteFields<D>> {
+declare class CloudSprite<D = unknown, I extends ImageLike = ImageLike> implements Readonly<SpriteFields<D, I>> {
   private constructor();
 
   readonly text: string;
-  readonly image: ImageLike | null;
+  readonly image: I | null;
   readonly imageWidth: number | null;
   readonly imageHeight: number | null;
   readonly font: string;
@@ -134,6 +133,7 @@ declare class CloudSprite<D = unknown> implements Readonly<SpriteFields<D>> {
   readonly trimWidth: number;
   readonly trimHeight: number;
   readonly spriteWidth: number;
+  /** A copy of the mask; changing it does not affect placement. */
   readonly sprite: Uint32Array;
 }
 
@@ -145,10 +145,10 @@ declare class CloudLayout {
 
   clear(): this;
   bounds(): Bounds | null;
-  erase(word: PlacedSprite<unknown>): void;
+  erase(word: PlacedSprite<unknown, ImageLike>): void;
 
   size(): [number, number];
-  size(value: [number, number] | number): this;
+  size(value: readonly [number, number] | number): this;
 
   overflow(): boolean;
   overflow(value: boolean): this;
@@ -162,10 +162,11 @@ declare class CloudLayout {
   blockSize(): number;
   blockSize(value: number): this;
 
-  getSprite<D = undefined>(source: TextSource, options?: SpriteOptions<D>): CloudSprite<D> | null;
-  getSprite<D = undefined>(source: ImageLike, options?: ImageSpriteOptions<D>): CloudSprite<D> | null;
+  getSprite<D = undefined>(source: TextSource, options?: SpriteOptions<D> | null): CloudSprite<D, never> | null;
+  getSprite<D = undefined, I extends ImageLike = ImageLike>(source: I, options?: ImageSpriteOptions<D> | null): CloudSprite<D, I> | null;
+  getSprite<D = undefined, I extends ImageLike = ImageLike>(source: TextSource | I, options?: ImageSpriteOptions<D> | null): CloudSprite<D, I> | null;
 
-  place<D>(sprite: CloudSprite<D>, options?: PlaceOptions): PlacedSprite<D> | null;
+  place<D, I extends ImageLike>(sprite: CloudSprite<D, I>, options?: PlaceOptions | null): PlacedSprite<D, I> | null;
 }
 
 export default CloudLayout;

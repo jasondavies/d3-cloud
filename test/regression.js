@@ -8,6 +8,7 @@ import CloudLayout, {
   rectangularStrategy,
   noneStrategy
 } from "../src/index.js";
+import { spriteMask } from "../src/sprite.js";
 
 const require = createRequire(import.meta.url);
 const NODE_CANVAS_OVERLAP_FILL_STYLE = "rgba(255, 255, 255, 0.125)";
@@ -224,8 +225,37 @@ test("unavailable image and video sources ignore explicit display dimensions", (
     { width: 100, height: 100, videoWidth: 0, videoHeight: 0 }
   ]) {
     assert.equal(layout.getSprite(source), null);
-    assert.equal(layout.getSprite(source, { width: 80, height: 80 }), null);
+    assert.equal(layout.getSprite(source, { width: 80 }), null);
+    if (!source.complete) {
+      assert.equal(layout.getSprite(source, { width: 80, height: 80 }), null);
+    }
   }
+});
+
+test("loaded images without intrinsic dimensions can be drawn at an explicit size", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const canvas = createCanvas(1, 1);
+  const context = canvas.getContext("2d");
+  const drawImage = context.drawImage.bind(context);
+  // Like an SVG with only a viewBox, and a broken image, both of which report
+  // zero intrinsic dimensions once complete.
+  const unsized = { width: 0, height: 0, naturalWidth: 0, naturalHeight: 0, complete: true };
+  const broken = { ...unsized };
+  context.drawImage = (image, ...args) => {
+    if (image === unsized) return context.fillRect(...args);
+    if (image === broken) throw new DOMException("broken image", "InvalidStateError");
+    return drawImage(image, ...args);
+  };
+  const layout = new CloudLayout().canvas(() => canvas);
+  assert.equal(layout.getSprite(unsized), null);
+  assert.equal(layout.getSprite(unsized, { height: 30 }), null);
+  const sprite = layout.getSprite(unsized, { width: 40, height: 30 });
+  assert.deepEqual([sprite.width, sprite.height, sprite.imageWidth, sprite.imageHeight], [40, 30, 40, 30]);
+  assert.equal(layout.getSprite(broken, { width: 40, height: 30 }), null);
+  assert.ok(context.getTransform().isIdentity);
+  const options = { size: 40, padding: 0 };
+  const fresh = new CloudLayout().canvas(() => createCanvas(1, 1)).getSprite("hello", options);
+  assert.deepEqual(layout.getSprite("hello", options).sprite, fresh.sprite);
 });
 
 test("failed image draws restore the context and clear any partial drawing", () => {
@@ -544,7 +574,8 @@ test("under-reported ink metrics redraw text without stale pixels or a wider env
     assert.deepEqual([redrawn.width, redrawn.height], [expected.width, expected.height]);
     assert.deepEqual(redrawn.sprite, expected.sprite);
     // The search envelope stays at the measured raster width.
-    assert.ok(redrawn._rasterWidth <= expected._rasterWidth);
+    const envelopeWidth = sprite => spriteMask(sprite).envelope.x1 - spriteMask(sprite).envelope.x0;
+    assert.ok(envelopeWidth(redrawn) <= envelopeWidth(expected));
     const next = layout.getSprite("hi", { size: 20, padding: 0 });
     assert.deepEqual(next.sprite, reference.getSprite("hi", { size: 20, padding: 0 }).sprite);
   }
@@ -639,13 +670,83 @@ test("custom strategies terminate when repeating or moving along only one axis",
     assert.ok(layout.place(layout.getSprite("first", { size: 20 })));
     let attempts = 0;
     const strategy = () => () => {
-      assert.ok(attempts < 100000, "candidate budget was exceeded");
+      assert.ok(attempts < 200000, "candidate budget was exceeded");
       attempts++;
       return { x: move ? attempts * 100 : 0, y: 0 };
     };
     assert.equal(layout.place(layout.getSprite("second", { size: 20 }), { strategy }), null);
-    assert.equal(attempts, 100000);
+    assert.ok(attempts >= 100000, `stopped after ${attempts} candidates`);
   }
+});
+
+test("custom strategies may scan every position in a large box", () => {
+  const width = 600;
+  const height = 400;
+  const layout = new CloudLayout().canvas(createFakeCanvas).size([width, height]).overflow(false);
+  const block = createFakeImage(width, height - 8,
+    Array.from({ length: width * (height - 8) }, (_, i) => [i % width, Math.floor(i / width)]));
+  assert.ok(layout.place(layout.getSprite(block), { x: 0, y: -4 }));
+  // A raster scan from the top-left corner only finds the free strip at the
+  // bottom after far more than 100,000 occupied positions.
+  const scan = () => {
+    let index = 0;
+    return () => index < width * height
+      ? { x: index % width - width / 2, y: Math.floor(index++ / width) - height / 2 }
+      : null;
+  };
+  const probe = layout.getSprite(createFakeImage(4, 4,
+    Array.from({ length: 16 }, (_, i) => [i % 4, Math.floor(i / 4)])));
+  const placed = layout.place(probe, { x: 0, y: 0, strategy: scan });
+  assert.ok(placed, "the scan stopped before reaching free space");
+  assert.ok(placed.y + placed.y0 >= height / 2 - 8);
+});
+
+test("strategy candidates and explicit coordinates must be finite", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size(0);
+  const sprite = layout.getSprite("word", { size: 20 });
+  assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+  for (const value of [NaN, Infinity, "abc"]) {
+    assert.throws(() => layout.place(sprite, { x: value, y: 0 }), /finite/);
+    assert.throws(() => layout.place(sprite, { strategy: () => () => ({ x: value, y: 0 }) }), /finite/);
+  }
+  assert.throws(() => layout.place(sprite, { x: 2 ** 25, y: 0 }), RangeError);
+  assert.throws(() => layout.size(2 ** 25), RangeError);
+  assert.throws(() => layout.size(-1), RangeError);
+  assert.deepEqual(layout.size(), [0, 0]);
+});
+
+test("huge coordinates and sizes cannot hang placement", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size(2 ** 24);
+  const sprite = layout.getSprite("word", { size: 20 });
+  const edge = 2 ** 24;
+  assert.ok(layout.place(sprite, { x: edge, y: -edge }));
+  // Huge candidates are outside every possible placement and are skipped.
+  let calls = 0;
+  const far = initial => () => (++calls < 10 ? { x: 1e300, y: initial.y } : null);
+  assert.equal(layout.place(sprite, { x: 0, y: 0, strategy: far }), null);
+  assert.equal(calls, 10);
+});
+
+test("random() must be a function returning numbers in [0, 1)", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas);
+  assert.throws(() => layout.random(0.5), /random\(\) expects a function/);
+  const sprite = layout.getSprite("word", { size: 20 });
+  for (const value of [undefined, NaN, 1, -0.1, "0.5x"]) {
+    layout.random(() => value);
+    assert.throws(() => layout.place(sprite), /random\(\) must return/);
+    assert.equal(layout.bounds(), null);
+  }
+  layout.random(() => 0.5);
+  assert.ok(layout.place(sprite));
+});
+
+test("blockSize() rejects sizes that cannot be allocated", () => {
+  const layout = new CloudLayout();
+  for (const value of [0, -1, NaN, Infinity, 2 ** 31, 1e12, 4097]) {
+    assert.throws(() => layout.blockSize(value), RangeError);
+  }
+  assert.equal(layout.blockSize(4096).blockSize(), 4096);
+  assert.equal(layout.blockSize(1).blockSize(), 32);
 });
 
 test("built-in spirals give up promptly in full boxes with extreme aspect ratios", () => {
@@ -1488,6 +1589,129 @@ for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
     }
   });
 }
+
+test("fonts the canvas rejects throw instead of rasterizing a mismatched mask", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const layout = new CloudLayout().canvas(() => createCanvas(1, 1));
+  for (const options of [{ font: "3Dumb" }, { weight: 1001 }, { font: {} }]) {
+    assert.throws(() => layout.getSprite("word", { size: 100, ...options }), /rejected by the canvas/);
+  }
+  // The same valid font can be used repeatedly.
+  for (let i = 0; i < 2; i++) {
+    assert.ok(layout.getSprite("word", { size: 100, font: "serif" }).height > 40);
+  }
+});
+
+test("a failed readback, such as from a tainted canvas, does not break later sprites", () => {
+  const canvases = [];
+  const layout = new CloudLayout().canvas(() => {
+    const canvas = createFakeCanvas();
+    canvases.push(canvas);
+    return canvas;
+  });
+  assert.ok(layout.getSprite("before", { size: 20 }));
+  const context = canvases[0].getContext("2d");
+  const tainted = createFakeImage(4, 4, [[0, 0]]);
+  const drawImage = context.drawImage;
+  context.drawImage = function(image, ...args) {
+    if (image === tainted) {
+      this.getImageData = () => { throw new DOMException("tainted", "SecurityError"); };
+    }
+    return drawImage.call(this, image, ...args);
+  };
+  assert.throws(() => layout.getSprite(tainted), /tainted/);
+  assert.ok(layout.getSprite("after", { size: 20 }));
+  assert.equal(canvases.length, 2);
+});
+
+test("layouts sharing one canvas do not contaminate each other's masks", () => {
+  const { createCanvas } = loadNodeCanvas();
+  const shared = createCanvas(1, 1);
+  const a = new CloudLayout().canvas(() => shared);
+  const b = new CloudLayout().canvas(() => shared);
+  const expected = new CloudLayout().canvas(() => createCanvas(1, 1)).getSprite("o", { size: 20 });
+  assert.ok(b.getSprite("o", { size: 20 }));
+  assert.ok(a.getSprite("WWWWWWWWWW", { size: 120, rotate: 30 }));
+  const sprite = b.getSprite("o", { size: 20 });
+  assert.deepEqual([sprite.width, sprite.height], [expected.width, expected.height]);
+  assert.deepEqual(sprite.sprite, expected.sprite);
+});
+
+test("placement ignores forged sprites and changes to a sprite's public mask", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size(0).strategy("none");
+  assert.throws(() => layout.place(Object.create(CloudSprite.prototype)), /CloudSprite from getSprite/);
+  const square = createFakeImage(8, 8, Array.from({ length: 64 }, (_, i) => [i % 8, Math.floor(i / 8)]));
+  const sprite = layout.getSprite(square);
+  assert.notEqual(layout.getSprite(square).sprite, sprite.sprite, "each sprite has its own mask copy");
+  const first = layout.place(sprite, { x: 0, y: 0 });
+  assert.ok(first);
+  sprite.sprite.fill(0);
+  assert.equal(layout.place(sprite, { x: 0, y: 0 }), null);
+  assert.ok(layout.place(sprite, { x: 9, y: 0 }));
+  layout.erase(first);
+  assert.ok(layout.place(sprite, { x: 0, y: 0 }), "erase freed the original pixels");
+  assert.equal(layout.place(sprite, { x: 9, y: 0 }), null, "erase kept the neighbor's pixels");
+});
+
+test("sprite options are validated", () => {
+  // Invalid sources are rejected before the default canvas factory runs.
+  assert.throws(() => new CloudLayout().getSprite(null), /text or an image-like source/);
+  const layout = new CloudLayout().canvas(createFakeCanvas);
+  for (const options of [{ size: NaN }, { fontSize: Infinity }, { rotate: "x" }, { padding: NaN }]) {
+    assert.throws(() => layout.getSprite("word", options), /finite/);
+  }
+  assert.throws(() => layout.getSprite("word", { padding: -1 }), RangeError);
+  for (const size of [0, 0.5, -10]) {
+    assert.equal(layout.getSprite("word", { size }), null);
+  }
+  const image = createFakeImage(4, 4, [[1, 1]]);
+  assert.ok(layout.getSprite(image, { size: 0 }), "images do not use size");
+  assert.equal(layout.getSprite(image, { width: 0.5 }), null);
+  assert.throws(() => layout.getSprite(image, { width: NaN }), /finite/);
+  const sprite = layout.getSprite("word", null);
+  assert.ok(sprite);
+  assert.ok(layout.place(sprite, null));
+});
+
+test("place() reads each option once", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size(0);
+  const reads = { x: 0, y: 0, strategy: 0 };
+  const options = {};
+  for (const [key, value] of [["x", 0], ["y", 0], ["strategy", "none"]]) {
+    Object.defineProperty(options, key, { get() { reads[key]++; return value; } });
+  }
+  assert.ok(layout.place(layout.getSprite("word", { size: 20 }), options));
+  assert.deepEqual(reads, { x: 1, y: 1, strategy: 1 });
+});
+
+test("small words reach a small cloud from anywhere in the seed box", () => {
+  const { createCanvas } = loadNodeCanvas();
+  for (const strategy of [archimedeanStrategy, rectangularStrategy]) {
+    for (const rx of [0.01, 0.6, 0.8, 0.99]) {
+      for (const ry of [0.01, 0.5, 0.99]) {
+        const layout = new CloudLayout().canvas(() => createCanvas(1, 1)).size([960, 500])
+          .strategy(strategy).random(createSequenceRandom([0.5, 0.5, rx, ry]));
+        const sprite = layout.getSprite("i", { size: 10 });
+        assert.ok(layout.place(sprite));
+        assert.ok(layout.place(sprite), `${strategy.name} missed the cloud from ${rx},${ry}`);
+      }
+    }
+  }
+});
+
+test("the rectangular spiral fills tall and wide boxes equally densely", () => {
+  const square = createFakeImage(4, 4, Array.from({ length: 16 }, (_, i) => [i % 4, Math.floor(i / 4)]));
+  const counts = [[400, 40], [40, 400]].map(size => {
+    const layout = new CloudLayout().canvas(createFakeCanvas).size(size).overflow(false)
+      .strategy("rectangular").random(createSeededRandom(3));
+    const sprite = layout.getSprite(square);
+    let count = 0;
+    while (layout.place(sprite)) count++;
+    return count;
+  });
+  // The box holds at most 1,000 squares.
+  assert.ok(counts[0] > 500 && counts[1] > 500, `placed ${counts}`);
+});
 
 function createFakeCanvas() {
   const boxes = [];

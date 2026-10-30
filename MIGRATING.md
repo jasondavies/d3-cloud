@@ -131,8 +131,8 @@ that the whole layout should be discarded.
 | `.on("word", listener)` | Call the listener after a successful `place()` |
 | `.on("end", listener)` | Call the listener after your loop, with results and `layout.bounds()` |
 | `.stop()`, `.timeInterval()` | Own the scheduling and cancellation, or use a worker |
-| `.spiral("rectangular")` | `.strategy("rectangular")` |
-| `.random(fn)` | `.random(fn)`; placement sequences can change |
+| `.spiral("rectangular")` | `.strategy("rectangular")`; now samples a 4-pixel grid at any aspect ratio |
+| `.random(fn)` | `.random(fn)`; it must return numbers in `[0, 1)`, and placement sequences can change |
 | `.canvas(factory)` | `.canvas(factory)`; a factory function is required |
 | Calling `.start()` again | `layout.clear()`, or construct a new layout |
 
@@ -163,6 +163,9 @@ depend on the original array index, evaluate them before sorting.
 - Explicit placement coordinates and custom strategy candidates are floored
   to whole pixels. Reusing the same random seed does not guarantee the same
   layout as v1; packing and rasterization have changed.
+- V1 silently replaced invalid values, such as a `NaN` font size or a font
+  string the canvas could not parse. V2 throws, so check your accessors and
+  font names; quote family names that start with a digit.
 
 See the [rendering examples](./README.md#rendering-placed-words) and test with
 your real fonts, rotations, long words, and fixed-size containers. Ensure fonts
@@ -256,5 +259,7 @@ function adaptSpiral(spiral) {
 ```
 
 Pass `adaptSpiral(yourSpiral)` to `.strategy()`. The initial seed is tried
-before the strategy is called, and v2 derives its own search limit. This
+before the strategy is called; if it fails, `initial` is the nearest position
+where the sprite could be placed, which may differ from the seed. V2 derives
+its own search limit. This
 adapts the interface without promising identical v1 placement.

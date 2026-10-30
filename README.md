@@ -157,13 +157,22 @@ A sprite is a mask: it holds the source, its styling, its trimmed geometry
 (`width`, `height`, `x0`, `y0`, `x1`, `y1`) and its pixels, but no position.
 Rasterization is the expensive step, so prepare a sprite once and place it as
 many times as you like, in this or any other layout. Sprites are frozen and
-can only be created by `getSprite()`.
+can only be created by `getSprite()`. The `sprite` field is a copy of the
+packed mask; placement uses a private copy, so changing it has no effect.
+Sprites work with any layout from the same copy of d3-cloud, but the package
+entry point and `build/d3-cloud.js` are separate copies whose sprites and
+layouts cannot be mixed.
 
 The optional *options* object may include `font`, `style`, `weight`, `rotate`,
 `size`, `padding`, and `datum`. The defaults are `font: "serif"`,
 `style: "normal"`, `weight: "normal"`, `size: 1`, `rotate: 0`, and
 `padding: 1`. `fontStyle`, `fontWeight`, and `fontSize` are accepted as aliases.
-Other option fields are ignored.
+Other option fields are ignored, and `null` is the same as no options.
+Numeric options must be finite, and `padding` must not be negative. Text sizes
+are truncated to whole pixels, and text smaller than 1 pixel returns `null`.
+If the canvas rejects the resulting CSS font, for example an unquoted family
+name starting with a digit or a weight above 1000, `getSprite()` throws rather
+than rasterizing a mask in the canvas's previous font.
 
 Use `datum` to carry your own data, such as the input word, a link, or an ID.
 It is stored by reference on the sprite and on every word placed from it, and
@@ -175,6 +184,10 @@ pixels are ignored automatically. For image sources, `options.width` and
 dimension is provided, the other is derived from the source aspect ratio.
 `options.text` sets the sprite's text, which defaults to the image's `alt`.
 Images and videos use their intrinsic dimensions rather than their display size.
+A loaded image without intrinsic dimensions, such as an SVG with only a
+`viewBox`, is drawn at the given `width` and `height` if both are specified;
+if the browser cannot draw it, for example because it is broken, `getSprite()`
+returns `null`.
 
 `padding` applies only to text. Image masks use the source alpha unchanged;
 adding transparent margins does not create occupied padding pixels.
@@ -184,19 +197,26 @@ padding. Packed rows are aligned internally without adding empty space to
 reported bounds or bounded placement checks.
 `null` can indicate empty text, an unloaded or empty image, or a raster exceeding
 the 2048-pixel scratch dimensions. Load images and fonts before preparing sprites.
+If drawing or reading the scratch canvas throws, for example because a
+cross-origin image tainted it, the error is rethrown and the layout requests a
+new canvas from its factory for later sprites.
 
 <a name="place" href="#place">#</a> <b>place</b>(<i>sprite</i>[, <i>options</i>])
 
 Attempts to place *sprite* and returns a new placed word, or `null` if it could
 not be placed. The sprite itself is not changed, so it can be placed again;
-for example, this fills the remaining space with one word at decreasing sizes:
+for example, this fills a fixed box with one word at decreasing sizes:
 
 ```js
+layout.overflow(false);
 for (let size = 80; size >= 8; size -= 4) {
   const sprite = layout.getSprite("fill", { size, font: "Impact" });
   while (sprite && layout.place(sprite)) {}
 }
 ```
+
+With the default `overflow(true)` the cloud can always grow, so a loop like
+this would never end.
 
 The placed word is a plain object with the sprite's `text`, `image`,
 `imageWidth`, `imageHeight`, `font`, `style`, `weight`, `rotate`, `size`,
@@ -208,7 +228,15 @@ Before posting or serializing a word, omit anything that cannot be cloned.
 If specified, the optional *options* object may include `x` and `y` to control
 the initial placement attempt before the strategy search begins. Any omitted axis
 still uses the normal seeded position from the centered half-size seed box
-derived from `size()`. Explicit coordinates are rounded down to integer pixels.
+derived from `size()`. Explicit coordinates must be finite and within
+±16,777,216, and are rounded down to integer pixels.
+
+Once the layout has placed words, every new word must overlap the bounding box
+of the cloud (with a little horizontal slack for text and a few pixels on each
+side for images), and with `overflow(false)` it must also fit inside the box.
+If the initial position fails, the search starts from the nearest position
+that satisfies these constraints, so seeds far from the cloud or outside the
+box are not a problem.
 
 If specified, `options.strategy` overrides the layout-level default strategy
 for this placement only.
@@ -235,9 +263,10 @@ used both for the aspect ratio of the built-in `"archimedean"` and
 `"rectangular"` strategies and for a centered initial seed box at half that
 width and height.
 
-If not specified, returns the current layout size, which defaults to
-`[256, 256]`. Use `[0, 0]` together with `overflow(true)` to start every word
-exactly at the origin without any bounding box.
+Each dimension must be from 0 to 16,777,216. If not specified, returns the
+current layout size, which defaults to `[256, 256]`. Use `[0, 0]` together
+with `overflow(true)` to start every word exactly at the origin without any
+bounding box.
 
 <a name="overflow" href="#overflow">#</a> <b>overflow</b>([<i>overflow</i>])
 
@@ -264,17 +293,25 @@ function(initial, context) {
 }
 ```
 
-The `initial` argument is the initial `{x, y}` seed for this placement.
+The `initial` argument is the `{x, y}` position the search starts from: the
+seed for this placement, moved if necessary to the nearest position where the
+sprite could be placed, as described under [place](#place).
 `context` includes `size`, `aspectRatio`, `bounds`, `overflow`, and `random`.
 
-Each generated candidate must be returned as `{x, y}`. Candidate coordinates
-are rounded down to integer pixels. Returning `null` stops the search.
-Built-in and custom strategies follow the same search limits. A search stops
-once a candidate is beyond the layout's search distance on both axes, or after
-100,000 consecutive candidates that make no progress on the axis furthest from
-that distance; stopping returns `null`. This limits
-repeated or one-axis searches, but cannot interrupt a generator that never
-returns from an individual call.
+Each generated candidate must be returned as `{x, y}` with finite coordinates,
+which are rounded down to integer pixels. Returning `null` stops the search.
+Built-in and custom strategies follow the same search limits. Candidates where
+the sprite could not be placed are skipped without a collision check. A search
+stops, returning `null`, once a candidate is beyond every such position on both
+axes by more than the sprite's own size; after as many candidates where it could
+be placed as there are such positions, or 100,000 if that is more; or after a
+long run of candidates where it could not. These limits end searches that
+repeat points or move along only one axis, but cannot interrupt a generator
+that never returns from an individual call.
+
+The archimedean spiral is stretched to the aspect ratio. The rectangular
+spiral visits every point of a 4-pixel grid in rings shaped to the aspect
+ratio.
 
 The built-in strategies are also exported as `archimedeanStrategy`,
 `rectangularStrategy`, and `noneStrategy`, so callers do not need to use string
@@ -289,18 +326,19 @@ built-in `archimedeanStrategy`.
 If specified, sets the internal random number generator, used for selecting the
 initial position of each sprite inside `size()`, and the
 clockwise/counterclockwise direction of the built-in strategies during
-placement. This
-should return a number in the range `[0, 1)`.
+placement. This must be a function returning a number in the range `[0, 1)`;
+`place()` throws a `RangeError` without changing the layout if a seed is
+outside it.
 
 If not specified, returns the current random number generator, which defaults
 to `Math.random`.
 
 <a name="blocksize" href="#blocksize">#</a> <b>blockSize</b>([<i>size</i>])
 
-If specified, sets the sparse block size used during placement. Block sizes
-are rounded up to the next multiple of 32 pixels so they align with the
-packed sprite representation. If not specified, returns the current size,
-which defaults to `512`.
+If specified, sets the sparse block size used during placement, from 1 to
+4096 pixels. Block sizes are rounded up to the next multiple of 32 pixels so
+they align with the packed sprite representation. If not specified, returns
+the current size, which defaults to `512`.
 
 <a name="canvas" href="#canvas">#</a> <b>canvas</b>([<i>canvas</i>])
 
@@ -314,6 +352,9 @@ function() { return document.createElement("canvas"); }
 
 When using Node.js, you will almost definitely override this default, e.g.
 using the [canvas module](https://www.npmjs.com/package/canvas).
+
+The factory is called once, and again only after a sprite fails to draw. Layouts
+may share one canvas, but nothing else should draw to it.
 
 ## Benchmarks
 

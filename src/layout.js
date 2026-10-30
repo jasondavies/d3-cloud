@@ -1,10 +1,13 @@
 // Word cloud layout by Jason Davies, https://www.jasondavies.com/wordcloud/
 // Algorithm due to Jonathan Feinberg, https://s3.amazonaws.com/static.mrfeinberg.com/bv_ch03.pdf
 
-import CloudSprite, { createSprite, createSpriteContext } from "./sprite.js";
+import { createSpriteContext, rasterizeSprite, spriteFields, spriteMask } from "./sprite.js";
 
-const IMAGE_SLACK = 4;
-const STALL_LIMIT = 100000;
+// Coordinates and layout sizes are limited so that block indices and strategy
+// offsets remain exact integers.
+const MAX_COORDINATE = 1 << 24;
+const MAX_BLOCK_SIZE = 4096;
+const MIN_SEARCH_BUDGET = 100000;
 
 const STRATEGIES = {
   archimedean: archimedeanStrategy,
@@ -23,7 +26,7 @@ export default class CloudLayout {
     this._spriteContext = null;
     this._bounds = null;
     this._blocks = createOccupancyBlocks(this._blockSize);
-    // Maps each placed word returned by place() to the sprite and position
+    // Maps each placed word returned by place() to the mask and position
     // needed to erase it. Results that are dropped are garbage collected.
     this._placements = new WeakMap();
   }
@@ -79,6 +82,9 @@ export default class CloudLayout {
     if (!arguments.length) {
       return this._random;
     }
+    if (typeof _ !== "function") {
+      throw new TypeError("random() expects a function");
+    }
     this._random = _;
     return this;
   }
@@ -99,12 +105,27 @@ export default class CloudLayout {
     return this;
   }
 
-  getSprite(source, options = {}) {
-    if (!options || typeof options !== "object" || Array.isArray(options)) {
+  getSprite(source, options) {
+    if (options == null) {
+      options = {};
+    } else if (typeof options !== "object" || Array.isArray(options)) {
       throw new TypeError("getSprite() expects an options object");
     }
 
-    return createSprite(source, options, this._getContext());
+    const fields = spriteFields(source, options);
+    if (!fields) {
+      return null;
+    }
+    const state = this._getContext();
+    try {
+      return rasterizeSprite(fields, state);
+    } catch (error) {
+      // A failed draw or readback, for example after a cross-origin image
+      // taints the canvas, must not break later sprites, so start over with a
+      // new canvas from the factory.
+      this._spriteContext = null;
+      throw error;
+    }
   }
 
   erase(word) {
@@ -113,32 +134,36 @@ export default class CloudLayout {
       throw new Error("erase() expects a word returned by place() on this layout since it was last cleared");
     }
 
-    this._blocks.remove(placement.sprite, placement.x, placement.y);
+    this._blocks.remove(placement.mask, placement.x, placement.y);
     this._placements.delete(word);
     if (this._blocks.isEmpty()) {
       this._bounds = null;
     }
   }
 
-  place(sprite, options = undefined) {
-    if (!(sprite instanceof CloudSprite)) {
-      throw new TypeError("place() expects a CloudSprite from getSprite()");
+  place(sprite, options) {
+    const mask = spriteMask(sprite);
+    if (!mask) {
+      throw new TypeError("place() expects a CloudSprite from getSprite() on a layout from the same copy of d3-cloud");
     }
-    if (options != null && (!options || typeof options !== "object" || Array.isArray(options))) {
+    if (options == null) {
+      options = {};
+    } else if (typeof options !== "object" || Array.isArray(options)) {
       throw new TypeError("place() expects an options object");
     }
 
-    const strategy = options?.strategy == null ? this._strategy : resolveStrategy(options.strategy);
-    const x = options?.x == null ? seedCoordinate(this._size[0], this._random) : normalizeCoordinate(options.x);
-    const y = options?.y == null ? seedCoordinate(this._size[1], this._random) : normalizeCoordinate(options.y);
-    const position = tryPlaceSprite(this._blocks, sprite, x, y, this._bounds, strategy, this._size, this._overflow, this._random);
+    const { x: optionX, y: optionY, strategy: optionStrategy } = options;
+    const strategy = optionStrategy == null ? this._strategy : resolveStrategy(optionStrategy);
+    const x = optionX == null ? seedCoordinate(this._size[0], this._random) : placeCoordinate(optionX);
+    const y = optionY == null ? seedCoordinate(this._size[1], this._random) : placeCoordinate(optionY);
+    const position = tryPlaceSprite(this._blocks, mask, x, y, this._bounds, strategy, this._size, this._overflow, this._random);
     if (!position) {
       return null;
     }
 
-    extendBounds(this, sprite, position.x, position.y);
+    extendBounds(this, mask, position.x, position.y);
     const word = createPlacedWord(sprite, position.x, position.y);
-    this._placements.set(word, { sprite, x: position.x, y: position.y });
+    this._placements.set(word, { mask, x: position.x, y: position.y });
     return word;
   }
 
@@ -152,30 +177,31 @@ export default class CloudLayout {
 
 // Returns the first position at which the sprite fits, after inserting it into
 // the occupancy blocks there, or null.
-function tryPlaceSprite(blocks, sprite, startX, startY, bounds, strategy, size, overflow, random) {
-  var deltaLimit = resolveMaxDelta(sprite, startX, startY, bounds, size, overflow),
-      limitX = deltaLimit[0],
-      limitY = deltaLimit[1],
-      clipBounds = overflow ? null : sizeBounds(size),
-      aspectRatio = sizeAspectRatio(size),
+function tryPlaceSprite(blocks, mask, seedX, seedY, bounds, strategy, size, overflow, random) {
+  var range = anchorRange(mask, bounds, size, overflow),
+      startX,
+      startY,
       next,
-      candidate,
-      dx,
-      dy,
-      progress;
+      candidate;
 
-  if ((!clipBounds || withinBounds(sprite, startX, startY, clipBounds)) &&
-      (!bounds || collideRects(sprite, startX, startY, bounds)) &&
-      !blocks.collides(sprite, startX, startY)) {
-    blocks.insert(sprite, startX, startY);
-    return { x: startX, y: startY };
+  if (!range) {
+    return null;
   }
+  if (withinRange(range, seedX, seedY) && !blocks.collides(mask, seedX, seedY)) {
+    blocks.insert(mask, seedX, seedY);
+    return { x: seedX, y: seedY };
+  }
+
+  // Search from the nearest anchor at which the sprite could be placed, so
+  // seeds outside a fixed box or far from the cloud need no long search.
+  startX = Math.min(Math.max(seedX, range.x0), range.x1);
+  startY = Math.min(Math.max(seedY, range.y0), range.y1);
 
   next = strategy(
     { x: startX, y: startY },
     {
       size: size.slice(),
-      aspectRatio,
+      aspectRatio: sizeAspectRatio(size),
       bounds: cloneBounds(bounds),
       overflow,
       random
@@ -185,51 +211,78 @@ function tryPlaceSprite(blocks, sprite, startX, startY, bounds, strategy, size, 
     throw new TypeError("strategy factories must return a candidate generator");
   }
 
-  // Stop once a candidate is beyond the limits on both axes. Progress is
-  // measured on the axis furthest from its limit, so generators that repeat
-  // points or move along only one axis stop after a run without progress.
-  var reach = 0,
-      stalled = 0;
+  // Candidates outside the range cannot be placed. Stop once one is beyond
+  // the range, and the box or cloud the sprite is placed against, on both
+  // axes; after trying at least as many candidates inside the range as it has
+  // anchors; or after a long run outside it, so generators that repeat points
+  // or move along only one axis also stop.
+  var envelope = mask.envelope,
+      limitX = Math.max(startX - range.x0, range.x1 - startX) + envelope.x1 - envelope.x0 + 1,
+      limitY = Math.max(startY - range.y0, range.y1 - startY) + envelope.y1 - envelope.y0 + 1,
+      insideLimit = Math.max(MIN_SEARCH_BUDGET, (range.x1 - range.x0 + 1) * (range.y1 - range.y0 + 1)),
+      outsideLimit = Math.max(MIN_SEARCH_BUDGET, 4 * limitX * limitY),
+      inside = 0,
+      outside = 0;
   while ((candidate = normalizeStrategyCandidate(next()))) {
-    dx = Math.abs(candidate.x - startX);
-    dy = Math.abs(candidate.y - startY);
-
-    if (dx >= limitX && dy >= limitY) break;
-    progress = Math.min(dx / limitX, dy / limitY);
-    if (progress > reach) {
-      reach = progress;
-      stalled = 0;
-    } else if (++stalled >= STALL_LIMIT) {
-      break;
+    if (!withinRange(range, candidate.x, candidate.y)) {
+      if (Math.abs(candidate.x - startX) >= limitX && Math.abs(candidate.y - startY) >= limitY) break;
+      if (++outside >= outsideLimit) break;
+      continue;
     }
-
-    if (clipBounds && !withinBounds(sprite, candidate.x, candidate.y, clipBounds)) continue;
-
-    if (!bounds || collideRects(sprite, candidate.x, candidate.y, bounds)) {
-      if (!blocks.collides(sprite, candidate.x, candidate.y)) {
-        blocks.insert(sprite, candidate.x, candidate.y);
-        return candidate;
-      }
+    outside = 0;
+    if (++inside > insideLimit) break;
+    if (!blocks.collides(mask, candidate.x, candidate.y)) {
+      blocks.insert(mask, candidate.x, candidate.y);
+      return candidate;
     }
   }
   return null;
 }
 
-function createOccupancyBlocks(cellSize) {
+// Returns the integer anchors at which the sprite could be placed: inside the
+// box when overflow is disabled, and with its envelope overlapping the cloud
+// bounds once there are any, or null if there are none. Without overflow or
+// bounds the layout is empty, so the seed itself always fits.
+function anchorRange(mask, bounds, size, overflow) {
+  var x0 = -MAX_COORDINATE,
+      y0 = -MAX_COORDINATE,
+      x1 = MAX_COORDINATE,
+      y1 = MAX_COORDINATE,
+      envelope = mask.envelope;
+
+  if (!overflow) {
+    x0 = Math.max(x0, Math.ceil(-size[0] / 2 - mask.x0));
+    y0 = Math.max(y0, Math.ceil(-size[1] / 2 - mask.y0));
+    x1 = Math.min(x1, Math.floor(size[0] / 2 - mask.x1));
+    y1 = Math.min(y1, Math.floor(size[1] / 2 - mask.y1));
+  }
+  if (bounds) {
+    x0 = Math.max(x0, Math.floor(bounds[0].x - envelope.x1) + 1);
+    y0 = Math.max(y0, Math.floor(bounds[0].y - envelope.y1) + 1);
+    x1 = Math.min(x1, Math.ceil(bounds[1].x - envelope.x0) - 1);
+    y1 = Math.min(y1, Math.ceil(bounds[1].y - envelope.y0) - 1);
+  }
+  return x0 <= x1 && y0 <= y1 ? { x0, y0, x1, y1 } : null;
+}
+
+function withinRange(range, x, y) {
+  return x >= range.x0 && x <= range.x1 && y >= range.y0 && y <= range.y1;
+}
+
+function createOccupancyBlocks(blockSize) {
   const blocks = new Map();
-  const blockSize = normalizeBlockSize(cellSize);
   const blockWords = blockSize >>> 5;
 
   // Applies visit to each block region the sprite overlaps at x, y, stopping
   // early if it returns true. Missing blocks are created when inserting, and
   // emptied blocks are pruned when removing.
-  function visitBlocks(sprite, x, y, visit, create, prune) {
-    var data = sprite.sprite,
-        words = spriteWords(sprite),
-        left = x + sprite.x0,
-        top = y + sprite.y0,
-        right = x + sprite.x1,
-        bottom = y + sprite.y1,
+  function visitBlocks(mask, x, y, visit, create, prune) {
+    var data = mask.data,
+        words = mask.words,
+        left = x + mask.x0,
+        top = y + mask.y0,
+        right = x + mask.x1,
+        bottom = y + mask.y1,
         firstX = Math.floor(left / blockSize),
         lastX = Math.floor((right - 1) / blockSize),
         firstY = Math.floor(top / blockSize),
@@ -285,14 +338,14 @@ function createOccupancyBlocks(cellSize) {
     isEmpty() {
       return blocks.size === 0;
     },
-    collides(sprite, x, y) {
-      return visitBlocks(sprite, x, y, packedRegionCollides, false, false);
+    collides(mask, x, y) {
+      return visitBlocks(mask, x, y, packedRegionCollides, false, false);
     },
-    insert(sprite, x, y) {
-      visitBlocks(sprite, x, y, stampPackedRegion, true, false);
+    insert(mask, x, y) {
+      visitBlocks(mask, x, y, stampPackedRegion, true, false);
     },
-    remove(sprite, x, y) {
-      visitBlocks(sprite, x, y, clearPackedRegion, false, true);
+    remove(mask, x, y) {
+      visitBlocks(mask, x, y, clearPackedRegion, false, true);
     }
   };
 }
@@ -417,84 +470,17 @@ function isZeroBlock(block) {
   return true;
 }
 
-function resolveMaxDelta(sprite, x, y, bounds, size, overflow) {
-  if (!overflow) {
-    // A fixed box cannot benefit from searching farther as the cloud grows,
-    // and no anchor farther along either axis than the box allows can fit.
-    // Include the distance to fitting anchors for explicit seeds outside it;
-    // the extra pixel keeps anchors on the limit eligible for placement.
-    return [
-      Math.max(
-        size[0],
-        Math.abs(x + sprite.x0 + size[0] / 2) + 1,
-        Math.abs(x + sprite.x1 - size[0] / 2) + 1
-      ),
-      Math.max(
-        size[1],
-        Math.abs(y + sprite.y0 + size[1] / 2) + 1,
-        Math.abs(y + sprite.y1 - size[1] / 2) + 1
-      )
-    ];
-  }
-
-  var wordExtent = Math.max(sprite.width || 0, sprite.height || 0),
-      boundsExtent = bounds
-        ? Math.max(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y)
-        : 0,
-      limit = Math.max(256, wordExtent * 4, boundsExtent * 2);
-  if (!bounds) {
-    return [limit, limit];
-  }
-
-  // Seeds may lie far from the cloud, so also reach every anchor at which
-  // the sprite still overlaps the current bounds.
-  return [
-    Math.max(
-      limit,
-      Math.abs(x + sprite.x0 - bounds[1].x) + 1,
-      Math.abs(x + sprite.x1 - bounds[0].x) + 1
-    ),
-    Math.max(
-      limit,
-      Math.abs(y + sprite.y0 - bounds[1].y) + 1,
-      Math.abs(y + sprite.y1 - bounds[0].y) + 1
-    )
-  ];
-}
-
 function createPlacedWord(sprite, x, y) {
-  return {
-    text: sprite.text,
-    image: sprite.image,
-    imageWidth: sprite.imageWidth,
-    imageHeight: sprite.imageHeight,
-    font: sprite.font,
-    style: sprite.style,
-    weight: sprite.weight,
-    rotate: sprite.rotate,
-    size: sprite.size,
-    padding: sprite.padding,
-    datum: sprite.datum,
-    x,
-    y,
-    width: sprite.width,
-    height: sprite.height,
-    x0: sprite.x0,
-    y0: sprite.y0,
-    x1: sprite.x1,
-    y1: sprite.y1,
-    trimX: sprite.trimX,
-    trimY: sprite.trimY,
-    trimWidth: sprite.trimWidth,
-    trimHeight: sprite.trimHeight
-  };
+  // The placed word copies the sprite's public fields, except its mask.
+  const { sprite: _mask, spriteWidth: _spriteWidth, ...fields } = sprite;
+  return { ...fields, x, y };
 }
 
-function extendBounds(layout, sprite, x, y) {
-  var left = x + sprite.x0,
-      top = y + sprite.y0,
-      right = x + sprite.x1,
-      bottom = y + sprite.y1,
+function extendBounds(layout, mask, x, y) {
+  var left = x + mask.x0,
+      top = y + mask.y0,
+      right = x + mask.x1,
+      bottom = y + mask.y1,
       bounds = layout._bounds;
   if (!bounds) {
     layout._bounds = [{ x: left, y: top }, { x: right, y: bottom }];
@@ -516,33 +502,6 @@ function cloneBounds(bounds) {
   ];
 }
 
-function collideRects(a, x, y, b) {
-  // Rectangle overlap keeps the cloud compact, but tight or opaque masks
-  // must be allowed beside it without their pixels overlapping. Text keeps
-  // the horizontal slack of its measured raster, centered on the origin.
-  // Image masks get a small envelope on every side. The rectangular spiral
-  // always steps 4px vertically, so it can land beside the cloud on that
-  // axis even when wide layouts stretch its horizontal step past the slack.
-  var x0, x1, y0, y1;
-  if (a._rasterWidth == null) {
-    x0 = a.x0 - IMAGE_SLACK;
-    x1 = a.x1 + IMAGE_SLACK;
-    y0 = a.y0 - IMAGE_SLACK;
-    y1 = a.y1 + IMAGE_SLACK;
-  } else {
-    x0 = -(a._rasterWidth >> 1);
-    x1 = Math.max(a.x1, x0 + a._rasterWidth);
-    x0 = Math.min(a.x0, x0);
-    y0 = a.y0;
-    y1 = a.y1;
-  }
-  return x + x1 > b[0].x && x + x0 < b[1].x && y + y1 > b[0].y && y + y0 < b[1].y;
-}
-
-function withinBounds(a, x, y, b) {
-  return x + a.x0 >= b[0].x && x + a.x1 <= b[1].x && y + a.y0 >= b[0].y && y + a.y1 <= b[1].y;
-}
-
 export function archimedeanStrategy(initial, context) {
   var spiral = archimedeanOffsets(context.aspectRatio),
       dt = context.random() < .5 ? 1 : -1,
@@ -558,15 +517,23 @@ export function archimedeanStrategy(initial, context) {
 }
 
 export function rectangularStrategy(initial, context) {
-  var spiral = rectangularOffsets(context.aspectRatio),
-      dt = context.random() < .5 ? 1 : -1,
-      t = 0;
+  var rings = rectangularRings(context.aspectRatio),
+      // Mirroring the rings vertically reverses the spiral's direction.
+      sign = context.random() < .5 ? 1 : -1,
+      ring = 0,
+      points = rings.get(0),
+      index = 0;
 
   return function() {
-    var dxdy = spiral(t += dt);
+    while (index === points.length) {
+      points = rings.get(++ring);
+      index = 0;
+    }
+    var x = points[index++],
+        y = points[index++];
     return {
-      x: initial.x + ~~dxdy[0],
-      y: initial.y + ~~dxdy[1]
+      x: initial.x + 4 * x,
+      y: initial.y + 4 * sign * y
     };
   };
 }
@@ -585,21 +552,65 @@ function archimedeanOffsets(aspectRatio) {
   };
 }
 
-function rectangularOffsets(aspectRatio) {
-  var dy = 4,
-      dx = dy * normalizeAspectRatio(aspectRatio),
-      x = 0,
-      y = 0;
-  return function(t) {
-    var sign = t < 0 ? -1 : 1;
-    switch ((Math.sqrt(1 + 4 * sign * t) - sign) & 3) {
-      case 0:  x += dx; break;
-      case 1:  y += dy; break;
-      case 2:  x -= dx; break;
-      default: y -= dy; break;
+// Rings depend only on the aspect ratio, so they are shared by every search
+// with the same ratio. Only the most recent ratios are kept.
+var rectangularRingCache = new Map();
+
+function rectangularRings(aspectRatio) {
+  var e = normalizeAspectRatio(aspectRatio),
+      rings = rectangularRingCache.get(e);
+  if (rings) {
+    rectangularRingCache.delete(e);
+  } else {
+    var scaleX = Math.max(1, e),
+        scaleY = Math.max(1, 1 / e),
+        list = [new Int32Array(2)];
+    rings = {
+      get(k) {
+        while (list.length <= k) {
+          list.push(rectangularRing(list.length, scaleX, scaleY));
+        }
+        return list[k];
+      }
+    };
+    if (rectangularRingCache.size >= 4) {
+      rectangularRingCache.delete(rectangularRingCache.keys().next().value);
     }
-    return [x, y];
-  };
+  }
+  rectangularRingCache.set(e, rings);
+  return rings;
+}
+
+// Returns the points of a 4px grid in ring k > 0 of a rectangular spiral, as
+// interleaved x and y steps: inside a rectangle k steps from the center along
+// the shorter axis, and proportionally farther along the longer one, but not
+// inside ring k - 1. Points are ordered by distance, then by angle, so every
+// grid point is visited once regardless of the aspect ratio.
+function rectangularRing(k, scaleX, scaleY) {
+  var a = Math.floor(k * scaleX),
+      b = Math.floor(k * scaleY),
+      innerA = Math.floor((k - 1) * scaleX),
+      innerB = Math.floor((k - 1) * scaleY),
+      points = [];
+
+  for (var y = -b; y <= b; y++) {
+    var innerRow = Math.abs(y) <= innerB;
+    for (var x = -a; x <= a; x++) {
+      if (innerRow && x === -innerA) {
+        x = innerA;
+        continue;
+      }
+      points.push([x, y, Math.max(Math.abs(x) / scaleX, Math.abs(y) / scaleY), Math.atan2(y, x)]);
+    }
+  }
+  points.sort(function(p, q) { return p[2] - q[2] || p[3] - q[3]; });
+
+  var steps = new Int32Array(points.length * 2);
+  for (var i = 0; i < points.length; i++) {
+    steps[i * 2] = points[i][0];
+    steps[i * 2 + 1] = points[i][1];
+  }
+  return steps;
 }
 
 function defaultCanvasFactory() {
@@ -613,17 +624,21 @@ function normalizeAspectRatio(value) {
 
 function normalizeBlockSize(value) {
   value = +value;
-  value = value > 0 && Number.isFinite(value) ? Math.max(1, value | 0) : 512;
-  return ((value + 31) >>> 5) << 5;
+  if (!(value > 0 && value <= MAX_BLOCK_SIZE)) {
+    throw new RangeError(`blockSize() expects a size from 1 to ${MAX_BLOCK_SIZE}`);
+  }
+  return Math.ceil(value / 32) * 32;
 }
 
-function normalizeCoordinate(value) {
+function placeCoordinate(value) {
   value = +value;
-  return Number.isFinite(value) ? Math.floor(value) : 0;
-}
-
-function spriteWords(sprite) {
-  return (sprite.spriteWidth ?? sprite.width) >>> 5;
+  if (!Number.isFinite(value)) {
+    throw new TypeError("place() expects finite x and y coordinates");
+  }
+  if (Math.abs(value) > MAX_COORDINATE) {
+    throw new RangeError(`place() expects x and y coordinates within ±${MAX_COORDINATE}`);
+  }
+  return Math.floor(value);
 }
 
 function normalizeSize(value) {
@@ -638,25 +653,25 @@ function normalizeSize(value) {
 
 function normalizeSizeDimension(value) {
   value = +value;
-  return value > 0 && Number.isFinite(value) ? value : 0;
+  if (!(value >= 0 && value <= MAX_COORDINATE)) {
+    throw new RangeError(`size() expects dimensions from 0 to ${MAX_COORDINATE}`);
+  }
+  return value;
 }
 
 function sizeAspectRatio(size) {
   return normalizeAspectRatio(size[0] / size[1]);
 }
 
-function sizeBounds(size) {
-  return [
-    { x: -size[0] / 2, y: -size[1] / 2 },
-    { x: size[0] / 2, y: size[1] / 2 }
-  ];
-}
-
 function seedCoordinate(size, random) {
   if (!(size > 0)) {
     return 0;
   }
-  return Math.floor((random() - 0.5) * (size / 2));
+  const value = random();
+  if (!(value >= 0 && value < 1)) {
+    throw new RangeError("random() must return a number in [0, 1)");
+  }
+  return Math.floor((value - 0.5) * (size / 2));
 }
 
 function resolveStrategy(value) {
@@ -673,10 +688,12 @@ function normalizeStrategyCandidate(value) {
     return null;
   }
   if (typeof value === "object") {
-    return {
-      x: normalizeCoordinate(value.x),
-      y: normalizeCoordinate(value.y)
-    };
+    const x = +value.x;
+    const y = +value.y;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      throw new TypeError("strategy candidates must have finite x and y");
+    }
+    return { x: Math.floor(x), y: Math.floor(y) };
   }
   throw new TypeError("strategy candidates must be {x, y} or null");
 }

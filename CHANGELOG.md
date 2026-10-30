@@ -37,6 +37,15 @@ Dependencies constrained to 1.x continue to use the old API.
   joins, so padding extends exactly `padding` pixels from the glyph outline
   rather than up to ten times that at sharp corners. Padded masks, and layouts
   that depend on them, differ from 1.x.
+- The rectangular strategy now visits every point of a 4-pixel grid in rings
+  shaped to the aspect ratio, instead of stepping four pixels times the aspect
+  ratio along the longer axis. Rectangular layouts differ from 1.x, and pack
+  densely at any aspect ratio.
+- Invalid arguments throw instead of being silently replaced: non-finite
+  coordinates, sizes, rotations, padding, image dimensions and strategy
+  candidates; negative padding; `size()` dimensions outside 0–16,777,216;
+  `blockSize()` outside 1–4096; a `random()` that is not a function or returns
+  a value outside `[0, 1)`; and fonts the canvas rejects.
 
 ### Added
 
@@ -48,7 +57,9 @@ Dependencies constrained to 1.x continue to use the old API.
   placement.
 - Added `erase()` for erasing a word returned by `place()`.
 - Added image sprite extraction from alpha masks, including optional image
-  resizing with `options.width` and `options.height`.
+  resizing with `options.width` and `options.height`. Loaded images without
+  intrinsic dimensions, such as SVGs with only a `viewBox`, are drawn at an
+  explicit width and height.
 - Added sparse packed block placement for effectively unbounded layouts.
 - Added browser examples for ESM loading, image sprites, and masked layout.
 - Added a `node:test` regression suite and a standalone benchmark script.
@@ -74,13 +85,24 @@ Dependencies constrained to 1.x continue to use the old API.
   the existing cloud.
 - Typed `datum` generically on sprites and placed words, inferred from
   `getSprite()` options.
-- Limited bounded placement searches per axis to the fixed box and initial
-  coordinates, avoiding expansion-distance searches after the box fills up.
-- Extended unbounded search limits to reach the existing cloud from distant
-  seeds.
+- Typed image sources as images, videos, canvases, and `ImageBitmap`s,
+  including node-canvas images, and kept the source type on sprites and
+  placed words so `word.image` can be drawn directly. Accepted text-or-image
+  unions and readonly `size()` tuples.
+- Searches start from the nearest position where the sprite could overlap the
+  cloud's bounds (and, without overflow, fit in the box), and skip candidates
+  outside those positions, so distant seeds cost no extra time and small
+  clouds are not stepped over.
 - Applied the same search limits to built-in and custom strategies, so wrapped
-  built-ins behave identically, and stopped generators that repeat points or
-  move along one axis after 100,000 candidates without progress.
+  built-ins behave identically. Limits scale with the number of positions
+  where the sprite could be placed, so scans and random samplers can cover
+  them, while generators that repeat points or move along one axis still stop.
+- Placement uses a private copy of each sprite's mask, and only accepts
+  sprites created by `getSprite()`, so changing or forging a sprite cannot
+  corrupt a layout.
+- Layouts sharing one canvas clear each other's drawings, and a layout
+  requests a new canvas after a failed draw or readback, for example from a
+  tainted canvas.
 - Trimmed text and image geometry to occupied pixels, independently of packed
   row alignment, so bounded layouts do not reject words due to raster slack.
 - Replaced string block keys and temporary range objects with numeric map
@@ -99,12 +121,9 @@ Dependencies constrained to 1.x continue to use the old API.
 
 ### Known limitations
 
-- The built-in strategies sample sparsely at extreme aspect ratios (around
-  20:1 and beyond), where the rectangular strategy's horizontal step grows to
-  four pixels times the aspect ratio. Fixed boxes at these ratios, and the
-  rectangular strategy from around 40:1, place fewer words than at moderate
-  ratios.
-- The archimedean strategy samples points about a tenth of the radius apart,
-  so from a seed far from the cloud along one axis it can step over a small
-  cloud and return `null`. Seed near the cloud, or use the rectangular
-  strategy, when placing far from existing words.
+- The archimedean strategy samples points about a tenth of the radius apart
+  and stretches its spiral to the aspect ratio, so in fixed boxes at extreme
+  aspect ratios (around 20:1 and beyond) it places fewer words than at
+  moderate ratios. Use the rectangular strategy for such boxes.
+- The rectangular strategy samples a finer grid than in 1.x, so it is up to
+  about 1.6 times slower in wide layouts, in exchange for denser packing.

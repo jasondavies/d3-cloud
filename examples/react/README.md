@@ -6,7 +6,8 @@ This sample shows the smallest typical React integration:
 - use about 200 short labels so the cloud looks reasonably full
 - store the placed words in component state
 - render them as SVG text
-- make each word clickable by passing `href` through `getSprite(..., options)`
+- make each word clickable by passing `href` in the `datum` option of
+  `getSprite()` and reading it back from `word.datum.href`
 
 The example uses `overflow(false)` so the cloud stays inside a fixed SVG
 viewport and avoids extra bounds bookkeeping.

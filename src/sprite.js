@@ -1,7 +1,18 @@
 const RADIANS = Math.PI / 180;
 const SCRATCH_WIDTH = 1 << 11;
 const SCRATCH_HEIGHT = 1 << 11;
+const IMAGE_SLACK = 4;
 const CREATE = Symbol("CloudSprite");
+
+// The mask and geometry used for placement, keyed by each sprite this module
+// created. Placement reads only this private copy, so changing a sprite's
+// public mask cannot corrupt a layout, and objects missing from this map were
+// not created by getSprite().
+const MASKS = new WeakMap();
+
+// Clearing state for each scratch context, shared by every layout that draws
+// to the same canvas.
+const CONTEXT_STATES = new WeakMap();
 
 // An immutable, rasterized mask for a text or image source. Sprites are only
 // created by CloudLayout.getSprite() and can be placed any number of times.
@@ -10,54 +21,91 @@ export default class CloudSprite {
     if (token !== CREATE) {
       throw new TypeError("CloudSprite instances are created by CloudLayout.getSprite()");
     }
-    const { _rasterWidth, ...rest } = fields;
-    Object.assign(this, rest);
-    Object.defineProperty(this, "_rasterWidth", { value: _rasterWidth });
+    Object.assign(this, fields);
     Object.freeze(this);
   }
 }
 
-export function createSprite(source, options, contextAndRatio) {
+export function spriteMask(sprite) {
+  return MASKS.get(sprite);
+}
+
+// Validates the source and options, returning the fields to rasterize, or
+// null if there is nothing to draw.
+export function spriteFields(source, options) {
   const image = isImageSource(source) ? source : null;
   if (!image && !isTextSource(source)) {
     throw new TypeError("getSprite() expects text or an image-like source");
   }
 
+  const size = finiteOption(options.size ?? options.fontSize, "size", 1);
+  const padding = finiteOption(options.padding, "padding", image ? 0 : 1);
+  if (padding < 0) {
+    throw new RangeError("getSprite() expects a nonnegative padding");
+  }
   const fields = {
     text: String(image ? options.text ?? source.alt ?? "" : source),
     image,
-    imageWidth: image ? normalizeOptionalInteger(options.width) : null,
-    imageHeight: image ? normalizeOptionalInteger(options.height) : null,
-    font: options.font ?? "serif",
-    style: options.style ?? options.fontStyle ?? "normal",
+    imageWidth: image ? imageDimensionOption(options.width, "width") : null,
+    imageHeight: image ? imageDimensionOption(options.height, "height") : null,
+    font: String(options.font ?? "serif"),
+    style: String(options.style ?? options.fontStyle ?? "normal"),
     weight: options.weight ?? options.fontWeight ?? "normal",
-    rotate: normalizeNumber(options.rotate ?? 0),
-    size: normalizeInteger(options.size ?? options.fontSize ?? 1),
-    padding: normalizeNumber(options.padding ?? (image ? 0 : 1)),
-    datum: options.datum,
-    width: 0,
-    height: 0,
-    x0: 0,
-    y0: 0,
-    x1: 0,
-    y1: 0,
-    trimX: 0,
-    trimY: 0,
-    trimWidth: 0,
-    trimHeight: 0,
-    spriteWidth: 0,
-    sprite: null,
-    _rasterWidth: null
+    rotate: finiteOption(options.rotate, "rotate", 0),
+    size: Math.trunc(size),
+    padding,
+    datum: options.datum
   };
 
-  const rasterized = image
-    ? rasterizeImageSprite(fields, contextAndRatio)
-    : rasterizeTextSprite(fields, contextAndRatio);
-  return rasterized ? new CloudSprite(CREATE, fields) : null;
+  const empty = image ? fields.imageWidth === 0 || fields.imageHeight === 0 : fields.size < 1;
+  return empty ? null : fields;
+}
+
+export function rasterizeSprite(fields, state) {
+  const raster = fields.image
+    ? rasterizeImageSprite(fields, state)
+    : rasterizeTextSprite(fields, state);
+  if (!raster) {
+    return null;
+  }
+
+  const sprite = new CloudSprite(CREATE, {
+    ...fields,
+    imageWidth: raster.imageWidth ?? fields.imageWidth,
+    imageHeight: raster.imageHeight ?? fields.imageHeight,
+    width: raster.width,
+    height: raster.height,
+    x0: raster.x0,
+    y0: raster.y0,
+    x1: raster.x1,
+    y1: raster.y1,
+    trimX: raster.trimX,
+    trimY: raster.trimY,
+    trimWidth: raster.width,
+    trimHeight: raster.height,
+    spriteWidth: raster.spriteWidth,
+    sprite: raster.data.slice()
+  });
+  MASKS.set(sprite, {
+    data: raster.data,
+    words: raster.spriteWidth >>> 5,
+    x0: raster.x0,
+    y0: raster.y0,
+    x1: raster.x1,
+    y1: raster.y1,
+    width: raster.width,
+    height: raster.height,
+    envelope: raster.envelope
+  });
+  return sprite;
 }
 
 export function createSpriteContext(canvas) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
+  let state = CONTEXT_STATES.get(context);
+  if (state) {
+    return state;
+  }
 
   canvas.width = canvas.height = 1;
   const ratio = Math.sqrt(context.getImageData(0, 0, 1, 1).data.length >> 2);
@@ -66,54 +114,54 @@ export function createSpriteContext(canvas) {
 
   context.fillStyle = context.strokeStyle = "red";
 
-  return {
+  state = {
     context,
     ratio,
     pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
     clearHeight: 0
   };
+  CONTEXT_STATES.set(context, state);
+  return state;
 }
 
-function normalizeInteger(value) {
-  value = +value;
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
-}
-
-function normalizeOptionalInteger(value) {
+function finiteOption(value, name, defaultValue) {
   if (value == null) {
-    return null;
+    return defaultValue;
   }
   value = +value;
-  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : null;
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`getSprite() expects a finite ${name}`);
+  }
+  return value;
 }
 
-function normalizeNumber(value) {
-  value = +value;
-  return Number.isFinite(value) ? value : 0;
+function imageDimensionOption(value, name) {
+  value = finiteOption(value, name, null);
+  return value == null ? null : Math.max(0, Math.trunc(value));
 }
 
 function ceilToRatio(value, ratio) {
   return Math.max(1, Math.ceil(value / ratio) * ratio);
 }
 
-function clearContext(contextAndRatio) {
-  const context = contextAndRatio.context;
-  const ratio = contextAndRatio.ratio;
+function clearContext(state, width = state.clearWidth, height = state.clearHeight) {
+  const context = state.context;
+  const ratio = state.ratio;
 
-  if (contextAndRatio.clearWidth && contextAndRatio.clearHeight) {
-    context.clearRect(0, 0, contextAndRatio.clearWidth / ratio, contextAndRatio.clearHeight / ratio);
+  if (width && height) {
+    context.clearRect(0, 0, width / ratio, height / ratio);
   }
 
   return context;
 }
 
-function rasterizeTextSprite(sprite, contextAndRatio) {
-  const context = clearContext(contextAndRatio);
+function rasterizeTextSprite(sprite, state) {
+  const context = clearContext(state);
 
   context.save();
   try {
-    return drawTextSprite(sprite, contextAndRatio, context);
+    return drawTextSprite(sprite, state, context);
   } finally {
     // A failed measure or draw must not affect the font, alignment, or
     // transform of the next sprite.
@@ -121,11 +169,21 @@ function rasterizeTextSprite(sprite, contextAndRatio) {
   }
 }
 
-function drawTextSprite(sprite, contextAndRatio, context) {
-  const ratio = contextAndRatio.ratio;
-  const pixelWidth = contextAndRatio.pixelWidth;
+function drawTextSprite(sprite, state, context) {
+  const ratio = state.ratio;
+  const pixelWidth = state.pixelWidth;
+  const fontSize = Math.max(1, Math.ceil(sprite.size / ratio));
+  const font = `${sprite.style} ${sprite.weight} ${fontSize}px ${sprite.font}`;
 
-  context.font = `${sprite.style} ${sprite.weight} ${Math.max(1, Math.ceil(sprite.size / ratio))}px ${sprite.font}`;
+  // Canvases ignore fonts they cannot parse and keep drawing with the previous
+  // one, which would leave a mask that does not match the rendered text. Set a
+  // font of a different size first, so a rejected font is detectable.
+  context.font = `${fontSize + 1}px serif`;
+  const previousFont = context.font;
+  context.font = font;
+  if (context.font === previousFont) {
+    throw new TypeError(`getSprite() font "${font}" was rejected by the canvas`);
+  }
   // Match the documented rendering contract exactly: some canvases position
   // centered glyphs differently from a manually offset left-aligned run.
   context.textAlign = "center";
@@ -142,27 +200,17 @@ function drawTextSprite(sprite, contextAndRatio, context) {
     // Advance width and font size do not bound italic overhang or accents.
     // Enclose the ink symmetrically around the rendering origin before
     // rotation; round stroke joins extend at most padding beyond the ink.
-    const strokeExtent = Math.abs(sprite.padding);
-    width = Math.max(width, 2 * ratio * (strokeExtent + Math.max(
+    width = Math.max(width, 2 * ratio * (sprite.padding + Math.max(
       Math.abs(metrics.actualBoundingBoxLeft),
       Math.abs(metrics.actualBoundingBoxRight)
     )));
-    height = Math.max(height, 2 * ratio * (strokeExtent + Math.max(
+    height = Math.max(height, 2 * ratio * (sprite.padding + Math.max(
       Math.abs(metrics.actualBoundingBoxAscent),
       Math.abs(metrics.actualBoundingBoxDescent)
     )));
   }
 
-  if (sprite.rotate) {
-    const sine = Math.sin(sprite.rotate * RADIANS);
-    const cosine = Math.cos(sprite.rotate * RADIANS);
-    const widthCosine = width * cosine;
-    const widthSine = width * sine;
-    const heightCosine = height * cosine;
-    const heightSine = height * sine;
-    width = Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine));
-    height = Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine));
-  }
+  ({ width, height } = rotatedExtent(width, height, sprite.rotate));
 
   const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * ratio * 2));
   const maxWidth = Math.floor(pixelWidth / ratio) * ratio;
@@ -181,9 +229,9 @@ function drawTextSprite(sprite, contextAndRatio, context) {
 
   for (;;) {
     if (rasterWidth > maxWidth || rasterHeight > maxHeight) {
-      contextAndRatio.clearWidth = 0;
-      contextAndRatio.clearHeight = 0;
-      return false;
+      state.clearWidth = 0;
+      state.clearHeight = 0;
+      return null;
     }
 
     context.save();
@@ -201,8 +249,8 @@ function drawTextSprite(sprite, contextAndRatio, context) {
     } finally {
       context.restore();
       // Clear any partial drawing before the next sprite, even after failure.
-      contextAndRatio.clearWidth = Math.min(pixelWidth, rasterWidth + overhang);
-      contextAndRatio.clearHeight = Math.min(SCRATCH_HEIGHT, rasterHeight + overhang);
+      state.clearWidth = redrawn ? pixelWidth : Math.min(pixelWidth, rasterWidth + overhang);
+      state.clearHeight = redrawn ? SCRATCH_HEIGHT : Math.min(SCRATCH_HEIGHT, rasterHeight + overhang);
     }
 
     pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
@@ -218,60 +266,63 @@ function drawTextSprite(sprite, contextAndRatio, context) {
     }
 
     // Ink reaching the raster edge may have been clipped because the font
-    // metrics underestimated it. Clipped ink may have landed anywhere on the
-    // scratch canvas, so clear all of it, then redraw larger along each axis
-    // the ink reached.
-    redrawn = true;
-    contextAndRatio.clearWidth = pixelWidth;
-    contextAndRatio.clearHeight = SCRATCH_HEIGHT;
-    clearContext(contextAndRatio);
+    // metrics underestimated it, so redraw larger along each axis the ink
+    // reached. Metrics that under-reported once cannot bound where the ink
+    // went, so the whole scratch canvas is cleared before the next sprite.
     const nextWidth = growWidth ? Math.min(maxWidth, rasterWidth * 2) : rasterWidth;
     const nextHeight = growHeight ? Math.min(maxHeight, rasterHeight * 2) : rasterHeight;
     if (nextWidth === rasterWidth && nextHeight === rasterHeight) {
       alphaBounds = null;
       break;
     }
+    redrawn = true;
+    state.clearWidth = pixelWidth;
+    state.clearHeight = SCRATCH_HEIGHT;
+    clearContext(state, nextWidth, nextHeight);
     rasterWidth = nextWidth;
     rasterHeight = nextHeight;
   }
 
-  if (redrawn) {
-    // Metrics that under-reported once cannot bound where this ink went.
-    contextAndRatio.clearWidth = pixelWidth;
-    contextAndRatio.clearHeight = SCRATCH_HEIGHT;
-  }
-
   if (!alphaBounds) {
-    return false;
+    return null;
   }
 
-  sprite._rasterWidth = envelopeWidth;
-  return extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBounds);
+  const raster = extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds);
+  // Rectangle checks against the cloud use the measured raster width,
+  // centered on the origin and widened only to contain the ink.
+  const left = -(envelopeWidth >> 1);
+  raster.envelope = {
+    x0: Math.min(raster.x0, left),
+    y0: raster.y0,
+    x1: Math.max(raster.x1, left + envelopeWidth),
+    y1: raster.y1
+  };
+  return raster;
 }
 
-function rasterizeImageSprite(sprite, contextAndRatio) {
-  const context = clearContext(contextAndRatio);
-  const ratio = contextAndRatio.ratio;
-  const pixelWidth = contextAndRatio.pixelWidth;
+function rasterizeImageSprite(sprite, state) {
+  const context = clearContext(state);
+  const ratio = state.ratio;
+  const pixelWidth = state.pixelWidth;
   const imageSize = resolveImageSize(sprite.image, sprite.imageWidth, sprite.imageHeight);
 
   if (!imageSize) {
-    contextAndRatio.clearWidth = 0;
-    contextAndRatio.clearHeight = 0;
-    return false;
+    state.clearWidth = 0;
+    state.clearHeight = 0;
+    return null;
   }
 
-  const { drawWidth, drawHeight } = imageSize;
-  const bounds = rotatedBounds(drawWidth, drawHeight, sprite.rotate);
+  const { drawWidth, drawHeight, intrinsic } = imageSize;
+  const bounds = rotatedExtent(drawWidth, drawHeight, sprite.rotate);
   // Leave room on both sides of the integer raster origin for half-pixel
   // image edges and antialiasing after rotation or resizing.
   const rasterWidth = ceilToRatio(bounds.width + 2 * ratio, ratio);
   const rasterHeight = ceilToRatio(bounds.height + 2 * ratio, ratio);
 
   if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
-    contextAndRatio.clearWidth = 0;
-    contextAndRatio.clearHeight = 0;
-    return false;
+    state.clearWidth = 0;
+    state.clearHeight = 0;
+    return null;
   }
 
   context.save();
@@ -287,56 +338,73 @@ function rasterizeImageSprite(sprite, contextAndRatio) {
       drawWidth / ratio,
       drawHeight / ratio
     );
+  } catch (error) {
+    // Without intrinsic dimensions, the source may be broken rather than
+    // merely unsized, and browsers refuse to draw broken images.
+    if (intrinsic) {
+      throw error;
+    }
+    return null;
   } finally {
     context.restore();
     // A failed draw must not affect the transform or pixels of the next sprite.
-    contextAndRatio.clearWidth = rasterWidth;
-    contextAndRatio.clearHeight = rasterHeight;
+    state.clearWidth = rasterWidth;
+    state.clearHeight = rasterHeight;
   }
 
   const pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
   const alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
 
   if (!alphaBounds) {
-    return false;
+    return null;
   }
 
-  sprite.imageWidth = drawWidth;
-  sprite.imageHeight = drawHeight;
-  return extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBounds);
+  const raster = extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds);
+  raster.imageWidth = drawWidth;
+  raster.imageHeight = drawHeight;
+  // Opaque image masks get a small envelope on every side, so they can be
+  // placed beside the cloud without their pixels overlapping it.
+  raster.envelope = {
+    x0: raster.x0 - IMAGE_SLACK,
+    y0: raster.y0 - IMAGE_SLACK,
+    x1: raster.x1 + IMAGE_SLACK,
+    y1: raster.y1 + IMAGE_SLACK
+  };
+  return raster;
 }
 
-function extractSpritePixels(sprite, pixels, rasterWidth, rasterHeight, alphaBounds) {
-  const packedWidth = ((alphaBounds.width + 31) >>> 5) << 5;
-  const wordsPerRow = packedWidth >>> 5;
-  const originX = -(rasterWidth >> 1);
-  const originY = -(rasterHeight >> 1);
+function extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds) {
+  const width = alphaBounds.width;
+  const height = alphaBounds.height;
+  const spriteWidth = ((width + 31) >>> 5) << 5;
+  const wordsPerRow = spriteWidth >>> 5;
+  const x0 = alphaBounds.x0 - (rasterWidth >> 1);
+  const y0 = alphaBounds.y0 - (rasterHeight >> 1);
+  const data = new Uint32Array(wordsPerRow * height);
 
-  sprite.width = alphaBounds.width;
-  sprite.height = alphaBounds.height;
-  sprite.spriteWidth = packedWidth;
-  sprite.trimX = alphaBounds.x0;
-  sprite.trimY = alphaBounds.y0;
-  sprite.trimWidth = alphaBounds.width;
-  sprite.trimHeight = alphaBounds.height;
-  sprite.x0 = originX + alphaBounds.x0;
-  sprite.y0 = originY + alphaBounds.y0;
-  sprite.x1 = sprite.x0 + sprite.width;
-  sprite.y1 = sprite.y0 + sprite.height;
-  sprite.sprite = new Uint32Array(wordsPerRow * sprite.height);
-
-  for (let row = 0; row < sprite.height; row += 1) {
+  for (let row = 0; row < height; row += 1) {
     const sourceRow = alphaBounds.y0 + row;
     const rowOffset = row * wordsPerRow;
-    for (let column = 0; column < sprite.width; column += 1) {
+    for (let column = 0; column < width; column += 1) {
       const sourceColumn = alphaBounds.x0 + column;
       if (pixels[((sourceRow * rasterWidth + sourceColumn) << 2) + 3]) {
-        sprite.sprite[rowOffset + (column >>> 5)] |= 1 << (31 - (column & 31));
+        data[rowOffset + (column >>> 5)] |= 1 << (31 - (column & 31));
       }
     }
   }
 
-  return true;
+  return {
+    data,
+    spriteWidth,
+    width,
+    height,
+    trimX: alphaBounds.x0,
+    trimY: alphaBounds.y0,
+    x0,
+    y0,
+    x1: x0 + width,
+    y1: y0 + height
+  };
 }
 
 function resolveImageSize(image, imageWidth, imageHeight) {
@@ -344,6 +412,12 @@ function resolveImageSize(image, imageWidth, imageHeight) {
   const sourceHeight = resolveImageDimension(image, "naturalHeight", "videoHeight", "height");
 
   if (!(sourceWidth > 0) || !(sourceHeight > 0)) {
+    // Images without intrinsic dimensions, such as SVGs with only a viewBox,
+    // can still be drawn at an explicit size once they have loaded.
+    if (imageWidth != null && imageHeight != null &&
+        typeof image.naturalWidth === "number" && image.complete === true) {
+      return { drawWidth: imageWidth, drawHeight: imageHeight, intrinsic: false };
+    }
     return null;
   }
 
@@ -359,10 +433,7 @@ function resolveImageSize(image, imageWidth, imageHeight) {
     drawHeight = Math.max(1, Math.round(sourceHeight * (drawWidth / sourceWidth)));
   }
 
-  return {
-    drawWidth,
-    drawHeight
-  };
+  return { drawWidth, drawHeight, intrinsic: true };
 }
 
 function resolveImageDimension(image, ...keys) {
@@ -377,7 +448,7 @@ function resolveImageDimension(image, ...keys) {
   return 0;
 }
 
-function rotatedBounds(width, height, rotate) {
+function rotatedExtent(width, height, rotate) {
   if (!rotate) {
     return { width, height };
   }
@@ -390,8 +461,8 @@ function rotatedBounds(width, height, rotate) {
   const heightSine = height * sine;
 
   return {
-    width: Math.max(1, Math.ceil(Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine)))),
-    height: Math.max(1, Math.ceil(Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine))))
+    width: Math.max(Math.abs(widthCosine + heightSine), Math.abs(widthCosine - heightSine)),
+    height: Math.max(Math.abs(widthSine + heightCosine), Math.abs(widthSine - heightCosine))
   };
 }
 
