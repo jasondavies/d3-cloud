@@ -74,6 +74,8 @@ export function rasterizeSprite(fields, state) {
   if (state.drawing) {
     throw new Error("getSprite() cannot be called while a sprite is being drawn to the same canvas");
   }
+  // Check the font before drawing: a rejected font is an argument error, not
+  // a canvas failure.
   const font = fields.image ? null : textFont(fields, state);
   let raster;
   state.drawing = true;
@@ -94,28 +96,21 @@ export function rasterizeSprite(fields, state) {
     return null;
   }
 
+  const { data, spriteWidth, x0, y0, x1, y1 } = raster;
   const sprite = new CloudSprite(CREATE, {
     ...fields,
     imageWidth: raster.imageWidth ?? fields.imageWidth,
     imageHeight: raster.imageHeight ?? fields.imageHeight,
     width: raster.width,
     height: raster.height,
-    x0: raster.x0,
-    y0: raster.y0,
-    x1: raster.x1,
-    y1: raster.y1,
-    spriteWidth: raster.spriteWidth,
-    sprite: raster.data.slice()
+    x0,
+    y0,
+    x1,
+    y1,
+    spriteWidth,
+    sprite: data.slice()
   });
-  MASKS.set(sprite, {
-    data: raster.data,
-    words: raster.spriteWidth >>> 5,
-    x0: raster.x0,
-    y0: raster.y0,
-    x1: raster.x1,
-    y1: raster.y1,
-    envelope: raster.envelope
-  });
+  MASKS.set(sprite, { data, words: spriteWidth >>> 5, x0, y0, x1, y1, envelope: raster.envelope });
   return sprite;
 }
 
@@ -271,7 +266,7 @@ function rasterizeTextSprite(sprite, font, state) {
     alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
 
     if (!alphaBounds) {
-      break;
+      return null;
     }
     const growWidth = alphaBounds.x0 === 0 || alphaBounds.x0 + alphaBounds.width === rasterWidth;
     const growHeight = alphaBounds.y0 === 0 || alphaBounds.y0 + alphaBounds.height === rasterHeight;
@@ -286,18 +281,13 @@ function rasterizeTextSprite(sprite, font, state) {
     const nextWidth = growWidth ? Math.min(SCRATCH_WIDTH, rasterWidth * 2) : rasterWidth;
     const nextHeight = growHeight ? Math.min(SCRATCH_HEIGHT, rasterHeight * 2) : rasterHeight;
     if (nextWidth === rasterWidth && nextHeight === rasterHeight) {
-      alphaBounds = null;
-      break;
+      return null;
     }
     redrawn = true;
     setClearExtent(state, SCRATCH_WIDTH, SCRATCH_HEIGHT);
     clearContext(state, nextWidth, nextHeight);
     rasterWidth = nextWidth;
     rasterHeight = nextHeight;
-  }
-
-  if (!alphaBounds) {
-    return null;
   }
 
   const raster = extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds);

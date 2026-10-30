@@ -96,27 +96,20 @@ function rasterizeSprite(fields, state) {
   if (!raster) {
     return null;
   }
+  const { data, spriteWidth, x0, y0, x1, y1 } = raster;
   const sprite = new CloudSprite(CREATE, __spreadProps(__spreadValues({}, fields), {
     imageWidth: (_a = raster.imageWidth) != null ? _a : fields.imageWidth,
     imageHeight: (_b = raster.imageHeight) != null ? _b : fields.imageHeight,
     width: raster.width,
     height: raster.height,
-    x0: raster.x0,
-    y0: raster.y0,
-    x1: raster.x1,
-    y1: raster.y1,
-    spriteWidth: raster.spriteWidth,
-    sprite: raster.data.slice()
+    x0,
+    y0,
+    x1,
+    y1,
+    spriteWidth,
+    sprite: data.slice()
   }));
-  MASKS.set(sprite, {
-    data: raster.data,
-    words: raster.spriteWidth >>> 5,
-    x0: raster.x0,
-    y0: raster.y0,
-    x1: raster.x1,
-    y1: raster.y1,
-    envelope: raster.envelope
-  });
+  MASKS.set(sprite, { data, words: spriteWidth >>> 5, x0, y0, x1, y1, envelope: raster.envelope });
   return sprite;
 }
 function createSpriteContext(canvas) {
@@ -232,7 +225,7 @@ function rasterizeTextSprite(sprite, font, state) {
     pixels = context.getImageData(0, 0, rasterWidth, rasterHeight).data;
     alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
     if (!alphaBounds) {
-      break;
+      return null;
     }
     const growWidth = alphaBounds.x0 === 0 || alphaBounds.x0 + alphaBounds.width === rasterWidth;
     const growHeight = alphaBounds.y0 === 0 || alphaBounds.y0 + alphaBounds.height === rasterHeight;
@@ -242,17 +235,13 @@ function rasterizeTextSprite(sprite, font, state) {
     const nextWidth = growWidth ? Math.min(SCRATCH_WIDTH, rasterWidth * 2) : rasterWidth;
     const nextHeight = growHeight ? Math.min(SCRATCH_HEIGHT, rasterHeight * 2) : rasterHeight;
     if (nextWidth === rasterWidth && nextHeight === rasterHeight) {
-      alphaBounds = null;
-      break;
+      return null;
     }
     redrawn = true;
     setClearExtent(state, SCRATCH_WIDTH, SCRATCH_HEIGHT);
     clearContext(state, nextWidth, nextHeight);
     rasterWidth = nextWidth;
     rasterHeight = nextHeight;
-  }
-  if (!alphaBounds) {
-    return null;
   }
   const raster = extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds);
   const left = -(envelopeWidth >> 1);
