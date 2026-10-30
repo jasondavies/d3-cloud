@@ -9,7 +9,7 @@ renderer.
 See [here](https://www.jasondavies.com/wordcloud/) for an interactive
 demonstration along with implementation details.
 
-![Example cloud of Twitter search results for “amazing”](http://www.jasondavies.com/wordcloud/amazing.png)
+![Word cloud of the most frequent words in the d3-cloud documentation](https://www.jasondavies.com/wordcloud/readme.svg)
 
 ## Install
 
