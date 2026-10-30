@@ -105,10 +105,6 @@ function rasterizeSprite(fields, state) {
     y0: raster.y0,
     x1: raster.x1,
     y1: raster.y1,
-    trimX: raster.trimX,
-    trimY: raster.trimY,
-    trimWidth: raster.width,
-    trimHeight: raster.height,
     spriteWidth: raster.spriteWidth,
     sprite: raster.data.slice()
   }));
@@ -132,17 +128,16 @@ function createSpriteContext(canvas) {
   if (!context) {
     throw new TypeError("canvas() factories must return a canvas with a 2d context");
   }
-  canvas.width = canvas.height = 1;
-  const ratio = Math.sqrt(context.getImageData(0, 0, 1, 1).data.length >> 2);
-  canvas.width = SCRATCH_WIDTH / ratio;
-  canvas.height = SCRATCH_HEIGHT / ratio;
+  canvas.width = SCRATCH_WIDTH;
+  canvas.height = SCRATCH_HEIGHT;
+  if (context.getImageData(0, 0, 1, 1).data.length !== 4) {
+    throw new TypeError("canvas() factories must return a canvas that reads back one pixel per unit");
+  }
   context.fillStyle = context.strokeStyle = "red";
   state = Object.assign(state || {}, {
     context,
-    ratio,
     invalid: false,
     drawing: false,
-    pixelWidth: SCRATCH_WIDTH,
     clearWidth: 0,
     clearHeight: 0
   });
@@ -166,22 +161,33 @@ function imageDimensionOption(value, name) {
   value = finiteOption(value, name, null);
   return value == null ? null : Math.max(0, Math.trunc(value));
 }
-function ceilToRatio(value, ratio) {
-  return Math.max(1, Math.ceil(value / ratio) * ratio);
-}
 function clearContext(state, width = state.clearWidth, height = state.clearHeight) {
   const context = state.context;
-  const ratio = state.ratio;
   if (width && height) {
-    context.clearRect(0, 0, width / ratio, height / ratio);
+    context.clearRect(0, 0, width, height);
   }
   return context;
 }
+function setClearExtent(state, width, height) {
+  state.clearWidth = width;
+  state.clearHeight = height;
+}
+function drawAtRasterCenter(context, rasterWidth, rasterHeight, rotate, draw) {
+  context.save();
+  try {
+    context.translate(rasterWidth >> 1, rasterHeight >> 1);
+    if (rotate) {
+      context.rotate(rotate * RADIANS);
+    }
+    draw();
+  } finally {
+    context.restore();
+  }
+}
 function textFont(sprite, state) {
   const context = state.context;
-  const fontSize = Math.max(1, Math.ceil(sprite.size / state.ratio));
-  const font = `${sprite.style} ${sprite.weight} ${fontSize}px ${sprite.font}`;
-  context.font = `${fontSize + 1}px serif`;
+  const font = `${sprite.style} ${sprite.weight} ${sprite.size}px ${sprite.font}`;
+  context.font = `${sprite.size + 1}px serif`;
   const previousFont = context.font;
   context.font = font;
   if (context.font === previousFont) {
@@ -199,59 +205,53 @@ function rasterizeTextSprite(sprite, font, state) {
   }
 }
 function drawTextSprite(sprite, font, state, context) {
-  const ratio = state.ratio;
-  const pixelWidth = state.pixelWidth;
   context.font = font;
   context.textAlign = "center";
   const metrics = context.measureText(sprite.text);
-  let width = (metrics.width + 1) * ratio;
+  let width = metrics.width + 1;
   let height = sprite.size * 2;
   const hasInkBounds = Number.isFinite(metrics.actualBoundingBoxLeft) && Number.isFinite(metrics.actualBoundingBoxRight) && Number.isFinite(metrics.actualBoundingBoxAscent) && Number.isFinite(metrics.actualBoundingBoxDescent);
   if (hasInkBounds) {
-    width = Math.max(width, 2 * ratio * (sprite.padding + Math.max(
+    width = Math.max(width, 2 * (sprite.padding + Math.max(
       Math.abs(metrics.actualBoundingBoxLeft),
       Math.abs(metrics.actualBoundingBoxRight)
     )));
-    height = Math.max(height, 2 * ratio * (sprite.padding + Math.max(
+    height = Math.max(height, 2 * (sprite.padding + Math.max(
       Math.abs(metrics.actualBoundingBoxAscent),
       Math.abs(metrics.actualBoundingBoxDescent)
     )));
   }
   ({ width, height } = rotatedExtent(width, height, sprite.rotate));
-  const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * ratio * 2));
-  const maxWidth = Math.floor(pixelWidth / ratio) * ratio;
-  const maxHeight = Math.floor(SCRATCH_HEIGHT / ratio) * ratio;
+  const overscan = Math.max(4, Math.ceil((sprite.padding + 2) * 2));
   const overhang = hasInkBounds ? 0 : 2 * sprite.size;
-  const envelopeWidth = ceilToRatio(width + overscan * 2, ratio);
+  const envelopeWidth = Math.ceil(width + overscan * 2);
   let rasterWidth = envelopeWidth;
-  let rasterHeight = ceilToRatio(height + overscan * 2, ratio);
+  let rasterHeight = Math.ceil(height + overscan * 2);
   let redrawn = false;
   let pixels;
   let alphaBounds;
   for (; ; ) {
-    if (rasterWidth > maxWidth || rasterHeight > maxHeight) {
-      state.clearWidth = 0;
-      state.clearHeight = 0;
+    if (rasterWidth > SCRATCH_WIDTH || rasterHeight > SCRATCH_HEIGHT) {
+      setClearExtent(state, 0, 0);
       return null;
     }
-    context.save();
     try {
-      context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
-      if (sprite.rotate) {
-        context.rotate(sprite.rotate * RADIANS);
-      }
-      context.fillText(sprite.text, 0, 0);
-      if (sprite.padding) {
-        context.lineWidth = 2 * sprite.padding;
-        context.lineJoin = "round";
-        context.strokeText(sprite.text, 0, 0);
-      }
+      drawAtRasterCenter(context, rasterWidth, rasterHeight, sprite.rotate, () => {
+        context.fillText(sprite.text, 0, 0);
+        if (sprite.padding) {
+          context.lineWidth = 2 * sprite.padding;
+          context.lineJoin = "round";
+          context.strokeText(sprite.text, 0, 0);
+        }
+      });
     } finally {
-      context.restore();
-      state.clearWidth = redrawn ? pixelWidth : Math.min(pixelWidth, rasterWidth + overhang);
-      state.clearHeight = redrawn ? SCRATCH_HEIGHT : Math.min(SCRATCH_HEIGHT, rasterHeight + overhang);
+      setClearExtent(
+        state,
+        redrawn ? SCRATCH_WIDTH : Math.min(SCRATCH_WIDTH, rasterWidth + overhang),
+        redrawn ? SCRATCH_HEIGHT : Math.min(SCRATCH_HEIGHT, rasterHeight + overhang)
+      );
     }
-    pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
+    pixels = context.getImageData(0, 0, rasterWidth, rasterHeight).data;
     alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
     if (!alphaBounds) {
       break;
@@ -261,15 +261,14 @@ function drawTextSprite(sprite, font, state, context) {
     if (!growWidth && !growHeight) {
       break;
     }
-    const nextWidth = growWidth ? Math.min(maxWidth, rasterWidth * 2) : rasterWidth;
-    const nextHeight = growHeight ? Math.min(maxHeight, rasterHeight * 2) : rasterHeight;
+    const nextWidth = growWidth ? Math.min(SCRATCH_WIDTH, rasterWidth * 2) : rasterWidth;
+    const nextHeight = growHeight ? Math.min(SCRATCH_HEIGHT, rasterHeight * 2) : rasterHeight;
     if (nextWidth === rasterWidth && nextHeight === rasterHeight) {
       alphaBounds = null;
       break;
     }
     redrawn = true;
-    state.clearWidth = pixelWidth;
-    state.clearHeight = SCRATCH_HEIGHT;
+    setClearExtent(state, SCRATCH_WIDTH, SCRATCH_HEIGHT);
     clearContext(state, nextWidth, nextHeight);
     rasterWidth = nextWidth;
     rasterHeight = nextHeight;
@@ -289,47 +288,32 @@ function drawTextSprite(sprite, font, state, context) {
 }
 function rasterizeImageSprite(sprite, state) {
   const context = clearContext(state);
-  const ratio = state.ratio;
-  const pixelWidth = state.pixelWidth;
   const imageSize = resolveImageSize(sprite.image, sprite.imageWidth, sprite.imageHeight);
   if (!imageSize) {
-    state.clearWidth = 0;
-    state.clearHeight = 0;
+    setClearExtent(state, 0, 0);
     return null;
   }
   const { drawWidth, drawHeight, intrinsic } = imageSize;
   const bounds = rotatedExtent(drawWidth, drawHeight, sprite.rotate);
-  const rasterWidth = ceilToRatio(bounds.width + 2 * ratio, ratio);
-  const rasterHeight = ceilToRatio(bounds.height + 2 * ratio, ratio);
-  if (rasterWidth > pixelWidth || rasterHeight > SCRATCH_HEIGHT) {
-    state.clearWidth = 0;
-    state.clearHeight = 0;
+  const rasterWidth = Math.ceil(bounds.width + 2);
+  const rasterHeight = Math.ceil(bounds.height + 2);
+  if (rasterWidth > SCRATCH_WIDTH || rasterHeight > SCRATCH_HEIGHT) {
+    setClearExtent(state, 0, 0);
     return null;
   }
-  context.save();
   try {
-    context.translate((rasterWidth >> 1) / ratio, (rasterHeight >> 1) / ratio);
-    if (sprite.rotate) {
-      context.rotate(sprite.rotate * RADIANS);
-    }
-    context.drawImage(
-      sprite.image,
-      -drawWidth / (2 * ratio),
-      -drawHeight / (2 * ratio),
-      drawWidth / ratio,
-      drawHeight / ratio
-    );
+    drawAtRasterCenter(context, rasterWidth, rasterHeight, sprite.rotate, () => {
+      context.drawImage(sprite.image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    });
   } catch (error) {
     if (intrinsic) {
       throw error;
     }
     return null;
   } finally {
-    context.restore();
-    state.clearWidth = rasterWidth;
-    state.clearHeight = rasterHeight;
+    setClearExtent(state, rasterWidth, rasterHeight);
   }
-  const pixels = context.getImageData(0, 0, rasterWidth / ratio, rasterHeight / ratio).data;
+  const pixels = context.getImageData(0, 0, rasterWidth, rasterHeight).data;
   const alphaBounds = findAlphaBounds(pixels, rasterWidth, rasterHeight);
   if (!alphaBounds) {
     return null;
@@ -368,8 +352,6 @@ function extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds) {
     spriteWidth,
     width,
     height,
-    trimX: alphaBounds.x0,
-    trimY: alphaBounds.y0,
     x0,
     y0,
     x1: x0 + width,
@@ -547,12 +529,7 @@ var CloudLayout = class {
     return this;
   }
   getSprite(source, options) {
-    if (options == null) {
-      options = {};
-    } else if (typeof options !== "object" || Array.isArray(options)) {
-      throw new TypeError("getSprite() expects an options object");
-    }
-    const fields = spriteFields(source, options);
+    const fields = spriteFields(source, optionsObject(options, "getSprite()"));
     if (!fields) {
       return null;
     }
@@ -574,12 +551,7 @@ var CloudLayout = class {
     if (!mask) {
       throw new TypeError("place() expects a CloudSprite from getSprite() on a layout from the same copy of d3-cloud");
     }
-    if (options == null) {
-      options = {};
-    } else if (typeof options !== "object" || Array.isArray(options)) {
-      throw new TypeError("place() expects an options object");
-    }
-    const { x: optionX, y: optionY, strategy: optionStrategy } = options;
+    const { x: optionX, y: optionY, strategy: optionStrategy } = optionsObject(options, "place()");
     const strategy = optionStrategy == null ? this._strategy : resolveStrategy(optionStrategy);
     const x = optionX == null ? seedCoordinate(this._size[0], this._random) : placeCoordinate(optionX);
     const y = optionY == null ? seedCoordinate(this._size[1], this._random) : placeCoordinate(optionY);
@@ -593,7 +565,7 @@ var CloudLayout = class {
     if (!position) {
       return null;
     }
-    extendBounds(this, mask, position.x, position.y);
+    this._bounds = extendBounds(this._bounds, mask, position.x, position.y);
     const word = createPlacedWord(sprite, position.x, position.y);
     this._placements.set(word, { mask, x: position.x, y: position.y });
     return word;
@@ -808,16 +780,16 @@ function createPlacedWord(sprite, x, y) {
   const _a = sprite, { sprite: _mask, spriteWidth: _spriteWidth } = _a, fields = __objRest(_a, ["sprite", "spriteWidth"]);
   return __spreadProps(__spreadValues({}, fields), { x, y });
 }
-function extendBounds(layout, mask, x, y) {
-  var left = x + mask.x0, top = y + mask.y0, right = x + mask.x1, bottom = y + mask.y1, bounds = layout._bounds;
+function extendBounds(bounds, mask, x, y) {
+  var left = x + mask.x0, top = y + mask.y0, right = x + mask.x1, bottom = y + mask.y1;
   if (!bounds) {
-    layout._bounds = [{ x: left, y: top }, { x: right, y: bottom }];
-    return;
+    return [{ x: left, y: top }, { x: right, y: bottom }];
   }
   if (left < bounds[0].x) bounds[0].x = left;
   if (top < bounds[0].y) bounds[0].y = top;
   if (right > bounds[1].x) bounds[1].x = right;
   if (bottom > bounds[1].y) bounds[1].y = bottom;
+  return bounds;
 }
 function cloneBounds(bounds) {
   if (!bounds) {
@@ -992,6 +964,15 @@ function seedCoordinate(size, random) {
     throw new RangeError("random() must return a number in [0, 1)");
   }
   return Math.floor((value - 0.5) * (size / 2));
+}
+function optionsObject(options, method) {
+  if (options == null) {
+    return {};
+  }
+  if (typeof options !== "object" || Array.isArray(options)) {
+    throw new TypeError(`${method} expects an options object`);
+  }
+  return options;
 }
 function resolveStrategy(value) {
   const strategy = typeof value === "string" && Object.prototype.hasOwnProperty.call(STRATEGIES, value) ? STRATEGIES[value] : value;

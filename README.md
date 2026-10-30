@@ -160,7 +160,9 @@ A sprite is a mask: it holds the source, its styling, its trimmed geometry
 Rasterization is the expensive step, so prepare a sprite once and place it as
 many times as you like, in this or any other layout. Sprites are frozen and
 can only be created by `getSprite()`. The `sprite` field is a copy of the
-packed mask; placement uses a private copy, so changing it has no effect.
+packed mask, a `Uint32Array` of `height` rows of `spriteWidth` bits each, with
+the leftmost pixel in the most significant bit. Placement uses a private copy,
+so changing it has no effect.
 Sprites work with any layout from the same copy of d3-cloud, but the package
 entry point and `build/d3-cloud.js` are separate copies whose sprites and
 layouts cannot be mixed.

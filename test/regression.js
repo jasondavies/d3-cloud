@@ -205,10 +205,8 @@ test("layout can build a CloudSprite from image alpha", () => {
   assert.equal(sprite.imageHeight, 4);
   assert.equal(sprite.width, 2);
   assert.equal(sprite.height, 2);
-  assert.equal(sprite.trimX, 2);
-  assert.equal(sprite.trimY, 2);
-  assert.equal(sprite.trimWidth, 2);
-  assert.equal(sprite.trimHeight, 2);
+  assert.equal("trimX" in sprite, false);
+  assert.equal("trimWidth" in sprite, false);
   assert.equal(sprite.x0, -1);
   assert.equal(sprite.y0, -1);
   assert.equal(sprite.x1, 1);
@@ -631,24 +629,25 @@ test("text overhang cannot contaminate subsequent text or image sprites", () => 
   }
 });
 
-test("ratio-three text readback preserves tail pixels without spilling between rows", () => {
-  for (const measuredWidth of [20, 31]) {
+test("text readback preserves tail pixels without spilling between rows", () => {
+  for (const measuredWidth of [20, 31, 50]) {
     const canvas = createFakeCanvas();
     const context = canvas.getContext("2d");
     context.measureText = () => ({ width: measuredWidth });
-    let physicalWidth;
-    // A 1×1 probe returns 3×3 pixels, so the layout infers a ratio of three.
-    // Keep the ink one pixel inside the raster, as ink touching the edge is
-    // treated as clipped and redrawn larger.
+    let rasterWidth;
+    // Ink at the end of row 1 and the start of row 2, one pixel inside the
+    // raster, as ink touching the edge is treated as clipped and redrawn larger.
     context.getImageData = (_x, _y, width, height) => {
-      physicalWidth = width * 3;
-      const data = new Uint8ClampedArray(physicalWidth * height * 3 * 4);
-      data[((physicalWidth * 2 - 2) * 4) + 3] = 255;
-      data[((physicalWidth * 2 + 1) * 4) + 3] = 255;
+      rasterWidth = width;
+      const data = new Uint8ClampedArray(width * height * 4);
+      if (width > 1) {
+        data[((width * 2 - 2) * 4) + 3] = 255;
+        data[((width * 2 + 1) * 4) + 3] = 255;
+      }
       return { data };
     };
     const sprite = new CloudLayout().canvas(() => canvas).getSprite("test", { size: 20, padding: 0 });
-    const trimmedWidth = physicalWidth - 2;
+    const trimmedWidth = rasterWidth - 2;
     const stride = Math.ceil(trimmedWidth / 32);
     const expected = new Uint32Array(stride * 2);
     expected[(trimmedWidth - 1) >>> 5] = (1 << (31 - ((trimmedWidth - 1) & 31))) >>> 0;
@@ -656,6 +655,15 @@ test("ratio-three text readback preserves tail pixels without spilling between r
     assert.equal(sprite.spriteWidth, stride * 32);
     assert.deepEqual(sprite.sprite, expected);
   }
+});
+
+test("canvases that read back more than one pixel per unit are rejected", () => {
+  const canvas = createFakeCanvas();
+  const context = canvas.getContext("2d");
+  // A 1×1 readback returning 2×2 pixels, as from an old high-DPI backing store.
+  context.getImageData = (_x, _y, width, height) => ({ data: new Uint8ClampedArray(width * height * 16) });
+  assert.throws(() => new CloudLayout().canvas(() => canvas).getSprite("test", { size: 20 }),
+    /one pixel per unit/);
 });
 
 test("strategy names do not resolve inherited object properties", () => {
@@ -1050,7 +1058,8 @@ test("placed words are plain objects that carry the datum by reference", () => {
   assert.equal("_rasterWidth" in placed, false);
   assert.equal(typeof placed.text, "string");
   assert.equal(typeof placed.x, "number");
-  assert.equal(typeof placed.trimHeight, "number");
+  assert.equal(typeof placed.height, "number");
+  assert.equal("trimHeight" in placed, false);
   assert.equal(layout.place(layout.getSprite("plain")).datum, undefined);
 });
 
@@ -1343,11 +1352,21 @@ test("width-only canvas adapters clear a bounded region between sprites", () => 
 
 test("padded text rasters are not inflated by the stroke miter limit", () => {
   const { createCanvas } = loadNodeCanvas();
-  const layout = new CloudLayout().canvas(() => createCanvas(1, 1));
-  // The raster origin is centered, so its size follows from the trim offset.
+  let readback;
+  const layout = new CloudLayout().canvas(() => {
+    const canvas = createCanvas(1, 1);
+    const context = canvas.getContext("2d");
+    const getImageData = context.getImageData.bind(context);
+    context.getImageData = (x, y, width, height) => {
+      readback = [width, height];
+      return getImageData(x, y, width, height);
+    };
+    return canvas;
+  });
+  // The raster read back for the sprite.
   const rasterSize = padding => {
-    const sprite = layout.getSprite("hello", { size: 40, font: "serif", padding });
-    return [2 * (sprite.trimX - sprite.x0), 2 * (sprite.trimY - sprite.y0)];
+    layout.getSprite("hello", { size: 40, font: "serif", padding });
+    return readback;
   };
   const [plainWidth, plainHeight] = rasterSize(0);
   const [paddedWidth, paddedHeight] = rasterSize(4);

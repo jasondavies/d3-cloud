@@ -92,10 +92,6 @@ interface SpriteFields<D, I extends ImageLike> {
   y0: number;
   x1: number;
   y1: number;
-  trimX: number;
-  trimY: number;
-  trimWidth: number;
-  trimHeight: number;
 }
 
 /** A plain object describing one successful placement. */
@@ -108,34 +104,17 @@ export interface PlacedSprite<D = unknown, I extends ImageLike = ImageLike> exte
  * An immutable, rasterized mask created by `CloudLayout.getSprite()`. The
  * same sprite can be placed any number of times.
  */
-declare class CloudSprite<D = unknown, I extends ImageLike = ImageLike> implements Readonly<SpriteFields<D, I>> {
+declare class CloudSprite<D = unknown, I extends ImageLike = ImageLike> {
   private constructor();
 
-  readonly text: string;
-  readonly image: I | null;
-  readonly imageWidth: number | null;
-  readonly imageHeight: number | null;
-  readonly font: string;
-  readonly style: string;
-  readonly weight: string | number;
-  readonly rotate: number;
-  readonly size: number;
-  readonly padding: number;
-  readonly datum: D;
-  readonly width: number;
-  readonly height: number;
-  readonly x0: number;
-  readonly y0: number;
-  readonly x1: number;
-  readonly y1: number;
-  readonly trimX: number;
-  readonly trimY: number;
-  readonly trimWidth: number;
-  readonly trimHeight: number;
+  /** The width of each packed mask row in bits, a multiple of 32. */
   readonly spriteWidth: number;
   /** A copy of the mask; changing it does not affect placement. */
   readonly sprite: Uint32Array;
 }
+
+// Merged with the class, so sprites have every placed-word field, read-only.
+interface CloudSprite<D = unknown, I extends ImageLike = ImageLike> extends Readonly<SpriteFields<D, I>> {}
 
 declare class CloudLayout {
   constructor();

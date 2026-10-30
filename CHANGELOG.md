@@ -8,6 +8,10 @@ release was `v1.2.9`.
 ## [2.0.0] - Unreleased
 
 Prerelease `2.0.0-rc.0` was published on 2026-10-30 under the `next` npm tag.
+Since then, the undocumented `trimX`, `trimY`, `trimWidth`, and `trimHeight`
+fields have been removed from sprites and placed words; use `width`, `height`,
+`x0`, and `y0` instead. Canvases that read back more than one pixel per unit
+are now rejected.
 
 See the [1.x to 2.x migration guide](./MIGRATING.md) before upgrading.
 Dependencies constrained to 1.x continue to use the old API.
@@ -51,8 +55,9 @@ Dependencies constrained to 1.x continue to use the old API.
   coordinates, sizes, rotations, padding, image dimensions and strategy
   candidates; negative padding; `size()` dimensions outside 0–16,777,216;
   `blockSize()` outside 1–4096; a `random()` that is not a function or returns
-  anything but a number in `[0, 1)`; fonts the canvas rejects; and canvases
-  without a 2d context.
+  anything but a number in `[0, 1)`; fonts the canvas rejects; canvases
+  without a 2d context; and canvases whose `getImageData()` returns more than
+  one pixel per canvas unit, as some old high-density WebKit canvases did.
 
 ### Added
 

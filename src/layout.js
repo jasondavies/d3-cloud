@@ -115,13 +115,7 @@ export default class CloudLayout {
   }
 
   getSprite(source, options) {
-    if (options == null) {
-      options = {};
-    } else if (typeof options !== "object" || Array.isArray(options)) {
-      throw new TypeError("getSprite() expects an options object");
-    }
-
-    const fields = spriteFields(source, options);
+    const fields = spriteFields(source, optionsObject(options, "getSprite()"));
     if (!fields) {
       return null;
     }
@@ -146,13 +140,8 @@ export default class CloudLayout {
     if (!mask) {
       throw new TypeError("place() expects a CloudSprite from getSprite() on a layout from the same copy of d3-cloud");
     }
-    if (options == null) {
-      options = {};
-    } else if (typeof options !== "object" || Array.isArray(options)) {
-      throw new TypeError("place() expects an options object");
-    }
 
-    const { x: optionX, y: optionY, strategy: optionStrategy } = options;
+    const { x: optionX, y: optionY, strategy: optionStrategy } = optionsObject(options, "place()");
     const strategy = optionStrategy == null ? this._strategy : resolveStrategy(optionStrategy);
     const x = optionX == null ? seedCoordinate(this._size[0], this._random) : placeCoordinate(optionX);
     const y = optionY == null ? seedCoordinate(this._size[1], this._random) : placeCoordinate(optionY);
@@ -167,7 +156,7 @@ export default class CloudLayout {
       return null;
     }
 
-    extendBounds(this, mask, position.x, position.y);
+    this._bounds = extendBounds(this._bounds, mask, position.x, position.y);
     const word = createPlacedWord(sprite, position.x, position.y);
     this._placements.set(word, { mask, x: position.x, y: position.y });
     return word;
@@ -495,20 +484,21 @@ function createPlacedWord(sprite, x, y) {
   return { ...fields, x, y };
 }
 
-function extendBounds(layout, mask, x, y) {
+// Returns the bounds extended to include the mask at x, y, updating existing
+// bounds in place.
+function extendBounds(bounds, mask, x, y) {
   var left = x + mask.x0,
       top = y + mask.y0,
       right = x + mask.x1,
-      bottom = y + mask.y1,
-      bounds = layout._bounds;
+      bottom = y + mask.y1;
   if (!bounds) {
-    layout._bounds = [{ x: left, y: top }, { x: right, y: bottom }];
-    return;
+    return [{ x: left, y: top }, { x: right, y: bottom }];
   }
   if (left < bounds[0].x) bounds[0].x = left;
   if (top < bounds[0].y) bounds[0].y = top;
   if (right > bounds[1].x) bounds[1].x = right;
   if (bottom > bounds[1].y) bounds[1].y = bottom;
+  return bounds;
 }
 
 function cloneBounds(bounds) {
@@ -686,6 +676,17 @@ function seedCoordinate(size, random) {
     throw new RangeError("random() must return a number in [0, 1)");
   }
   return Math.floor((value - 0.5) * (size / 2));
+}
+
+// Accepts null or undefined as no options, and any non-array object.
+function optionsObject(options, method) {
+  if (options == null) {
+    return {};
+  }
+  if (typeof options !== "object" || Array.isArray(options)) {
+    throw new TypeError(`${method} expects an options object`);
+  }
+  return options;
 }
 
 function resolveStrategy(value) {
