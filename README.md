@@ -370,8 +370,10 @@ using the [canvas module](https://www.npmjs.com/package/canvas).
 The canvas must provide a 2d context; otherwise `getSprite()` throws a
 `TypeError`. The factory is called once, and again after a sprite fails to draw
 or read back. If it returns the same canvas, that canvas is reset before reuse
-by resizing it, which clears its pixels and resets its origin-clean flag after
-cross-origin tainting. Layouts may share one canvas; a failure invalidates their
+by resizing it, which clears its pixels. Chrome and Safari also clear a
+cross-origin taint when a canvas is resized, but Firefox does not, so return a
+new canvas to recover from tainting in every browser, as the default factory
+does. Layouts may share one canvas; a failure invalidates their
 shared state until the canvas is reset or replaced. Nothing else should draw
 to the scratch canvas.
 

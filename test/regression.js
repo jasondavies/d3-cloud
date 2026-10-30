@@ -1873,8 +1873,9 @@ test("failed shared canvases reset before either layout uses them again", () => 
     if (tainted) throw new DOMException("tainted", "SecurityError");
     return read(...args);
   };
-  // Resizing a browser canvas clears its origin taint. Model that behavior
-  // around a real rasterizer, since node-canvas does not enforce CORS.
+  // Resizing a canvas clears its origin taint in Chrome and Safari, though not
+  // in Firefox. Model that behavior around a real rasterizer, since
+  // node-canvas does not enforce CORS.
   const shared = {
     get width() { return canvas.width; },
     set width(value) { canvas.width = value; tainted = false; resets++; },

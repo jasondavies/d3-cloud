@@ -7,6 +7,8 @@ release was `v1.2.9`.
 
 ## [2.0.0] - Unreleased
 
+Prerelease `2.0.0-rc.0` was published on 2026-10-30 under the `next` npm tag.
+
 See the [1.x to 2.x migration guide](./MIGRATING.md) before upgrading.
 Dependencies constrained to 1.x continue to use the old API.
 
