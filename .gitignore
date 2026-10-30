@@ -1,2 +1,4 @@
 node_modules
+.npm-cache
+.DS_Store
 npm-debug.log

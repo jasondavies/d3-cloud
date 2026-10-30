@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>d3-cloud Frequency Example</title>
+    <link rel="stylesheet" href="./shared.css">
+    <style>
+      :root {
+        --ink: #111111;
+        --paper: #eef2ed;
+        --panel: rgba(255, 255, 255, 0.88);
+        --accent: #2f6b3b;
+        --accent-soft: rgba(47, 107, 59, 0.12);
+        --body-background:
+          radial-gradient(circle at top left, rgba(47, 107, 59, 0.18), transparent 34%),
+          radial-gradient(circle at bottom right, rgba(29, 78, 137, 0.14), transparent 28%),
+          linear-gradient(160deg, #f8fbf8 0%, var(--paper) 42%, #dde7dc 100%);
+        --frame-border: rgba(17, 17, 17, 0.1);
+        --frame-shadow: rgba(36, 62, 42, 0.14);
+        --button-text: #f6fff7;
+        --button-background: linear-gradient(135deg, #2f6b3b, #4a9256);
+        --button-shadow: rgba(47, 107, 59, 0.2);
+        --link-background: rgba(255, 255, 255, 0.78);
+        --link-shadow: inset 0 0 0 1px rgba(47, 107, 59, 0.16);
+        --canvas-background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(246, 251, 246, 0.92)),
+          radial-gradient(circle at center, rgba(47, 107, 59, 0.05), transparent 60%);
+      }
+
+      .editor {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 180px;
+        resize: vertical;
+        padding: 16px 18px;
+        border: 1px solid rgba(17, 17, 17, 0.12);
+        border-radius: 18px;
+        font: 400 1rem/1.5 "Georgia", "Times New Roman", serif;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      }
+
+      .editor-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .editor-note {
+        font-size: 0.9rem;
+        color: var(--note-color);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="frame">
+        <div class="masthead">
+          <div>
+            <h1>Frequency Example</h1>
+            <p>
+              This example tokenizes raw text in the browser, counts word frequencies,
+              maps those counts to sprite sizes, and then places the resulting cloud.
+            </p>
+          </div>
+          <div class="controls">
+            <div class="actions">
+              <a href="./">Text Example</a>
+              <button type="button" data-render>Render Cloud</button>
+            </div>
+            <div class="status" data-status></div>
+          </div>
+        </div>
+        <div class="editor">
+          <textarea data-source spellcheck="false"></textarea>
+          <div class="editor-row">
+            <div class="editor-note">
+              Common stopwords and very short tokens are filtered out before layout.
+            </div>
+          </div>
+        </div>
+        <div class="canvas">
+          <svg data-cloud viewBox="-360 -240 720 480" aria-label="Word frequency cloud example"></svg>
+        </div>
+        <div class="note">
+          This demonstrates the preprocessing that issue
+          <a href="https://github.com/jasondavies/d3-cloud/issues/4">#4</a>
+          was asking about, without adding frequency analysis to the core library.
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./frequencies.js"></script>
+  </body>
+</html>

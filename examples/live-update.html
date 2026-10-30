@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>d3-cloud Live Update Example</title>
+    <link rel="stylesheet" href="./shared.css">
+    <style>
+      :root {
+        --ink: #111111;
+        --paper: #f0eef8;
+        --panel: rgba(255, 255, 255, 0.88);
+        --accent: #6b3fa0;
+        --accent-soft: rgba(107, 63, 160, 0.12);
+        --body-background:
+          radial-gradient(circle at top left, rgba(107, 63, 160, 0.18), transparent 32%),
+          radial-gradient(circle at bottom right, rgba(29, 78, 137, 0.14), transparent 28%),
+          linear-gradient(160deg, #faf8ff 0%, var(--paper) 42%, #e6dff6 100%);
+        --frame-border: rgba(17, 17, 17, 0.1);
+        --frame-shadow: rgba(68, 44, 106, 0.14);
+        --button-text: #fcf9ff;
+        --button-background: linear-gradient(135deg, #6b3fa0, #8b59c5);
+        --button-shadow: rgba(107, 63, 160, 0.22);
+        --link-background: rgba(255, 255, 255, 0.78);
+        --link-shadow: inset 0 0 0 1px rgba(107, 63, 160, 0.16);
+        --canvas-background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(248, 244, 255, 0.92)),
+          radial-gradient(circle at center, rgba(107, 63, 160, 0.05), transparent 60%);
+      }
+
+      .cloud-word {
+        transition: opacity 220ms ease;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="frame">
+        <div class="masthead">
+          <div>
+            <h1>Live Update Example</h1>
+            <p>
+              This example reruns layout for a sequence of revisions and reconciles
+              the SVG by <code>text</code>, so entering sprites fade in, existing
+              sprites move and resize, and removed sprites fade out.
+            </p>
+          </div>
+          <div class="controls">
+            <div class="actions">
+              <a href="./">Text Example</a>
+              <button type="button" data-next>Next Revision</button>
+            </div>
+            <div class="status" data-status></div>
+          </div>
+        </div>
+        <div class="canvas">
+          <svg data-cloud viewBox="-360 -240 720 480" aria-label="Live update example"></svg>
+        </div>
+        <div class="note">
+          This is the plain-SVG equivalent of the keyed enter/update/exit pattern
+          discussed in <a href="https://github.com/jasondavies/d3-cloud/issues/160">issue #160</a>.
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./live-update.js"></script>
+  </body>
+</html>

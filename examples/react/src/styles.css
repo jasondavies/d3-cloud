@@ -1,0 +1,74 @@
+:root {
+  font-family: "Trebuchet MS", "Gill Sans", sans-serif;
+  color: #111111;
+  background:
+    radial-gradient(circle at top left, rgba(21, 94, 99, 0.12), transparent 32%),
+    linear-gradient(180deg, #f8f5ed, #ece7d9);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+main {
+  width: min(780px, 100%);
+  margin: 0 auto;
+}
+
+.app {
+  padding: 24px;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 16px 36px rgba(34, 32, 25, 0.1);
+}
+
+h1 {
+  margin: 0 0 10px;
+  font: 700 clamp(2rem, 4vw, 3rem) / 0.95 "Georgia", "Times New Roman", serif;
+}
+
+p {
+  margin: 0 0 18px;
+  max-width: 58ch;
+  line-height: 1.5;
+}
+
+code {
+  padding: 0.15em 0.35em;
+  border-radius: 0.4em;
+  background: rgba(21, 94, 99, 0.12);
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 720 / 480;
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 252, 246, 0.95);
+}
+
+a {
+  text-decoration: none;
+}
+
+text {
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+a:hover text,
+a:focus text {
+  opacity: 0.72;
+}
