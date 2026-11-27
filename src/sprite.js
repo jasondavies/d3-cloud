@@ -1,7 +1,7 @@
 const RADIANS = Math.PI / 180;
 const SCRATCH_WIDTH = 1 << 11;
 const SCRATCH_HEIGHT = 1 << 11;
-// Four consecutive anchors cover every offset of the rectangular strategy's 4px grid.
+// Four consecutive anchors cover every offset of the rectangular 4px grid.
 const SEARCH_SLACK = 4;
 const CREATE = Symbol("CloudSprite");
 
@@ -13,9 +13,8 @@ const CREATE = Symbol("CloudSprite");
 // Mask data is row-major, with the leftmost pixel in the most significant
 // bit of each 32-bit word; words is the padded row stride in words. Geometry
 // is in pixels relative to the placement origin, with inclusive x0/y0 and
-// exclusive x1/y1. The envelope uses the same coordinates but may extend past
-// the ink: it limits searches to positions adjoining the cloud, while the
-// mask itself controls pixel collisions, fixed-box containment, and bounds.
+// exclusive x1/y1. The envelope extends past the ink to allow searches beside
+// the cloud. The mask controls collisions, fixed-box containment, and bounds.
 const MASKS = new WeakMap();
 
 // Context and clearing state for each scratch canvas, shared by every layout
@@ -292,7 +291,7 @@ function rasterizeTextSprite(sprite, font, state) {
   }
 
   const raster = extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds);
-  // Keep the centered measured width and allow clearance on both sides of overhanging ink.
+  // Keep the measured width and allow clearance on both sides of the ink.
   const left = -(envelopeWidth >> 1);
   raster.envelope = {
     x0: Math.min(raster.x0 - SEARCH_SLACK, left),

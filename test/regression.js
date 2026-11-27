@@ -410,12 +410,31 @@ test("text sprites can be placed directly above or below a bounded cloud", () =>
     word.y + word.y0 >= -100 && word.y + word.y1 <= 100);
 });
 
+test("the default spiral stacks several wide words in a bounded layout", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size([120, 240])
+    .overflow(false).random(createSeededRandom(1));
+  const sprite = layout.getSprite("wide-word!", { size: 20, padding: 0 });
+  // Start at the top. Two 100px words cannot sit side by side in a 120px box.
+  let previous = layout.place(sprite, { x: 0, y: -100 });
+  assert.ok(previous);
+  for (let i = 1; i < 4; i++) {
+    const word = layout.place(sprite);
+    assert.ok(word, `word ${i} failed to stack`);
+    const gap = word.y + word.y0 - (previous.y + previous.y1);
+    assert.ok(gap >= 0 && gap <= 3, `word ${i} left a ${gap}px gap`);
+    assert.ok(word.y + word.y1 <= 120);
+    previous = word;
+  }
+});
+
 test("rectangular search can stack full-width text from a misaligned row", () => {
   const layout = new CloudLayout().canvas(createFakeCanvas).size([100, 120]).overflow(false)
     .strategy("rectangular").random(() => 0.5);
   const sprite = layout.getSprite("wide-word!", { size: 20, padding: 0 });
   assert.deepEqual([sprite.width, sprite.height], [100, 40]);
   assert.ok(layout.place(sprite, { x: 0, y: -40 }));
+  assert.equal(layout.place(sprite, { x: 0, y: 4, strategy: "none" }), null,
+    "a 4px gap is outside the vertical search envelope");
 
   // The first word touches the top of the box. The next word would sit flush
   // below it at y = 0, but the spiral visits rows -1 + 4k, so it needs y = 3.
@@ -448,6 +467,7 @@ test("opaque image sprites support explicit adjacent placement and erasure", () 
   const layout = new CloudLayout().canvas(() => createCanvas(1, 1)).size(0).strategy("none");
   const sprite = layout.getSprite(image);
   assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+  assert.equal(layout.place(sprite, { x: 14, y: 0 }), null, "a 4px gap is detached");
   const second = layout.place(sprite, { x: 10, y: 0 });
   assert.ok(second);
   assert.equal(layout.place(sprite, { x: 9, y: 0 }), null);
@@ -1352,7 +1372,7 @@ test("image sprites stay attached to the cloud rather than forming islands", () 
     const word = layout.place(layout.getSprite(image), { x: 150, y: 150 });
     assert.ok(word);
     const gap = Math.max(word.x + word.x0 - 5, -5 - (word.x + word.x1), word.y + word.y0 - 5, -5 - (word.y + word.y1));
-    assert.ok(gap >= 0 && gap <= 4, `${strategy.name} left a ${gap}px gap`);
+    assert.ok(gap >= 0 && gap <= 3, `${strategy.name} left a ${gap}px gap`);
   }
 });
 
@@ -1371,7 +1391,7 @@ test("opaque images pack beside each other in wide layouts", () => {
         if (before) {
           const gapX = Math.max(word.x + word.x0 - before[1].x, before[0].x - (word.x + word.x1));
           const gapY = Math.max(word.y + word.y0 - before[1].y, before[0].y - (word.y + word.y1));
-          assert.ok(gapX <= 4 && gapY <= 4, `${strategy.name} ${size}: image ${i} detached by ${gapX},${gapY}`);
+          assert.ok(gapX <= 3 && gapY <= 3, `${strategy.name} ${size}: image ${i} detached by ${gapX},${gapY}`);
         }
       }
     }
