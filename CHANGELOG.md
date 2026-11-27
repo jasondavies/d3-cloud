@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 This changelog currently documents the 2.x line. The previous stable 1.x
 release was `v1.2.9`.
 
+## [Unreleased]
+
+### Fixed
+
+- Wide, flat-edged words can now stack above or below each other in bounded
+  layouts. Text placements may differ from 2.0.0 even with the same random
+  seed. ([#196](https://github.com/jasondavies/d3-cloud/issues/196))
+
 ## [2.0.0] - 2026-10-30
 
 See the [1.x to 2.x migration guide](./MIGRATING.md) before upgrading.
