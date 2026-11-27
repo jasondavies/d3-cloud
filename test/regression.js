@@ -424,6 +424,23 @@ test("rectangular search can stack full-width text from a misaligned row", () =>
   assert.equal(word.y, 3);
 });
 
+test("horizontal text placement allows for both measured width and ink overhang", () => {
+  // The same 40px ink box can extend beyond the measured width or sit inside it.
+  for (const [measuredWidth, gap] of [[20, 3], [80, 20]]) {
+    const layout = new CloudLayout().size(0).strategy("none").canvas(() => createFakeCanvas({
+      measureText: () => ({ width: measuredWidth }),
+      textBox: ({ _tx, _ty }) => ({ x0: _tx - 20, x1: _tx + 20, y0: _ty - 5, y1: _ty + 5 })
+    }));
+    const sprite = layout.getSprite("word", { size: 20, padding: 0 });
+    assert.equal(sprite.width, 40);
+    for (const side of [-1, 1]) {
+      layout.clear();
+      assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+      assert.ok(layout.place(sprite, { x: side * (sprite.width + gap), y: 0 }));
+    }
+  }
+});
+
 test("opaque image sprites support explicit adjacent placement and erasure", () => {
   const { createCanvas } = loadNodeCanvas();
   const image = createCanvas(10, 10);
@@ -601,7 +618,7 @@ test("under-reported ink metrics redraw text without stale pixels or a wider env
     const expected = reference.getSprite("WWWWWWWW", options);
     assert.deepEqual([redrawn.width, redrawn.height], [expected.width, expected.height]);
     assert.deepEqual(redrawn.sprite, expected.sprite);
-    // The search envelope stays at the measured raster width.
+    // Growing the scratch raster must not give the word extra search slack.
     const envelopeWidth = sprite => spriteMask(sprite).envelope.x1 - spriteMask(sprite).envelope.x0;
     assert.ok(envelopeWidth(redrawn) <= envelopeWidth(expected));
     const next = layout.getSprite("hi", { size: 20, padding: 0 });

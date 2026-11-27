@@ -246,9 +246,9 @@ function rasterizeTextSprite(sprite, font, state) {
   const raster = extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds);
   const left = -(envelopeWidth >> 1);
   raster.envelope = {
-    x0: Math.min(raster.x0, left),
+    x0: Math.min(raster.x0 - SEARCH_SLACK, left),
     y0: raster.y0 - SEARCH_SLACK,
-    x1: Math.max(raster.x1, left + envelopeWidth),
+    x1: Math.max(raster.x1 + SEARCH_SLACK, left + envelopeWidth),
     y1: raster.y1 + SEARCH_SLACK
   };
   return raster;

@@ -10,7 +10,8 @@ release was `v1.2.9`.
 ### Fixed
 
 - Wide, flat-edged words can now stack above or below each other in bounded
-  layouts. Text placements may differ from 2.0.0 even with the same random
+  layouts. Glyphs that overhang their measured width can also sit beside the
+  cloud. Text placements may differ from 2.0.0 even with the same random
   seed. ([#196](https://github.com/jasondavies/d3-cloud/issues/196))
 
 ## [2.0.0] - 2026-10-30
