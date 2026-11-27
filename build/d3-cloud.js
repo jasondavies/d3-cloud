@@ -35,6 +35,7 @@ var RADIANS = Math.PI / 180;
 var SCRATCH_WIDTH = 1 << 11;
 var SCRATCH_HEIGHT = 1 << 11;
 var IMAGE_SLACK = 4;
+var TEXT_VERTICAL_SLACK = 1;
 var CREATE = Symbol("CloudSprite");
 var MASKS = /* @__PURE__ */ new WeakMap();
 var CANVAS_STATES = /* @__PURE__ */ new WeakMap();
@@ -247,9 +248,9 @@ function rasterizeTextSprite(sprite, font, state) {
   const left = -(envelopeWidth >> 1);
   raster.envelope = {
     x0: Math.min(raster.x0, left),
-    y0: raster.y0,
+    y0: raster.y0 - TEXT_VERTICAL_SLACK,
     x1: Math.max(raster.x1, left + envelopeWidth),
-    y1: raster.y1
+    y1: raster.y1 + TEXT_VERTICAL_SLACK
   };
   return raster;
 }

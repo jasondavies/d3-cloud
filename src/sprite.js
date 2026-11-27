@@ -2,6 +2,7 @@ const RADIANS = Math.PI / 180;
 const SCRATCH_WIDTH = 1 << 11;
 const SCRATCH_HEIGHT = 1 << 11;
 const IMAGE_SLACK = 4;
+const TEXT_VERTICAL_SLACK = 1;
 const CREATE = Symbol("CloudSprite");
 
 // The mask and geometry used for placement, keyed by each sprite this module
@@ -292,13 +293,15 @@ function rasterizeTextSprite(sprite, font, state) {
 
   const raster = extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds);
   // Rectangle checks against the cloud use the measured raster width,
-  // centered on the origin and widened only to contain the ink.
+  // centered on the origin and widened only to contain the ink. Text also
+  // gets one row above and below, so it can be placed above or below the
+  // cloud without its pixels overlapping it.
   const left = -(envelopeWidth >> 1);
   raster.envelope = {
     x0: Math.min(raster.x0, left),
-    y0: raster.y0,
+    y0: raster.y0 - TEXT_VERTICAL_SLACK,
     x1: Math.max(raster.x1, left + envelopeWidth),
-    y1: raster.y1
+    y1: raster.y1 + TEXT_VERTICAL_SLACK
   };
   return raster;
 }
