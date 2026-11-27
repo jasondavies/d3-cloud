@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 This changelog currently documents the 2.x line. The previous stable 1.x
 release was `v1.2.9`.
 
-## [Unreleased]
+## [2.0.1] - 2026-11-27
 
 ### Fixed
 
