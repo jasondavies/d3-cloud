@@ -1,7 +1,8 @@
 const RADIANS = Math.PI / 180;
 const SCRATCH_WIDTH = 1 << 11;
 const SCRATCH_HEIGHT = 1 << 11;
-const IMAGE_SLACK = 4;
+// Four consecutive anchors cover every offset of the rectangular strategy's 4px grid.
+const SEARCH_SLACK = 4;
 const CREATE = Symbol("CloudSprite");
 
 // The mask and geometry used for placement, keyed by each sprite this module
@@ -291,14 +292,13 @@ function rasterizeTextSprite(sprite, font, state) {
   }
 
   const raster = extractSpritePixels(pixels, rasterWidth, rasterHeight, alphaBounds);
-  // Rectangle checks against the cloud use the measured raster width,
-  // centered on the origin and widened only to contain the ink.
+  // Keep the centered measured width and allow clearance on both sides of overhanging ink.
   const left = -(envelopeWidth >> 1);
   raster.envelope = {
-    x0: Math.min(raster.x0, left),
-    y0: raster.y0,
-    x1: Math.max(raster.x1, left + envelopeWidth),
-    y1: raster.y1
+    x0: Math.min(raster.x0 - SEARCH_SLACK, left),
+    y0: raster.y0 - SEARCH_SLACK,
+    x1: Math.max(raster.x1 + SEARCH_SLACK, left + envelopeWidth),
+    y1: raster.y1 + SEARCH_SLACK
   };
   return raster;
 }
@@ -380,10 +380,10 @@ function rasterizeImageSprite(sprite, state) {
   // Opaque image masks get a small envelope on every side, so they can be
   // placed beside the cloud without their pixels overlapping it.
   raster.envelope = {
-    x0: raster.x0 - IMAGE_SLACK,
-    y0: raster.y0 - IMAGE_SLACK,
-    x1: raster.x1 + IMAGE_SLACK,
-    y1: raster.y1 + IMAGE_SLACK
+    x0: raster.x0 - SEARCH_SLACK,
+    y0: raster.y0 - SEARCH_SLACK,
+    x1: raster.x1 + SEARCH_SLACK,
+    y1: raster.y1 + SEARCH_SLACK
   };
   return raster;
 }

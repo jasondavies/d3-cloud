@@ -395,6 +395,52 @@ test("odd image dimensions cannot escape a bounded layout through clipped mask e
   assert.deepEqual(layout.bounds(), [{ x: -2, y: -2 }, { x: 2, y: 2 }]);
 });
 
+test("text sprites can be placed directly above or below a bounded cloud", () => {
+  // The fake canvas fills each word's box, so facing rows are flat and any
+  // shared row collides. The first word spans the full width of the box.
+  const layout = new CloudLayout().canvas(createFakeCanvas).size([100, 200]).overflow(false)
+    .random(createSeededRandom(1));
+  const wide = layout.place(layout.getSprite("wide-word!", { size: 20, padding: 0 }), { x: 0, y: 0 });
+  assert.ok(wide);
+  assert.equal(wide.x1 - wide.x0, 100);
+  const word = layout.place(layout.getSprite("small", { size: 20, padding: 0 }));
+  assert.ok(word, "a word fits directly above or below the cloud");
+  assert.ok(word.y + word.y1 <= wide.y + wide.y0 || word.y + word.y0 >= wide.y + wide.y1);
+  assert.ok(word.x + word.x0 >= -50 && word.x + word.x1 <= 50 &&
+    word.y + word.y0 >= -100 && word.y + word.y1 <= 100);
+});
+
+test("rectangular search can stack full-width text from a misaligned row", () => {
+  const layout = new CloudLayout().canvas(createFakeCanvas).size([100, 120]).overflow(false)
+    .strategy("rectangular").random(() => 0.5);
+  const sprite = layout.getSprite("wide-word!", { size: 20, padding: 0 });
+  assert.deepEqual([sprite.width, sprite.height], [100, 40]);
+  assert.ok(layout.place(sprite, { x: 0, y: -40 }));
+
+  // The first word touches the top of the box. The next word would sit flush
+  // below it at y = 0, but the spiral visits rows -1 + 4k, so it needs y = 3.
+  const word = layout.place(sprite, { x: 0, y: -1 });
+  assert.ok(word);
+  assert.equal(word.y, 3);
+});
+
+test("horizontal text placement allows for both measured width and ink overhang", () => {
+  // The same 40px ink box can extend beyond the measured width or sit inside it.
+  for (const [measuredWidth, gap] of [[20, 3], [80, 20]]) {
+    const layout = new CloudLayout().size(0).strategy("none").canvas(() => createFakeCanvas({
+      measureText: () => ({ width: measuredWidth }),
+      textBox: ({ _tx, _ty }) => ({ x0: _tx - 20, x1: _tx + 20, y0: _ty - 5, y1: _ty + 5 })
+    }));
+    const sprite = layout.getSprite("word", { size: 20, padding: 0 });
+    assert.equal(sprite.width, 40);
+    for (const side of [-1, 1]) {
+      layout.clear();
+      assert.ok(layout.place(sprite, { x: 0, y: 0 }));
+      assert.ok(layout.place(sprite, { x: side * (sprite.width + gap), y: 0 }));
+    }
+  }
+});
+
 test("opaque image sprites support explicit adjacent placement and erasure", () => {
   const { createCanvas } = loadNodeCanvas();
   const image = createCanvas(10, 10);
@@ -572,7 +618,7 @@ test("under-reported ink metrics redraw text without stale pixels or a wider env
     const expected = reference.getSprite("WWWWWWWW", options);
     assert.deepEqual([redrawn.width, redrawn.height], [expected.width, expected.height]);
     assert.deepEqual(redrawn.sprite, expected.sprite);
-    // The search envelope stays at the measured raster width.
+    // Growing the scratch raster must not give the word extra search slack.
     const envelopeWidth = sprite => spriteMask(sprite).envelope.x1 - spriteMask(sprite).envelope.x0;
     assert.ok(envelopeWidth(redrawn) <= envelopeWidth(expected));
     const next = layout.getSprite("hi", { size: 20, padding: 0 });

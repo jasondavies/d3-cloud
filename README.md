@@ -331,9 +331,8 @@ derived from `size()`. Explicit coordinates must be finite and within
 ±16,777,216, and are rounded down to integer pixels.
 
 Once the layout has placed words, a new sprite's search envelope must overlap
-the existing cloud's bounds. This envelope extends the mask's rectangle with
-some horizontal slack for text and a few pixels on each side for images, so
-words can sit beside the cloud while their occupied pixels remain separate.
+the existing cloud's bounds. The envelope extends 4px past the mask on each
+side. For text, it also includes the full measured raster width.
 With `overflow(false)`, the mask must also fit inside the fixed layout rectangle
 defined by `size()`; this is distinct from the existing cloud's bounds.
 If the initial position fails, the search starts from the nearest position
